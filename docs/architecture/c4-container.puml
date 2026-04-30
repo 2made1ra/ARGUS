@@ -1,0 +1,71 @@
+@startuml
+!include <C4/C4_Container>
+
+title C4 Container Diagram — Document Ingestion, Extraction, Entity Resolution and Drill-down Search
+
+Person(user, "User", "Uploads documents and searches by topic, contractor, contracts and document fragments")
+
+System_Boundary(system, "Document Intelligence Platform") {
+
+  Container(web_app, "Web App", "Frontend", "Drill-down UX: topic search → contractor → contracts → search inside contracts")
+
+  Container(api, "Backend API", "Python / FastAPI", "Accepts uploads, manages ingestion pipeline, search and drill-down requests")
+
+  Container(worker, "Ingestion Worker", "Python", "Processes uploaded documents asynchronously")
+
+  Container(converter, "Document Converter", "LibreOffice / soffice", "Converts non-PDF documents to PDF")
+
+  Container(text_extractor, "Text Extraction Service", "Python PDF parser + OCR detector", "Extracts raw text from PDFs and detects scanned/image-only pages")
+
+  Container(ocr, "OCR Service", "OCR Engine", "Extracts text from scanned PDFs or photographed documents")
+
+  Container(normalizer, "Text Normalizer", "Python", "Cleans, normalizes and prepares extracted text")
+
+  Container(chunker, "Chunking Service", "Python", "Splits text into chunks by pages, headings and semantic boundaries")
+
+  Container(llm_extractor, "LLM Extraction Service", "LLM", "Extracts structured fields, creates chunk summaries and document-level summaries")
+
+  Container(entity_resolution, "Entity Resolution Service", "Python", "Resolves contractor_raw to canonical contractor_entity_id using INN, fuzzy matching and business rules")
+
+  Container(embedding_service, "Embedding Service", "Embedding Model", "Creates vector embeddings for document chunks")
+
+  Container(search_service, "Search Service", "Python", "Combines Qdrant vector search, payload filters and PostgreSQL metadata")
+
+  ContainerDb(postgres, "PostgreSQL", "Relational DB", "Stores documents, contracts, extracted fields, summaries, contractor entities and ingestion metadata")
+
+  ContainerDb(qdrant, "Qdrant", "Vector DB", "Stores chunk embeddings and payload filters for contractor, document, contract and section metadata")
+}
+
+Rel(user, web_app, "Uses")
+Rel(web_app, api, "Uploads documents and sends search / drill-down requests", "HTTPS")
+
+Rel(api, worker, "Creates ingestion job")
+
+Rel(worker, converter, "If file is not PDF, convert to PDF")
+Rel(converter, worker, "Returns converted PDF")
+
+Rel(worker, text_extractor, "Extract raw text from PDF")
+Rel(text_extractor, ocr, "If PDF contains scans or photos, run OCR")
+Rel(ocr, text_extractor, "Returns OCR text")
+
+Rel(text_extractor, normalizer, "Passes raw extracted text")
+Rel(normalizer, chunker, "Passes normalized text")
+
+Rel(chunker, llm_extractor, "Sends chunks for field extraction, chunk summaries and section labeling")
+Rel(llm_extractor, entity_resolution, "Passes contractor_raw and extracted contractor attributes")
+
+Rel(entity_resolution, postgres, "Stores / links canonical contractor_entity_id")
+Rel(llm_extractor, postgres, "Stores extracted fields, chunk-level summaries and document-level summaries")
+
+Rel(chunker, embedding_service, "Sends chunks for embedding")
+Rel(embedding_service, qdrant, "Stores chunk vectors with payload filters")
+
+Rel(worker, postgres, "Stores document metadata, chunks and processing status")
+Rel(worker, qdrant, "Stores searchable chunk payload metadata")
+
+Rel(web_app, search_service, "Searches by topic, contractor, contract or inside documents")
+Rel(search_service, qdrant, "Vector search and payload-filtered search")
+Rel(search_service, postgres, "Loads metadata, summaries, contracts and canonical contractor data")
+Rel(search_service, web_app, "Returns drill-down search results")
+
+@enduml
