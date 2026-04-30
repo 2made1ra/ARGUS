@@ -1,0 +1,29 @@
+[tool.uv.workspace]
+members = ["backend", "packages/sage"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+pythonpath = ["backend", "packages/sage"]
+testpaths = ["backend/tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+src = ["backend/app", "backend/tests", "packages/sage/sage"]
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "E",
+    "F",
+    "I",
+    "UP",
+]
