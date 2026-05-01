@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from app.core.domain.ids import ContractorEntityId
+from app.core.domain.ids import ContractorEntityId, DocumentId
 
 
 @dataclass
@@ -29,8 +29,25 @@ class ContractorSearchResult:
     top_snippet: str
 
 
+@dataclass
+class ChunkSnippet:
+    page: int | None
+    snippet: str
+    score: float
+
+
+@dataclass
+class DocumentSearchResult:
+    document_id: DocumentId
+    title: str
+    date: str | None
+    matched_chunks: list[ChunkSnippet]
+
+
 __all__ = [
+    "ChunkSnippet",
     "ContractorSearchResult",
+    "DocumentSearchResult",
     "SearchGroup",
     "SearchHit",
 ]
