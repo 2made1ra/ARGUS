@@ -5,7 +5,14 @@ from sage.models import (
     Page,
     ProcessingResult,
 )
-from sage.process import process_document
+
+
+def __getattr__(name: str) -> object:
+    if name == "process_document":
+        from sage.process import process_document
+
+        return process_document
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "Chunk",

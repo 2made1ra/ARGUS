@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.sqlalchemy.models import Document as DocumentRow
 from app.core.domain.ids import ContractorEntityId, DocumentId
-from app.features.ingest.entities.document import Document
+from app.features.ingest.entities.document import Document, DocumentStatus
 from app.features.ingest.ports import DocumentNotFound
 
 
@@ -44,11 +44,35 @@ class SqlAlchemyDocumentRepository:
         rows = await self._session.scalars(statement)
         return [_to_entity(row) for row in rows]
 
-    async def update_status(self, document_id: DocumentId, status: str) -> None:
+    async def update_status(
+        self,
+        document_id: DocumentId,
+        status: DocumentStatus,
+    ) -> None:
         statement = (
             update(DocumentRow)
             .where(DocumentRow.id == document_id)
             .values(status=status)
+            .returning(DocumentRow.id)
+        )
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
+
+    async def update_processing_result(
+        self,
+        document_id: DocumentId,
+        *,
+        document_kind: str,
+        partial_extraction: bool,
+    ) -> None:
+        statement = (
+            update(DocumentRow)
+            .where(DocumentRow.id == document_id)
+            .values(
+                document_kind=document_kind,
+                partial_extraction=partial_extraction,
+            )
             .returning(DocumentRow.id)
         )
         result = await self._session.execute(statement)
