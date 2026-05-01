@@ -35,7 +35,7 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "../packages/sage"]
 asyncio_mode = "auto"
 
 [tool.mypy]

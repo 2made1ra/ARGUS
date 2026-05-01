@@ -27,6 +27,14 @@ class DocumentRepository(Protocol):
         status: DocumentStatus,
     ) -> None: ...
 
+    async def update_processing_result(
+        self,
+        document_id: DocumentId,
+        *,
+        document_kind: str,
+        partial_extraction: bool,
+    ) -> None: ...
+
     async def set_error(self, document_id: DocumentId, message: str) -> None: ...
 
 
