@@ -50,6 +50,7 @@ class FakeDocumentRepository:
     def __init__(self, documents: dict[DocumentId, Document]) -> None:
         self.documents = documents
         self.get_calls: list[DocumentId] = []
+        self.get_many_calls: list[list[DocumentId]] = []
 
     async def add(self, document: Document) -> None:
         raise NotImplementedError
@@ -57,6 +58,14 @@ class FakeDocumentRepository:
     async def get(self, document_id: DocumentId) -> Document:
         self.get_calls.append(document_id)
         return self.documents[document_id]
+
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        self.get_many_calls.append(ids)
+        return {
+            document_id: self.documents[document_id]
+            for document_id in ids
+            if document_id in self.documents
+        }
 
     async def list(self, *, limit: int, offset: int) -> list[Document]:
         raise NotImplementedError
@@ -153,7 +162,8 @@ async def test_search_documents_filters_by_contractor_and_groups_by_document() -
             "group_size": 3,
         },
     ]
-    assert documents.get_calls == [first_document_id, second_document_id]
+    assert documents.get_many_calls == [[first_document_id, second_document_id]]
+    assert documents.get_calls == []
     assert len(results) == 1
     assert results[0].document_id == second_document_id
     assert results[0].title == "Акт выполненных работ"
@@ -173,7 +183,7 @@ async def test_search_documents_builds_chunk_snippets_from_qdrant_payload() -> N
             _group(
                 document_id,
                 [
-                    _hit(score=0.77, text="payload text", page_start="4"),
+                    _hit(score=0.77, text="A" * 300, page_start="4"),
                     _hit(score=0.69, text="another payload text", page_start=6),
                 ],
             ),
@@ -201,15 +211,62 @@ async def test_search_documents_builds_chunk_snippets_from_qdrant_payload() -> N
     )
 
     assert len(vectors.calls) == 1
-    assert documents.get_calls == [document_id]
+    assert documents.get_many_calls == [[document_id]]
+    assert documents.get_calls == []
     assert results[0].date == "2026-01-02"
     chunks = [
         (chunk.page, chunk.snippet, chunk.score)
         for chunk in results[0].matched_chunks
     ]
     assert chunks == [
-        (4, "payload text", 0.77),
+        (4, "A" * 300, 0.77),
         (6, "another payload text", 0.69),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_documents_skips_groups_without_document_metadata() -> None:
+    contractor_id = ContractorEntityId(uuid4())
+    existing_document_id = DocumentId(uuid4())
+    missing_document_id = DocumentId(uuid4())
+    embeddings = FakeEmbeddingService()
+    vectors = FakeVectorSearch(
+        [
+            _group(
+                missing_document_id,
+                [_hit(score=0.98, text="missing", page_start=1)],
+            ),
+            _group(
+                existing_document_id,
+                [_hit(score=0.76, text="existing", page_start=2)],
+            ),
+        ],
+    )
+    documents = FakeDocumentRepository(
+        {
+            existing_document_id: _document(
+                existing_document_id,
+                contractor_id,
+                "Существующий договор",
+                datetime(2026, 2, 3, 4, 5, tzinfo=UTC),
+            ),
+        },
+    )
+    use_case = SearchDocumentsUseCase(
+        embeddings=embeddings,
+        vectors=vectors,
+        documents=documents,
+    )
+
+    results = await use_case.execute(
+        contractor_entity_id=contractor_id,
+        query="оплата",
+    )
+
+    assert documents.get_many_calls == [[missing_document_id, existing_document_id]]
+    assert documents.get_calls == []
+    assert [(result.document_id, result.title) for result in results] == [
+        (existing_document_id, "Существующий договор"),
     ]
 
 

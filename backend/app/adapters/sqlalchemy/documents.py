@@ -34,6 +34,15 @@ class SqlAlchemyDocumentRepository:
             raise DocumentNotFound(document_id)
         return _to_entity(row)
 
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        if not ids:
+            return {}
+
+        statement = select(DocumentRow).where(DocumentRow.id.in_(ids))
+        rows = await self._session.scalars(statement)
+        documents = [_to_entity(row) for row in rows]
+        return {document.id: document for document in documents}
+
     async def list(self, *, limit: int, offset: int) -> list[Document]:
         statement = (
             select(DocumentRow)

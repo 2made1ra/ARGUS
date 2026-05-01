@@ -47,13 +47,24 @@ class SearchDocumentsUseCase:
             group_size=_QDRANT_GROUP_SIZE,
         )
 
+        search_groups = [group for group in groups if isinstance(group, SearchGroup)]
+        document_ids = [
+            _document_id_from_group(group)
+            for group in search_groups
+            if group.hits
+        ]
+        documents = await self._documents.get_many(document_ids)
+
         results: list[tuple[float, DocumentSearchResult]] = []
-        for group in [group for group in groups if isinstance(group, SearchGroup)]:
+        for group in search_groups:
             if not group.hits:
                 continue
 
             document_id = _document_id_from_group(group)
-            document = await self._documents.get(document_id)
+            document = documents.get(document_id)
+            if document is None:
+                continue
+
             snippets = [
                 ChunkSnippet(
                     page=_optional_int(hit.payload.get("page_start")),
