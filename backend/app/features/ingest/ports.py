@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.core.domain.ids import DocumentId
 from app.features.ingest.entities.document import Document
@@ -10,6 +10,7 @@ class DocumentNotFound(Exception):
         self.document_id = document_id
 
 
+@runtime_checkable
 class DocumentRepository(Protocol):
     async def add(self, document: Document) -> None: ...
 

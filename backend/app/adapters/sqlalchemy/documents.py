@@ -23,7 +23,7 @@ class SqlAlchemyDocumentRepository:
             status=document.status,
             error_message=document.error_message,
             partial_extraction=document.partial_extraction,
-            created_at=document.created_at,
+            # created_at omitted — filled by server default (func.now())
         )
         await self._session.execute(statement)
 
@@ -49,16 +49,22 @@ class SqlAlchemyDocumentRepository:
             update(DocumentRow)
             .where(DocumentRow.id == document_id)
             .values(status=status)
+            .returning(DocumentRow.id)
         )
-        await self._session.execute(statement)
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
 
     async def set_error(self, document_id: DocumentId, message: str) -> None:
         statement = (
             update(DocumentRow)
             .where(DocumentRow.id == document_id)
             .values(status="FAILED", error_message=message)
+            .returning(DocumentRow.id)
         )
-        await self._session.execute(statement)
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
 
 
 def _to_entity(row: DocumentRow) -> Document:
