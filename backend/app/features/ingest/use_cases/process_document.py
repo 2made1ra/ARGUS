@@ -52,8 +52,6 @@ class ProcessDocumentUseCase:
                 await self._uow.commit()
         except Exception as exc:
             async with self._uow:
-                failed_document = await self._documents.get(document_id)
-                failed_document.mark_failed(str(exc))
                 await self._documents.set_error(document_id, str(exc))
                 await self._uow.commit()
             raise

@@ -24,7 +24,7 @@ class SqlAlchemyChunkRepository:
                     page_start=chunk.page_start,
                     page_end=chunk.page_end,
                     section_type=chunk.section_type,
-                    chunk_summary=getattr(chunk, "chunk_summary", None),
+                    chunk_summary=chunk.chunk_summary,
                 )
                 for chunk in chunks
             ],

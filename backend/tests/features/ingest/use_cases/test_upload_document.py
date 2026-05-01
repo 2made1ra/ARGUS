@@ -4,18 +4,28 @@ from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO
 
+import pytest
+
 from app.core.domain.ids import DocumentId
 from app.features.ingest.entities.document import Document, DocumentStatus
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
 
 
 class FakeDocumentFileStorage:
-    def __init__(self, calls: MutableSequence[str]) -> None:
+    def __init__(
+        self,
+        calls: MutableSequence[str],
+        *,
+        raise_on_save: BaseException | None = None,
+    ) -> None:
         self.calls = calls
         self.files: dict[Path, bytes] = {}
+        self.raise_on_save = raise_on_save
 
     async def save(self, stream: BinaryIO, filename: str) -> Path:
         self.calls.append("save")
+        if self.raise_on_save is not None:
+            raise self.raise_on_save
         path = Path("/fake/uploads") / filename
         self.files[path] = stream.read()
         return path
@@ -127,3 +137,28 @@ async def test_upload_document_enqueues_only_after_commit() -> None:
         "enqueue",
     ]
     assert calls.index("commit") < calls.index("enqueue")
+
+
+async def test_upload_document_does_not_persist_if_storage_raises() -> None:
+    calls: list[str] = []
+    documents = FakeDocumentRepository(calls)
+    tasks = FakeIngestionTaskQueue(calls)
+    uow = FakeUnitOfWork(calls)
+    storage = FakeDocumentFileStorage(calls, raise_on_save=OSError("disk full"))
+    use_case = UploadDocumentUseCase(
+        storage=storage,
+        documents=documents,
+        tasks=tasks,
+        uow=uow,
+    )
+
+    with pytest.raises(OSError, match="disk full"):
+        await use_case.execute(
+            file=BytesIO(b"contract contents"),
+            filename="contract.pdf",
+            content_type="application/pdf",
+        )
+
+    assert documents.documents == {}
+    assert tasks.enqueued_processes == []
+    assert uow.committed is False
