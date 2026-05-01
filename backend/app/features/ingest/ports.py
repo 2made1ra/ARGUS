@@ -1,7 +1,10 @@
-from typing import Protocol, runtime_checkable
+from pathlib import Path
+from typing import BinaryIO, Protocol, runtime_checkable
+
+from sage import Chunk, ContractFields, ProcessingResult
 
 from app.core.domain.ids import DocumentId
-from app.features.ingest.entities.document import Document
+from app.features.ingest.entities.document import Document, DocumentStatus
 
 
 class DocumentNotFound(Exception):
@@ -18,9 +21,70 @@ class DocumentRepository(Protocol):
 
     async def list(self, *, limit: int, offset: int) -> list[Document]: ...
 
-    async def update_status(self, document_id: DocumentId, status: str) -> None: ...
+    async def update_status(
+        self,
+        document_id: DocumentId,
+        status: DocumentStatus,
+    ) -> None: ...
 
     async def set_error(self, document_id: DocumentId, message: str) -> None: ...
 
 
-__all__ = ["DocumentNotFound", "DocumentRepository"]
+@runtime_checkable
+class ChunkRepository(Protocol):
+    async def add_many(self, document_id: DocumentId, chunks: list[Chunk]) -> None: ...
+
+    async def list_for(self, document_id: DocumentId) -> list[Chunk]: ...
+
+
+@runtime_checkable
+class FieldsRepository(Protocol):
+    async def upsert(self, document_id: DocumentId, fields: ContractFields) -> None: ...
+
+    async def get(self, document_id: DocumentId) -> ContractFields | None: ...
+
+
+@runtime_checkable
+class SummaryRepository(Protocol):
+    async def upsert(
+        self,
+        document_id: DocumentId,
+        summary: str,
+        key_points: list[str],
+    ) -> None: ...
+
+    async def get(self, document_id: DocumentId) -> tuple[str, list[str]] | None: ...
+
+
+@runtime_checkable
+class DocumentFileStorage(Protocol):
+    async def save(self, stream: BinaryIO, filename: str) -> Path: ...
+
+
+@runtime_checkable
+class SageProcessor(Protocol):
+    async def process(self, file_path: Path) -> ProcessingResult: ...
+
+
+@runtime_checkable
+class IngestionTaskQueue(Protocol):
+    async def enqueue_process(self, document_id: DocumentId) -> None: ...
+
+    async def enqueue_resolve(self, document_id: DocumentId) -> None: ...
+
+    async def enqueue_index(self, document_id: DocumentId) -> None: ...
+
+
+__all__ = [
+    "Chunk",
+    "ChunkRepository",
+    "ContractFields",
+    "DocumentFileStorage",
+    "DocumentNotFound",
+    "DocumentRepository",
+    "FieldsRepository",
+    "IngestionTaskQueue",
+    "ProcessingResult",
+    "SageProcessor",
+    "SummaryRepository",
+]
