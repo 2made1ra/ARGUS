@@ -7,11 +7,12 @@ name = "sage"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "pymupdf",
-    "pytesseract",
-    "pillow",
-    "httpx",
-    "pydantic",
+    "pymupdf>=1.24",
+    "pytesseract>=0.3.13",
+    "pillow>=10.4",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "langchain-text-splitters>=0.3",
 ]
 
 [tool.hatch.build.targets.wheel]
