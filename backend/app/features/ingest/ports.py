@@ -1,5 +1,7 @@
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Protocol, runtime_checkable
+from typing import Any, BinaryIO, Protocol, runtime_checkable
+from uuid import UUID
 
 from sage import Chunk, ContractFields, ProcessingResult
 
@@ -11,6 +13,13 @@ class DocumentNotFound(Exception):
     def __init__(self, document_id: DocumentId) -> None:
         super().__init__(f"Document not found: {document_id}")
         self.document_id = document_id
+
+
+@dataclass
+class VectorPoint:
+    id: UUID
+    vector: list[float]
+    payload: dict[str, Any]
 
 
 @runtime_checkable
@@ -89,6 +98,18 @@ class IngestionTaskQueue(Protocol):
     async def enqueue_index(self, document_id: DocumentId) -> None: ...
 
 
+@runtime_checkable
+class EmbeddingService(Protocol):
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+@runtime_checkable
+class VectorIndex(Protocol):
+    async def upsert_chunks(self, points: list[VectorPoint]) -> None: ...
+
+    async def delete_document(self, document_id: DocumentId) -> None: ...
+
+
 __all__ = [
     "Chunk",
     "ChunkRepository",
@@ -96,9 +117,12 @@ __all__ = [
     "DocumentFileStorage",
     "DocumentNotFound",
     "DocumentRepository",
+    "EmbeddingService",
     "FieldsRepository",
     "IngestionTaskQueue",
     "ProcessingResult",
     "SageProcessor",
     "SummaryRepository",
+    "VectorIndex",
+    "VectorPoint",
 ]

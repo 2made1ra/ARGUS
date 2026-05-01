@@ -1,12 +1,10 @@
-from uuid import uuid4
-
+from sage import Chunk
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sage import Chunk
-
 from app.adapters.sqlalchemy.models import DocumentChunk
 from app.core.domain.ids import DocumentId
+from app.features.ingest.chunk_ids import stable_chunk_id
 
 
 class SqlAlchemyChunkRepository:
@@ -17,7 +15,7 @@ class SqlAlchemyChunkRepository:
         self._session.add_all(
             [
                 DocumentChunk(
-                    id=uuid4(),
+                    id=stable_chunk_id(document_id, chunk.chunk_index),
                     document_id=document_id,
                     chunk_index=chunk.chunk_index,
                     text=chunk.text,

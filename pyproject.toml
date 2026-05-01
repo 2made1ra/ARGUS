@@ -27,3 +27,17 @@ select = [
     "I",
     "UP",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+mypy_path = "packages/sage"
+
+[[tool.mypy.overrides]]
+module = [
+    "fitz",
+    "langchain_text_splitters",
+    "PIL",
+    "pytesseract",
+]
+ignore_missing_imports = true

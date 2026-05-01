@@ -93,6 +93,7 @@ dependencies = [
     { name = "qdrant-client" },
     { name = "rapidfuzz" },
     { name = "redis" },
+    { name = "sage" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -123,6 +124,7 @@ requires-dist = [
     { name = "rapidfuzz" },
     { name = "redis" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "sage", editable = "packages/sage" },
     { name = "sqlalchemy", extras = ["asyncio"] },
     { name = "uvicorn", extras = ["standard"] },
 ]

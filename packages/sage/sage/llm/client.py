@@ -24,8 +24,8 @@ class LMStudioClient:
 
     async def chat(
         self,
-        messages: list[dict],
-        response_format: dict | None = None,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None = None,
     ) -> str:
         if self._http is None:
             raise RuntimeError("LMStudioClient must be used as an async context manager")
@@ -38,7 +38,8 @@ class LMStudioClient:
             payload["response_format"] = response_format
         response = await self._http.post(self._chat_completions_url(), json=payload)
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        content = response.json()["choices"][0]["message"]["content"]
+        return str(content)
 
     def _chat_completions_url(self) -> str:
         if self.base_url.endswith("/chat/completions"):
