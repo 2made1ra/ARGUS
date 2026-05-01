@@ -47,6 +47,8 @@ class RawContractorMappingRepository(Protocol):
         inn: str | None,
     ) -> RawContractorMapping | None: ...
 
+    async def count_for(self, contractor_id: ContractorEntityId) -> int: ...
+
 
 __all__ = [
     "ContractorNotFound",

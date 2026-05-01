@@ -99,6 +99,14 @@ class SqlAlchemyRawContractorMappingRepository:
         row = await self._session.scalar(stmt)
         return _mapping_to_entity(row) if row is not None else None
 
+    async def count_for(self, contractor_id: ContractorEntityId) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ContractorRawMappingRow)
+            .where(ContractorRawMappingRow.contractor_entity_id == contractor_id)
+        )
+        return await self._session.scalar(stmt) or 0
+
 
 def _contractor_to_entity(row: ContractorRow) -> Contractor:
     return Contractor(
