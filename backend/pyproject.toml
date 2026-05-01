@@ -21,6 +21,7 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "python-multipart",
+    "sage",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,9 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.4",
 ]
+
+[tool.uv.sources]
+sage = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
@@ -42,7 +46,17 @@ asyncio_mode = "auto"
 [tool.mypy]
 python_version = "3.13"
 strict = true
+mypy_path = "packages/sage"
 
 [[tool.mypy.overrides]]
 module = "app.core.*"
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "fitz",
+    "langchain_text_splitters",
+    "PIL",
+    "pytesseract",
+]
+ignore_missing_imports = true
