@@ -44,10 +44,21 @@ class DocumentSearchResult:
     matched_chunks: list[ChunkSnippet]
 
 
+@dataclass
+class WithinDocumentResult:
+    chunk_index: int
+    page_start: int | None
+    page_end: int | None
+    section_type: str | None
+    snippet: str
+    score: float
+
+
 __all__ = [
     "ChunkSnippet",
     "ContractorSearchResult",
     "DocumentSearchResult",
     "SearchGroup",
     "SearchHit",
+    "WithinDocumentResult",
 ]
