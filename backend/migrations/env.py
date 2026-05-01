@@ -5,6 +5,7 @@ from logging.config import fileConfig
 from sqlalchemy.engine import Connection
 
 from alembic import context
+from app.adapters.sqlalchemy.models import Base
 from app.adapters.sqlalchemy.session import make_engine
 
 # this is the Alembic Config object, which provides
@@ -16,11 +17,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def get_database_url() -> str:
