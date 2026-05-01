@@ -37,11 +37,11 @@ backend/app/core/
 
 ## Критерии приёмки трека
 
-- [ ] `from app.core.domain import DocumentId, ContractorEntityId, ChunkId,
+- [x] `from app.core.domain import DocumentId, ContractorEntityId, ChunkId,
   new_document_id, new_contractor_entity_id, new_chunk_id` работает.
-- [ ] `from app.core.ports import UnitOfWork` работает.
-- [ ] Юнит-тесты на ID round-trip зелёные.
-- [ ] `mypy` (если уже подключён) считает типы newtype'ов различимыми.
+- [x] `from app.core.ports import UnitOfWork` работает.
+- [x] Юнит-тесты на ID round-trip зелёные.
+- [x] `mypy` (если уже подключён) считает типы newtype'ов различимыми.
 
 ## Что НЕ делаем
 
@@ -60,8 +60,8 @@ backend/app/core/
 
 ## Verification checklist
 
-- [ ] `pytest backend/tests/core -v`
-- [ ] `python -c "from app.core.domain import DocumentId, ChunkId; from
+- [x] `pytest backend/tests/core -v`
+- [x] `python -c "from app.core.domain import DocumentId, ChunkId; from
   app.core.ports import UnitOfWork; print(UnitOfWork)"`
 
 ---
