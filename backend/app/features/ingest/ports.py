@@ -99,6 +99,11 @@ class IngestionTaskQueue(Protocol):
 
 
 @runtime_checkable
+class EmbeddingService(Protocol):
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+@runtime_checkable
 class VectorIndex(Protocol):
     async def upsert_chunks(self, points: list[VectorPoint]) -> None: ...
 
@@ -112,6 +117,7 @@ __all__ = [
     "DocumentFileStorage",
     "DocumentNotFound",
     "DocumentRepository",
+    "EmbeddingService",
     "FieldsRepository",
     "IngestionTaskQueue",
     "ProcessingResult",
