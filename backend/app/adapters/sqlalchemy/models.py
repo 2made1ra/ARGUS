@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, Text, TIMESTAMP, func
+from sqlalchemy import TIMESTAMP, Boolean, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -18,9 +18,9 @@ class Contractor(Base):
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True)
     display_name: Mapped[str | None] = mapped_column(Text)
     normalized_key: Mapped[str | None] = mapped_column(Text, unique=True)
-    inn: Mapped[str | None] = mapped_column(Text)
+    inn: Mapped[str | None] = mapped_column(Text, unique=True)
     kpp: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime | None] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=func.now(),
     )

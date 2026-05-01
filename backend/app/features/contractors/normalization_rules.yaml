@@ -1,0 +1,10 @@
+legal_forms:
+  - ООО
+  - АО
+  - ИП
+  - ПАО
+  - ЗАО
+  - НКО
+
+stopwords: []
+blocklist: []

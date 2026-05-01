@@ -17,6 +17,7 @@ dependencies = [
     "qdrant-client",
     "httpx",
     "rapidfuzz",
+    "pyyaml",
     "pydantic",
     "pydantic-settings",
     "python-multipart",

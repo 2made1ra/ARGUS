@@ -3,7 +3,7 @@ from typing import BinaryIO, Protocol, runtime_checkable
 
 from sage import Chunk, ContractFields, ProcessingResult
 
-from app.core.domain.ids import DocumentId
+from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.ingest.entities.document import Document, DocumentStatus
 
 
@@ -36,6 +36,12 @@ class DocumentRepository(Protocol):
     ) -> None: ...
 
     async def set_error(self, document_id: DocumentId, message: str) -> None: ...
+
+    async def set_contractor_entity_id(
+        self,
+        document_id: DocumentId,
+        contractor_entity_id: ContractorEntityId | None,
+    ) -> None: ...
 
 
 @runtime_checkable

@@ -90,6 +90,21 @@ class SqlAlchemyDocumentRepository:
         if result.scalar_one_or_none() is None:
             raise DocumentNotFound(document_id)
 
+    async def set_contractor_entity_id(
+        self,
+        document_id: DocumentId,
+        contractor_entity_id: ContractorEntityId | None,
+    ) -> None:
+        statement = (
+            update(DocumentRow)
+            .where(DocumentRow.id == document_id)
+            .values(contractor_entity_id=contractor_entity_id)
+            .returning(DocumentRow.id)
+        )
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
+
 
 def _to_entity(row: DocumentRow) -> Document:
     contractor_entity_id = (
