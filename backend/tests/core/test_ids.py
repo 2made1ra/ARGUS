@@ -23,7 +23,6 @@ def test_document_id_round_trips_through_string_uuid() -> None:
 
 
 def test_id_newtypes_are_distinct_static_type_markers() -> None:
-    assert DocumentId is not ContractorEntityId
     assert DocumentId.__name__ == "DocumentId"
     assert ContractorEntityId.__name__ == "ContractorEntityId"
     assert ChunkId.__name__ == "ChunkId"

@@ -5,11 +5,10 @@ from types import TracebackType
 from uuid import uuid4
 
 import pytest
-from sage import Chunk, ContractFields, Page, ProcessingResult
-
-from app.core.domain.ids import DocumentId
+from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.ingest.entities.document import Document, DocumentStatus
 from app.features.ingest.use_cases.process_document import ProcessDocumentUseCase
+from sage import Chunk, ContractFields, Page, ProcessingResult
 
 
 class FakeDocumentRepository:
@@ -60,6 +59,19 @@ class FakeDocumentRepository:
             document.error_message = message
         self.errors.append((document_id, message))
 
+    async def add(self, document: Document) -> None:
+        raise NotImplementedError
+
+    async def list(self, *, limit: int, offset: int) -> list[Document]:
+        raise NotImplementedError
+
+    async def set_contractor_entity_id(
+        self,
+        document_id: DocumentId,
+        contractor_entity_id: ContractorEntityId | None,
+    ) -> None:
+        raise NotImplementedError
+
 
 class FakeChunkRepository:
     def __init__(
@@ -78,6 +90,9 @@ class FakeChunkRepository:
             raise self.raise_on_add
         self.added.append((document_id, chunks))
 
+    async def list_for(self, document_id: DocumentId) -> list[Chunk]:
+        raise NotImplementedError
+
 
 class FakeFieldsRepository:
     def __init__(self, calls: MutableSequence[str]) -> None:
@@ -87,6 +102,9 @@ class FakeFieldsRepository:
     async def upsert(self, document_id: DocumentId, fields: ContractFields) -> None:
         self.calls.append("fields.upsert")
         self.upserts.append((document_id, fields))
+
+    async def get(self, document_id: DocumentId) -> ContractFields | None:
+        raise NotImplementedError
 
 
 class FakeSummaryRepository:
@@ -102,6 +120,9 @@ class FakeSummaryRepository:
     ) -> None:
         self.calls.append("summaries.upsert")
         self.upserts.append((document_id, summary, key_points))
+
+    async def get(self, document_id: DocumentId) -> tuple[str, list[str]] | None:
+        raise NotImplementedError
 
 
 class FakeSageProcessor:
@@ -284,7 +305,7 @@ async def test_process_document_marks_failed_and_reraises_when_sage_fails() -> N
     assert calls.index("sage.process") < calls.index("documents.set_error")
 
 
-async def test_process_document_marks_failed_and_reraises_when_persisting_fails() -> None:
+async def test_process_document_marks_failed_when_persisting_fails() -> None:
     calls: list[str] = []
     document_id = DocumentId(uuid4())
     documents = FakeDocumentRepository(calls, {document_id: _document(document_id)})

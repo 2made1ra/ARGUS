@@ -107,6 +107,12 @@ class SqlAlchemyDocumentRepository:
 
 
 def _to_entity(row: DocumentRow) -> Document:
+    title = _required(row.title, "title")
+    file_path = _required(row.file_path, "file_path")
+    content_type = _required(row.content_type, "content_type")
+    status = _document_status(_required(row.status, "status"))
+    partial_extraction = _required(row.partial_extraction, "partial_extraction")
+    created_at = _required(row.created_at, "created_at")
     contractor_entity_id = (
         ContractorEntityId(row.contractor_entity_id)
         if row.contractor_entity_id is not None
@@ -115,16 +121,32 @@ def _to_entity(row: DocumentRow) -> Document:
     return Document(
         id=DocumentId(row.id),
         contractor_entity_id=contractor_entity_id,
-        title=row.title,
-        file_path=row.file_path,
-        content_type=row.content_type,
+        title=title,
+        file_path=file_path,
+        content_type=content_type,
         document_kind=row.document_kind,
         doc_type=row.doc_type,
-        status=row.status,
+        status=status,
         error_message=row.error_message,
-        partial_extraction=row.partial_extraction,
-        created_at=row.created_at,
+        partial_extraction=partial_extraction,
+        created_at=created_at,
     )
+
+
+def _required[RequiredValue](
+    value: RequiredValue | None,
+    field_name: str,
+) -> RequiredValue:
+    if value is None:
+        raise ValueError(f"Document row is missing {field_name}")
+    return value
+
+
+def _document_status(value: str) -> DocumentStatus:
+    try:
+        return DocumentStatus(value)
+    except ValueError as exc:
+        raise ValueError(f"Document row has invalid status: {value}") from exc
 
 
 __all__ = ["SqlAlchemyDocumentRepository"]

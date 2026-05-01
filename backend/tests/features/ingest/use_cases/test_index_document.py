@@ -44,6 +44,28 @@ class FakeDocumentRepository:
         document.error_message = message
         self.errors.append((document_id, message))
 
+    async def add(self, document: Document) -> None:
+        raise NotImplementedError
+
+    async def list(self, *, limit: int, offset: int) -> list[Document]:
+        raise NotImplementedError
+
+    async def update_processing_result(
+        self,
+        document_id: DocumentId,
+        *,
+        document_kind: str,
+        partial_extraction: bool,
+    ) -> None:
+        raise NotImplementedError
+
+    async def set_contractor_entity_id(
+        self,
+        document_id: DocumentId,
+        contractor_entity_id: ContractorEntityId | None,
+    ) -> None:
+        raise NotImplementedError
+
 
 class FakeChunkRepository:
     def __init__(self, calls: MutableSequence[str], chunks: list[Chunk]) -> None:
@@ -53,6 +75,9 @@ class FakeChunkRepository:
     async def list_for(self, document_id: DocumentId) -> list[Chunk]:
         self.calls.append("chunks.list_for")
         return self.chunks
+
+    async def add_many(self, document_id: DocumentId, chunks: list[Chunk]) -> None:
+        raise NotImplementedError
 
 
 class FakeFieldsRepository:
@@ -68,6 +93,9 @@ class FakeFieldsRepository:
         self.calls.append("fields.get")
         return self.fields
 
+    async def upsert(self, document_id: DocumentId, fields: ContractFields) -> None:
+        raise NotImplementedError
+
 
 class FakeSummaryRepository:
     def __init__(
@@ -81,6 +109,14 @@ class FakeSummaryRepository:
     async def get(self, document_id: DocumentId) -> tuple[str, list[str]] | None:
         self.calls.append("summaries.get")
         return self.summary
+
+    async def upsert(
+        self,
+        document_id: DocumentId,
+        summary: str,
+        key_points: list[str],
+    ) -> None:
+        raise NotImplementedError
 
 
 class FakeContractorRepository:
@@ -97,6 +133,30 @@ class FakeContractorRepository:
         self.calls.append("contractors.get")
         self.gets.append(id)
         return self.contractors[id]
+
+    async def add(self, contractor: Contractor) -> None:
+        raise NotImplementedError
+
+    async def find_by_inn(self, inn: str) -> Contractor | None:
+        raise NotImplementedError
+
+    async def find_by_normalized_key(self, key: str) -> Contractor | None:
+        raise NotImplementedError
+
+    async def find_all_for_fuzzy(self) -> list[Contractor]:
+        raise NotImplementedError
+
+    async def count_documents_for(self, id: ContractorEntityId) -> int:
+        raise NotImplementedError
+
+    async def list_for_contractor(
+        self,
+        id: ContractorEntityId,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[Document]:
+        raise NotImplementedError
 
 
 class FakeEmbeddingService:
@@ -126,6 +186,9 @@ class FakeVectorIndex:
     async def upsert_chunks(self, points: list[VectorPoint]) -> None:
         self.calls.append("index.upsert_chunks")
         self.upserts.append(points)
+
+    async def delete_document(self, document_id: DocumentId) -> None:
+        raise NotImplementedError
 
 
 class FakeUnitOfWork:

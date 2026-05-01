@@ -5,8 +5,7 @@ from types import TracebackType
 from typing import BinaryIO
 
 import pytest
-
-from app.core.domain.ids import DocumentId
+from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.ingest.entities.document import Document, DocumentStatus
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
 
@@ -40,6 +39,38 @@ class FakeDocumentRepository:
         self.calls.append("add")
         self.documents[document.id] = document
 
+    async def get(self, document_id: DocumentId) -> Document:
+        raise NotImplementedError
+
+    async def list(self, *, limit: int, offset: int) -> list[Document]:
+        raise NotImplementedError
+
+    async def update_status(
+        self,
+        document_id: DocumentId,
+        status: DocumentStatus,
+    ) -> None:
+        raise NotImplementedError
+
+    async def update_processing_result(
+        self,
+        document_id: DocumentId,
+        *,
+        document_kind: str,
+        partial_extraction: bool,
+    ) -> None:
+        raise NotImplementedError
+
+    async def set_error(self, document_id: DocumentId, message: str) -> None:
+        raise NotImplementedError
+
+    async def set_contractor_entity_id(
+        self,
+        document_id: DocumentId,
+        contractor_entity_id: ContractorEntityId | None,
+    ) -> None:
+        raise NotImplementedError
+
 
 class FakeIngestionTaskQueue:
     def __init__(self, calls: MutableSequence[str]) -> None:
@@ -50,6 +81,12 @@ class FakeIngestionTaskQueue:
         assert "commit" in self.calls
         self.calls.append("enqueue")
         self.enqueued_processes.append(document_id)
+
+    async def enqueue_resolve(self, document_id: DocumentId) -> None:
+        raise NotImplementedError
+
+    async def enqueue_index(self, document_id: DocumentId) -> None:
+        raise NotImplementedError
 
 
 class FakeUnitOfWork:

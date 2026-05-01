@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ def set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def clear_settings_cache(monkeypatch: pytest.MonkeyPatch):
+def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     get_settings.cache_clear()
     for key in ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
@@ -40,10 +41,16 @@ def clear_settings_cache(monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
 
 
+def _settings_without_env_file() -> Settings:
+    return Settings(
+        _env_file=None,  # type: ignore[call-arg]  # pydantic-settings runtime option
+    )
+
+
 def test_settings_parses_env_and_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     set_required_env(monkeypatch)
 
-    settings = Settings(_env_file=None)
+    settings = _settings_without_env_file()
 
     assert settings.database_url == (
         "postgresql+asyncpg://argus:argus@localhost:5432/argus"
@@ -63,7 +70,7 @@ def test_settings_requires_database_url(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("DATABASE_URL")
 
     with pytest.raises(ValidationError) as exc_info:
-        Settings(_env_file=None)
+        _settings_without_env_file()
 
     assert any(error["loc"] == ("database_url",) for error in exc_info.value.errors())
 
@@ -73,7 +80,7 @@ def test_settings_requires_lm_studio_url(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("LM_STUDIO_URL")
 
     with pytest.raises(ValidationError) as exc_info:
-        Settings(_env_file=None)
+        _settings_without_env_file()
 
     assert any(error["loc"] == ("lm_studio_url",) for error in exc_info.value.errors())
 
