@@ -14,7 +14,7 @@ dependencies = [
     "alembic",
     "celery[redis]",
     "redis",
-    "qdrant-client",
+    "qdrant-client>=1.17.1",
     "httpx",
     "rapidfuzz",
     "pyyaml",

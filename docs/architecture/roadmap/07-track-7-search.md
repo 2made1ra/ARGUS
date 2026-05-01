@@ -104,7 +104,8 @@ drill-down-поиска (по контрагентам).
     group_size: int = 3) -> list[SearchHit] | list[SearchGroup]`.
 - `adapters/qdrant/search.py`:
   * `QdrantVectorSearch(client, collection)`. Если `group_by` задан —
-    использует `client.search_groups(...)`. Иначе — `client.search(...)`.
+    использует `client.query_points_groups(...)`. Иначе —
+    `client.query_points(...)`.
   * Конвертирует Qdrant-результаты в DTO.
 - `use_cases/search_contractors.py`:
   * Конструктор: `__init__(*, embeddings: EmbeddingService, vectors:
@@ -132,7 +133,7 @@ drill-down-поиска (по контрагентам).
 - Вывод `pytest backend/tests/features/search/use_cases/test_search_contractors.py -v`.
 
 # Stop rules
-- Если Qdrant client не поддерживает `search_groups` в установленной
+- Если Qdrant client не поддерживает `query_points_groups` в установленной
   версии — обнови минимальную версию в `pyproject.toml`.
 ```
 

@@ -726,7 +726,7 @@ display name and a top snippet.
 >    `ContractorSearchResult(contractor_id, name, score, matched_chunks_count,
 >    top_snippet)`.
 > 3. `adapters/qdrant/search.py`: `QdrantVectorSearch` implementing the port
->    using `client.search` and `client.search_groups`.
+>    using `client.query_points` and `client.query_points_groups`.
 > 4. `use_cases/search_contractors.py`: `SearchContractorsUseCase` with deps
 >    `embeddings: EmbeddingService`, `vectors: VectorSearch`, `contractors:
 >    ContractorRepository`. `execute(query, limit=20)`:
