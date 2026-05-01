@@ -38,6 +38,18 @@ class SqlAlchemyContractorRepository:
             raise ContractorNotFound(id)
         return _contractor_to_entity(row)
 
+    async def get_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, Contractor]:
+        if not ids:
+            return {}
+
+        stmt = select(ContractorRow).where(ContractorRow.id.in_(ids))
+        rows = await self._session.scalars(stmt)
+        contractors = [_contractor_to_entity(row) for row in rows]
+        return {contractor.id: contractor for contractor in contractors}
+
     async def find_by_inn(self, inn: str) -> Contractor | None:
         stmt = select(ContractorRow).where(ContractorRow.inn == inn)
         row = await self._session.scalar(stmt)

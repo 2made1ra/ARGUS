@@ -120,7 +120,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "python-multipart" },
     { name = "pyyaml" },
-    { name = "qdrant-client" },
+    { name = "qdrant-client", specifier = ">=1.17.1" },
     { name = "rapidfuzz" },
     { name = "redis" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
