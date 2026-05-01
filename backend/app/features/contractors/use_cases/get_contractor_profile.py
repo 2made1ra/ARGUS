@@ -4,7 +4,10 @@ from dataclasses import dataclass
 
 from app.core.domain.ids import ContractorEntityId
 from app.features.contractors.entities.contractor import Contractor
-from app.features.contractors.ports import ContractorRepository, RawContractorMappingRepository
+from app.features.contractors.ports import (
+    ContractorRepository,
+    RawContractorMappingRepository,
+)
 
 
 @dataclass

@@ -5,7 +5,9 @@ from typing import Protocol, runtime_checkable
 from app.core.domain.ids import ContractorEntityId
 from app.features.contractors.entities.contractor import Contractor
 from app.features.contractors.entities.resolution import RawContractorMapping
-from app.features.ingest.entities.document import Document  # allowed cross-feature exception
+
+# Allowed cross-feature exception for contractor document listing.
+from app.features.ingest.entities.document import Document
 
 
 class ContractorNotFound(Exception):
@@ -40,12 +42,6 @@ class ContractorRepository(Protocol):
 @runtime_checkable
 class RawContractorMappingRepository(Protocol):
     async def add(self, mapping: RawContractorMapping) -> None: ...
-
-    async def find_by_raw(
-        self,
-        raw_name: str,
-        inn: str | None,
-    ) -> RawContractorMapping | None: ...
 
     async def count_for(self, contractor_id: ContractorEntityId) -> int: ...
 

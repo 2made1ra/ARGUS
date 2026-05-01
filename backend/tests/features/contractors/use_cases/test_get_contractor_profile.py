@@ -13,7 +13,6 @@ from app.features.contractors.use_cases.get_contractor_profile import (
 )
 from app.features.ingest.entities.document import Document
 
-
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -41,7 +40,10 @@ class FakeContractorRepository:
     async def find_by_inn(self, inn: str) -> Contractor | None:  # pragma: no cover
         raise NotImplementedError
 
-    async def find_by_normalized_key(self, key: str) -> Contractor | None:  # pragma: no cover
+    async def find_by_normalized_key(
+        self,
+        key: str,
+    ) -> Contractor | None:  # pragma: no cover
         raise NotImplementedError
 
     async def find_all_for_fuzzy(self) -> list[Contractor]:  # pragma: no cover
@@ -63,11 +65,6 @@ class FakeRawContractorMappingRepository:
         return self.mapping_counts.get(contractor_id, 0)
 
     async def add(self, mapping: RawContractorMapping) -> None:  # pragma: no cover
-        raise NotImplementedError
-
-    async def find_by_raw(
-        self, raw_name: str, inn: str | None
-    ) -> RawContractorMapping | None:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -112,7 +109,9 @@ async def test_returns_profile_with_counts() -> None:
     mappings = FakeRawContractorMappingRepository(calls)
     mappings.mapping_counts[contractor_id] = 3
 
-    profile = await _use_case(contractors=contractors, mappings=mappings).execute(contractor_id)
+    profile = await _use_case(contractors=contractors, mappings=mappings).execute(
+        contractor_id
+    )
 
     assert isinstance(profile, ContractorProfile)
     assert profile.contractor == contractor
@@ -132,7 +131,7 @@ async def test_not_found_propagates() -> None:
 
     try:
         await _use_case(contractors=contractors, mappings=mappings).execute(unknown_id)
-        assert False, "ContractorNotFound was not raised"
+        raise AssertionError("ContractorNotFound was not raised")
     except ContractorNotFound as exc:
         assert exc.contractor_id == unknown_id
 

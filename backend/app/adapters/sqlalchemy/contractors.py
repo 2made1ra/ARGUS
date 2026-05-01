@@ -1,9 +1,15 @@
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.sqlalchemy.models import Contractor as ContractorRow
-from app.adapters.sqlalchemy.models import ContractorRawMapping as ContractorRawMappingRow
-from app.adapters.sqlalchemy.models import Document as DocumentRow
+from app.adapters.sqlalchemy.models import (
+    Contractor as ContractorRow,
+)
+from app.adapters.sqlalchemy.models import (
+    ContractorRawMapping as ContractorRawMappingRow,
+)
+from app.adapters.sqlalchemy.models import (
+    Document as DocumentRow,
+)
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.contractors.entities.contractor import Contractor
 from app.features.contractors.entities.resolution import RawContractorMapping
@@ -87,18 +93,6 @@ class SqlAlchemyRawContractorMappingRepository:
         )
         await self._session.execute(stmt)
 
-    async def find_by_raw(
-        self,
-        raw_name: str,
-        inn: str | None,
-    ) -> RawContractorMapping | None:
-        stmt = select(ContractorRawMappingRow).where(
-            ContractorRawMappingRow.raw_name == raw_name,
-            ContractorRawMappingRow.inn == inn,
-        )
-        row = await self._session.scalar(stmt)
-        return _mapping_to_entity(row) if row is not None else None
-
     async def count_for(self, contractor_id: ContractorEntityId) -> int:
         stmt = (
             select(func.count())
@@ -111,21 +105,11 @@ class SqlAlchemyRawContractorMappingRepository:
 def _contractor_to_entity(row: ContractorRow) -> Contractor:
     return Contractor(
         id=ContractorEntityId(row.id),
-        display_name=row.display_name,
-        normalized_key=row.normalized_key,
+        display_name=_required(row.display_name, "contractors.display_name"),
+        normalized_key=_required(row.normalized_key, "contractors.normalized_key"),
         inn=row.inn,
         kpp=row.kpp,
-        created_at=row.created_at,
-    )
-
-
-def _mapping_to_entity(row: ContractorRawMappingRow) -> RawContractorMapping:
-    return RawContractorMapping(
-        id=row.id,
-        raw_name=row.raw_name,
-        inn=row.inn,
-        contractor_entity_id=ContractorEntityId(row.contractor_entity_id),
-        confidence=row.confidence,
+        created_at=_required(row.created_at, "contractors.created_at"),
     )
 
 
@@ -138,16 +122,25 @@ def _document_to_entity(row: DocumentRow) -> Document:
     return Document(
         id=DocumentId(row.id),
         contractor_entity_id=contractor_entity_id,
-        title=row.title,
-        file_path=row.file_path,
-        content_type=row.content_type,
+        title=_required(row.title, "documents.title"),
+        file_path=_required(row.file_path, "documents.file_path"),
+        content_type=_required(row.content_type, "documents.content_type"),
         document_kind=row.document_kind,
         doc_type=row.doc_type,
-        status=DocumentStatus(row.status),
+        status=DocumentStatus(_required(row.status, "documents.status")),
         error_message=row.error_message,
-        partial_extraction=row.partial_extraction,
-        created_at=row.created_at,
+        partial_extraction=_required(
+            row.partial_extraction,
+            "documents.partial_extraction",
+        ),
+        created_at=_required(row.created_at, "documents.created_at"),
     )
+
+
+def _required[T](value: T | None, field_name: str) -> T:
+    if value is None:
+        raise ValueError(f"Expected non-null value for {field_name}")
+    return value
 
 
 __all__ = [

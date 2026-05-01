@@ -3,14 +3,16 @@ from datetime import UTC, datetime
 from types import TracebackType
 from uuid import uuid4
 
-from sage import ContractFields
-
 from app.core.domain.ids import ContractorEntityId, DocumentId, new_contractor_entity_id
 from app.features.contractors.entities.contractor import Contractor
 from app.features.contractors.entities.resolution import RawContractorMapping
-from app.features.contractors.use_cases.resolve_contractor import ResolveContractorUseCase
+from app.features.contractors.use_cases.resolve_contractor import (
+    FUZZY_MATCH_THRESHOLD,
+    InvalidDocumentStatusForResolution,
+    ResolveContractorUseCase,
+)
 from app.features.ingest.entities.document import Document, DocumentStatus
-
+from sage import ContractFields
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -44,10 +46,19 @@ class FakeContractorRepository:
     async def get(self, id: ContractorEntityId) -> Contractor:  # pragma: no cover
         raise NotImplementedError
 
-    async def count_documents_for(self, id: ContractorEntityId) -> int:  # pragma: no cover
+    async def count_documents_for(
+        self,
+        id: ContractorEntityId,
+    ) -> int:  # pragma: no cover
         raise NotImplementedError
 
-    async def list_for_contractor(self, id: ContractorEntityId, *, limit: int, offset: int) -> list[Document]:  # pragma: no cover
+    async def list_for_contractor(
+        self,
+        id: ContractorEntityId,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[Document]:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -60,7 +71,10 @@ class FakeRawContractorMappingRepository:
         self.calls.append("mappings.add")
         self.added.append(mapping)
 
-    async def find_by_raw(self, raw_name: str, inn: str | None) -> RawContractorMapping | None:  # pragma: no cover
+    async def count_for(
+        self,
+        contractor_id: ContractorEntityId,
+    ) -> int:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -68,11 +82,47 @@ class FakeDocumentRepository:
     def __init__(self, calls: MutableSequence[str], document: Document) -> None:
         self.calls = calls
         self._document = document
-        self.contractor_id_updates: list[tuple[DocumentId, ContractorEntityId | None]] = []
+        self.contractor_id_updates: list[
+            tuple[DocumentId, ContractorEntityId | None]
+        ] = []
 
     async def get(self, document_id: DocumentId) -> Document:
         self.calls.append("documents.get")
         return self._document
+
+    async def add(self, document: Document) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[Document]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def update_status(
+        self,
+        document_id: DocumentId,
+        status: DocumentStatus,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def update_processing_result(
+        self,
+        document_id: DocumentId,
+        *,
+        document_kind: str,
+        partial_extraction: bool,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def set_error(
+        self,
+        document_id: DocumentId,
+        message: str,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
 
     async def set_contractor_entity_id(
         self,
@@ -84,13 +134,24 @@ class FakeDocumentRepository:
 
 
 class FakeFieldsRepository:
-    def __init__(self, calls: MutableSequence[str], fields: ContractFields | None) -> None:
+    def __init__(
+        self,
+        calls: MutableSequence[str],
+        fields: ContractFields | None,
+    ) -> None:
         self.calls = calls
         self._fields = fields
 
     async def get(self, document_id: DocumentId) -> ContractFields | None:
         self.calls.append("fields.get")
         return self._fields
+
+    async def upsert(
+        self,
+        document_id: DocumentId,
+        fields: ContractFields,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
 
 
 class FakeUnitOfWork:
@@ -123,7 +184,11 @@ class FakeUnitOfWork:
 # ---------------------------------------------------------------------------
 
 
-def _document(document_id: DocumentId) -> Document:
+def _document(
+    document_id: DocumentId,
+    *,
+    status: DocumentStatus = DocumentStatus.RESOLVING,
+) -> Document:
     return Document(
         id=document_id,
         contractor_entity_id=None,
@@ -132,7 +197,7 @@ def _document(document_id: DocumentId) -> Document:
         content_type="application/pdf",
         document_kind=None,
         doc_type=None,
-        status=DocumentStatus.RESOLVING,
+        status=status,
         error_message=None,
         partial_extraction=False,
         created_at=datetime.now(UTC),
@@ -181,7 +246,10 @@ async def test_inn_exact_match() -> None:
     contractors.by_inn["7701234567"] = existing
     mappings = FakeRawContractorMappingRepository(calls)
     documents = FakeDocumentRepository(calls, _document(document_id))
-    fields = FakeFieldsRepository(calls, ContractFields(supplier_name="ООО Вектор", supplier_inn="7701234567"))
+    fields = FakeFieldsRepository(
+        calls,
+        ContractFields(supplier_name="ООО Вектор", supplier_inn="7701234567"),
+    )
     uow = FakeUnitOfWork(calls)
 
     result = await _use_case(
@@ -267,7 +335,10 @@ async def test_fuzzy_match_below_threshold_creates_new() -> None:
     contractors.fuzzy_pool = [unrelated]
     mappings = FakeRawContractorMappingRepository(calls)
     documents = FakeDocumentRepository(calls, _document(document_id))
-    fields = FakeFieldsRepository(calls, ContractFields(supplier_name="Вектор"))
+    fields = FakeFieldsRepository(
+        calls,
+        ContractFields(supplier_name="Вектор", supplier_kpp="770101001"),
+    )
     uow = FakeUnitOfWork(calls)
 
     result = await _use_case(
@@ -285,6 +356,7 @@ async def test_fuzzy_match_below_threshold_creates_new() -> None:
     new_contractor = contractors.added[0]
     assert new_contractor.id == result
     assert new_contractor.normalized_key == "вектор"
+    assert new_contractor.kpp == "770101001"
     assert mappings.added[0].confidence == 1.0
     assert documents.contractor_id_updates == [(document_id, result)]
 
@@ -340,3 +412,38 @@ async def test_empty_raw_name_returns_none() -> None:
     assert "contractors.find_by_normalized_key" not in calls
     assert "contractors.find_all_for_fuzzy" not in calls
     assert "contractors.add" not in calls
+
+
+async def test_invalid_document_status_raises() -> None:
+    calls: list[str] = []
+    document_id = DocumentId(uuid4())
+    contractors = FakeContractorRepository(calls)
+    mappings = FakeRawContractorMappingRepository(calls)
+    documents = FakeDocumentRepository(
+        calls,
+        _document(document_id, status=DocumentStatus.PROCESSING),
+    )
+    fields = FakeFieldsRepository(calls, ContractFields(supplier_name="ООО Вектор"))
+    uow = FakeUnitOfWork(calls)
+
+    try:
+        await _use_case(
+            calls=calls,
+            contractors=contractors,
+            mappings=mappings,
+            documents=documents,
+            fields=fields,
+            uow=uow,
+        ).execute(document_id)
+        raise AssertionError("InvalidDocumentStatusForResolution was not raised")
+    except InvalidDocumentStatusForResolution as exc:
+        assert exc.document_id == document_id
+        assert exc.status is DocumentStatus.PROCESSING
+
+    assert "fields.get" not in calls
+    assert "documents.set_contractor_entity_id" not in calls
+    assert uow.commits == 0
+
+
+def test_fuzzy_threshold_is_named_constant() -> None:
+    assert FUZZY_MATCH_THRESHOLD == 90
