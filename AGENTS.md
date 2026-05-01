@@ -156,6 +156,9 @@ manifests in the repository.
   system unless the roadmap or user explicitly asks for it.
 - Do not commit secrets. Keep real credentials out of `.env`, `.env.example`,
   docs, tests, and generated examples.
+- Always add type annotations to all function parameters and return values; internal
+  variables may omit annotations when the type is unambiguous from the right-hand side.
+  Run `mypy --strict` to verify.
 
 ## When To Ask Before Proceeding
 
