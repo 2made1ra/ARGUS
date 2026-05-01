@@ -1,7 +1,8 @@
 from types import TracebackType
-from typing import Protocol, Self
+from typing import Protocol, Self, runtime_checkable
 
 
+@runtime_checkable
 class UnitOfWork(Protocol):
     """Exiting without commit() rolls back.
     Exceptions inside the context block roll back automatically.
