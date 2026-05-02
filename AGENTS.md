@@ -145,7 +145,7 @@ manifests in the repository.
 
 ## Dependency And Infrastructure Rules
 
-- Python target: 3.12+.
+- Python target: 3.13+.
 - API: FastAPI and uvicorn.
 - Tasks: Celery with Redis.
 - Persistence: SQLAlchemy 2.x async and Alembic.
@@ -161,6 +161,8 @@ manifests in the repository.
   Run `mypy --strict` to verify.
 
 ## When To Ask Before Proceeding
+
+Do not make changes unless you are highly confident about the task. Ask clarifying questions when requirements are ambiguous.
 
 Ask the user before:
 
