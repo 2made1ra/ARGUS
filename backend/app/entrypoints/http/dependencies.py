@@ -1,7 +1,9 @@
+from collections.abc import AsyncIterator
 from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends
+from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
@@ -9,7 +11,6 @@ from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
 from app.adapters.qdrant.client import make_qdrant_client
 from app.adapters.qdrant.search import QdrantVectorSearch
-from app.adapters.sqlalchemy.chunks import SqlAlchemyChunkRepository
 from app.adapters.sqlalchemy.contractors import (
     SqlAlchemyContractorRepository,
     SqlAlchemyRawContractorMappingRepository,
@@ -36,7 +37,6 @@ from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
 
-
 # ---------------------------------------------------------------------------
 # Session / UoW primitives
 # ---------------------------------------------------------------------------
@@ -47,9 +47,23 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     return make_sessionmaker(make_engine(get_settings().database_url))
 
 
-def _session() -> AsyncSession:
-    """Fresh session per request; closed by SessionUnitOfWork.__aexit__."""
-    return get_sessionmaker()()
+async def _session() -> AsyncIterator[AsyncSession]:
+    """Fresh session per request; closed after FastAPI resolves dependencies."""
+    session = get_sessionmaker()()
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+async def get_qdrant_client(
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[AsyncQdrantClient]:
+    qdrant = make_qdrant_client(settings.qdrant_url)
+    try:
+        yield qdrant
+    finally:
+        await qdrant.close()
 
 
 # ---------------------------------------------------------------------------
@@ -98,8 +112,8 @@ def get_document_facts_uc(
 
 def get_search_within_uc(
     settings: Settings = Depends(get_settings),
+    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
 ) -> SearchWithinDocumentUseCase:
-    qdrant = make_qdrant_client(settings.qdrant_url)
     return SearchWithinDocumentUseCase(
         embeddings=LMStudioEmbeddings(
             base_url=settings.lm_studio_url,
@@ -135,8 +149,8 @@ def get_list_contractor_documents_uc(
 def get_search_documents_uc(
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(_session),
+    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
 ) -> SearchDocumentsUseCase:
-    qdrant = make_qdrant_client(settings.qdrant_url)
     return SearchDocumentsUseCase(
         embeddings=LMStudioEmbeddings(
             base_url=settings.lm_studio_url,
@@ -156,8 +170,8 @@ def get_search_documents_uc(
 def get_search_contractors_uc(
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(_session),
+    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
 ) -> SearchContractorsUseCase:
-    qdrant = make_qdrant_client(settings.qdrant_url)
     return SearchContractorsUseCase(
         embeddings=LMStudioEmbeddings(
             base_url=settings.lm_studio_url,
@@ -175,6 +189,7 @@ __all__ = [
     "get_get_document_uc",
     "get_list_contractor_documents_uc",
     "get_list_documents_uc",
+    "get_qdrant_client",
     "get_search_contractors_uc",
     "get_search_documents_uc",
     "get_search_within_uc",

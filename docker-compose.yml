@@ -2,8 +2,8 @@ services:
 
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: .env
     ports:
       - "8000:8000"
@@ -19,9 +19,9 @@ services:
 
   celery-worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: celery -A app.entrypoints.celery worker --loglevel=info
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
     env_file: .env
     volumes:
       - ./data/uploads:/data/uploads
