@@ -1,15 +1,22 @@
 import { Fragment, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import ChunkResults from "../components/ChunkResults";
 import DocumentStatus from "../components/DocumentStatus";
-import { getDocument, getDocumentFacts } from "../api";
-import type { DocumentOut, DocumentFactsOut } from "../api";
+import SearchBar from "../components/SearchBar";
+import { getDocument, getDocumentFacts, searchWithinDocument } from "../api";
+import type { DocumentOut, DocumentFactsOut, WithinDocumentResult } from "../api";
 
 export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
   const [doc, setDoc] = useState<DocumentOut | null>(null);
   const [facts, setFacts] = useState<DocumentFactsOut | null>(null);
+  const [chunkResults, setChunkResults] = useState<WithinDocumentResult[] | null>(
+    null
+  );
+  const [query, setQuery] = useState("");
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -25,6 +32,18 @@ export default function DocumentPage() {
   }, [liveStatus, id]);
 
   const status = liveStatus ?? doc?.status ?? null;
+
+  async function handleSearch(nextQuery: string) {
+    if (!id) return;
+    setQuery(nextQuery);
+    setSearchError(null);
+    try {
+      setChunkResults(await searchWithinDocument(id, nextQuery));
+    } catch (err) {
+      setChunkResults(null);
+      setSearchError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   if (loadError) {
     return <p style={{ color: "#b91c1c" }}>Ошибка загрузки: {loadError}</p>;
@@ -86,6 +105,16 @@ export default function DocumentPage() {
           )}
         </div>
       )}
+
+      <section className="panel document-search">
+        <h2>Поиск внутри документа</h2>
+        <SearchBar
+          onSearch={handleSearch}
+          placeholder="Найти фрагмент в тексте документа"
+        />
+        {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
+        {chunkResults && <ChunkResults results={chunkResults} query={query} />}
+      </section>
     </div>
   );
 }

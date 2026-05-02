@@ -20,6 +20,51 @@ export interface DocumentFactsOut {
   partial_extraction: boolean;
 }
 
+export interface ContractorOut {
+  id: string;
+  display_name: string;
+  normalized_key: string;
+  inn: string | null;
+  kpp: string | null;
+  created_at: string;
+}
+
+export interface ContractorProfileOut {
+  contractor: ContractorOut;
+  document_count: number;
+  raw_mapping_count: number;
+}
+
+export interface ContractorSearchResult {
+  contractor_id: string;
+  name: string;
+  score: number;
+  matched_chunks_count: number;
+  top_snippet: string;
+}
+
+export interface ChunkSnippet {
+  page: number | null;
+  snippet: string;
+  score: number;
+}
+
+export interface DocumentSearchResult {
+  document_id: string;
+  title: string;
+  date: string | null;
+  matched_chunks: ChunkSnippet[];
+}
+
+export interface WithinDocumentResult {
+  chunk_index: number;
+  page_start: number | null;
+  page_end: number | null;
+  section_type: string | null;
+  snippet: string;
+  score: number;
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -33,18 +78,25 @@ export const getDocumentFacts = (id: string) =>
   apiFetch<DocumentFactsOut>(`/documents/${id}/facts`);
 
 export const listDocuments = () =>
-  apiFetch<DocumentOut[]>("/documents/");
+  apiFetch<DocumentOut[]>("/documents/?limit=20");
 
 export const getContractor = (id: string) =>
-  apiFetch<unknown>(`/contractors/${id}`);
+  apiFetch<ContractorProfileOut>(`/contractors/${id}`);
+
+export const listContractorDocuments = (id: string) =>
+  apiFetch<DocumentOut[]>(`/contractors/${id}/documents?limit=20`);
 
 export const searchContractors = (q: string) =>
-  apiFetch<unknown[]>(`/search?q=${encodeURIComponent(q)}`);
+  apiFetch<ContractorSearchResult[]>(
+    `/search?q=${encodeURIComponent(q)}&limit=20`
+  );
 
 export const searchDocumentsForContractor = (id: string, q: string) =>
-  apiFetch<unknown[]>(
-    `/contractors/${id}/search?q=${encodeURIComponent(q)}`
+  apiFetch<DocumentSearchResult[]>(
+    `/contractors/${id}/search?q=${encodeURIComponent(q)}&limit=20`
   );
 
 export const searchWithinDocument = (id: string, q: string) =>
-  apiFetch<unknown[]>(`/documents/${id}/search?q=${encodeURIComponent(q)}`);
+  apiFetch<WithinDocumentResult[]>(
+    `/documents/${id}/search?q=${encodeURIComponent(q)}&limit=20`
+  );
