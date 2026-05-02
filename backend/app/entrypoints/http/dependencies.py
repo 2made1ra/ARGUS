@@ -1,15 +1,12 @@
-from collections.abc import AsyncIterator
-from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends
 from qdrant_client import AsyncQdrantClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
 from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
-from app.adapters.qdrant.client import make_qdrant_client
 from app.adapters.qdrant.search import QdrantVectorSearch
 from app.adapters.sqlalchemy.contractors import (
     SqlAlchemyContractorRepository,
@@ -17,10 +14,10 @@ from app.adapters.sqlalchemy.contractors import (
 )
 from app.adapters.sqlalchemy.documents import SqlAlchemyDocumentRepository
 from app.adapters.sqlalchemy.fields import SqlAlchemyFieldsRepository
-from app.adapters.sqlalchemy.session import make_engine, make_sessionmaker
 from app.adapters.sqlalchemy.summaries import SqlAlchemySummaryRepository
 from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork
 from app.config import Settings, get_settings
+from app.entrypoints.http.session import _session, get_qdrant_client, get_sessionmaker
 from app.features.contractors.use_cases.get_contractor_profile import (
     GetContractorProfileUseCase,
 )
@@ -36,35 +33,6 @@ from app.features.search.use_cases.search_documents import SearchDocumentsUseCas
 from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
-
-# ---------------------------------------------------------------------------
-# Session / UoW primitives
-# ---------------------------------------------------------------------------
-
-
-@lru_cache
-def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
-    return make_sessionmaker(make_engine(get_settings().database_url))
-
-
-async def _session() -> AsyncIterator[AsyncSession]:
-    """Fresh session per request; closed after FastAPI resolves dependencies."""
-    session = get_sessionmaker()()
-    try:
-        yield session
-    finally:
-        await session.close()
-
-
-async def get_qdrant_client(
-    settings: Settings = Depends(get_settings),
-) -> AsyncIterator[AsyncQdrantClient]:
-    qdrant = make_qdrant_client(settings.qdrant_url)
-    try:
-        yield qdrant
-    finally:
-        await qdrant.close()
-
 
 # ---------------------------------------------------------------------------
 # Ingest use cases

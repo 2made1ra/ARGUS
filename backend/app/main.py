@@ -7,10 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.adapters.qdrant.bootstrap import bootstrap_collection
 from app.adapters.qdrant.client import make_qdrant_client
 from app.config import get_settings
-from app.entrypoints.http.contractors import router as contractors_router
-from app.entrypoints.http.documents import router as documents_router
-from app.entrypoints.http.search import router as search_router
-from app.entrypoints.http.streams import router as streams_router
+from app.entrypoints.http.router import router
 
 
 @asynccontextmanager
@@ -37,9 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(documents_router)
-app.include_router(contractors_router)
-app.include_router(search_router)
-app.include_router(streams_router)
+app.include_router(router)
 
 __all__ = ["app"]

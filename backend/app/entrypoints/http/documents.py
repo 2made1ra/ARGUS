@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
-from pydantic import BaseModel, ConfigDict
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.entrypoints.http.dependencies import (
@@ -15,97 +12,22 @@ from app.entrypoints.http.dependencies import (
     get_search_within_uc,
     get_upload_uc,
 )
-from app.features.documents.dto import DocumentDTO, DocumentFactsDTO
+from app.entrypoints.http.schemas.documents import (
+    DocumentFactsOut,
+    DocumentOut,
+    WithinDocumentResultOut,
+)
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
 from app.features.ingest.entities.document import DocumentStatus
 from app.features.ingest.ports import DocumentNotFound
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
-from app.features.search.dto import WithinDocumentResult
 from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-
-# ---------------------------------------------------------------------------
-# Response schemas
-# ---------------------------------------------------------------------------
-
-
-class DocumentOut(BaseModel):
-    id: UUID
-    title: str
-    status: str
-    doc_type: str | None
-    document_kind: str | None
-    contractor_entity_id: UUID | None
-    content_type: str
-    partial_extraction: bool
-    error_message: str | None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-    @classmethod
-    def from_dto(cls, dto: DocumentDTO) -> "DocumentOut":
-        return cls(
-            id=UUID(str(dto.id)),
-            title=dto.title,
-            status=str(dto.status),
-            doc_type=dto.doc_type,
-            document_kind=dto.document_kind,
-            contractor_entity_id=UUID(str(dto.contractor_entity_id))
-            if dto.contractor_entity_id is not None
-            else None,
-            content_type=dto.content_type,
-            partial_extraction=dto.partial_extraction,
-            error_message=dto.error_message,
-            created_at=dto.created_at,
-        )
-
-
-class DocumentFactsOut(BaseModel):
-    fields: dict[str, Any]
-    summary: str | None
-    key_points: list[str]
-    partial_extraction: bool
-
-    @classmethod
-    def from_dto(cls, dto: DocumentFactsDTO) -> "DocumentFactsOut":
-        return cls(
-            fields=dto.fields,
-            summary=dto.summary,
-            key_points=dto.key_points,
-            partial_extraction=dto.partial_extraction,
-        )
-
-
-class WithinDocumentResultOut(BaseModel):
-    chunk_index: int
-    page_start: int | None
-    page_end: int | None
-    section_type: str | None
-    snippet: str
-    score: float
-
-    @classmethod
-    def from_domain(cls, r: WithinDocumentResult) -> "WithinDocumentResultOut":
-        return cls(
-            chunk_index=r.chunk_index,
-            page_start=r.page_start,
-            page_end=r.page_end,
-            section_type=r.section_type,
-            snippet=r.snippet,
-            score=r.score,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Handlers
-# ---------------------------------------------------------------------------
 
 
 @router.post("/upload", status_code=202)
@@ -178,4 +100,4 @@ async def get_document(
     return DocumentOut.from_dto(dto)
 
 
-__all__ = ["DocumentFactsOut", "DocumentOut", "WithinDocumentResultOut", "router"]
+__all__ = ["router"]

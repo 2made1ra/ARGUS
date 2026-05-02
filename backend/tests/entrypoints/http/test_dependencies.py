@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import pytest
 from app.config import Settings
-from app.entrypoints.http import dependencies
+from app.entrypoints.http import session as http_session
 
 
 class _FakeSession:
@@ -32,9 +32,9 @@ async def test_session_dependency_closes_session(
     def fake_sessionmaker() -> Callable[[], _FakeSession]:
         return lambda: session
 
-    monkeypatch.setattr(dependencies, "get_sessionmaker", fake_sessionmaker)
+    monkeypatch.setattr(http_session, "get_sessionmaker", fake_sessionmaker)
 
-    dep = dependencies._session()
+    dep = http_session._session()
     yielded = await anext(dep)
     await dep.aclose()
 
@@ -54,9 +54,9 @@ async def test_qdrant_dependency_closes_client(
         lm_studio_llm_model="test-model",
     )
 
-    monkeypatch.setattr(dependencies, "make_qdrant_client", lambda url: client)
+    monkeypatch.setattr(http_session, "make_qdrant_client", lambda url: client)
 
-    dep = dependencies.get_qdrant_client(settings)
+    dep = http_session.get_qdrant_client(settings)
     yielded = await anext(dep)
     await dep.aclose()
 

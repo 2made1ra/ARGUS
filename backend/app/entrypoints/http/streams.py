@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.adapters.sqlalchemy.documents import SqlAlchemyDocumentRepository
 from app.adapters.sqlalchemy.unit_of_work import SqlAlchemyUnitOfWork
 from app.core.domain.ids import DocumentId
-from app.entrypoints.http.dependencies import get_sessionmaker
+from app.entrypoints.http.session import get_sessionmaker
 from app.features.ingest.entities.document import Document, DocumentStatus
 
 logger = logging.getLogger(__name__)
