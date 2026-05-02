@@ -2,6 +2,58 @@
 
 Инструкция для ручного тестирования ARGUS с локальным LM Studio.
 
+## Быстрый старт через Makefile
+
+Все часто используемые команды обёрнуты в `Makefile`. Ниже — типовой порядок запуска.
+
+### Локальная разработка (uv + отдельные сервисы)
+
+```bash
+# 1. Установить системный Tesseract (один раз)
+make install-ocr
+
+# 2. Поднять postgres, redis, qdrant
+make infra-up
+
+# 3. Применить миграции
+make migrate
+
+# 4. Запустить API (hot-reload) — в одном терминале
+make dev
+
+# 5. Запустить Celery worker — в другом терминале
+make worker
+
+# 6. Запустить frontend — в третьем терминале
+cd frontend && npm run dev
+```
+
+Чтобы убрать Tesseract из системы:
+
+```bash
+make uninstall-ocr
+```
+
+### Полный стек в Docker
+
+```bash
+# Поднять все сервисы (инфра + api + celery-worker)
+make app-up
+
+# Остановить
+make app-down
+```
+
+Tesseract при запуске через Docker устанавливать не нужно — он уже встроен в образ.
+
+### Справка по всем командам
+
+```bash
+make help
+```
+
+---
+
 ## Что изменено для Alembic
 
 Теперь миграции запускаются из директории `backend/` простой командой:
@@ -108,6 +160,12 @@ LM_STUDIO_URL=http://localhost:1234/v1
 ```bash
 uv sync
 ```
+
+Для обработки сканированных PDF запускай `celery-worker` внутри Docker:
+Docker-образ ARGUS содержит `tesseract-ocr`, `tesseract-ocr-rus` и
+`tesseract-ocr-eng`. При локальном запуске worker через `uv` OCR будет
+доступен только если системный `tesseract` уже есть в `PATH`; Python-пакет
+`pytesseract` сам бинарник и языковые данные не устанавливает.
 
 Фронтенд:
 

@@ -8,7 +8,7 @@ import fitz
 import pytesseract
 import pytest
 from PIL import Image
-from sage.pdf.ocr import OCR_DPI, OCR_LANG, ocr_pages
+from sage.pdf.ocr import OCR_DPI, OCR_LANG, OcrError, ocr_pages
 
 
 class FakePixmap:
@@ -81,6 +81,7 @@ def test_ocr_pages_renders_300_dpi_and_returns_ordered_scan_pages(
         return f"text {len(calls)}"
 
     monkeypatch.setattr("sage.pdf.ocr.fitz.open", fake_open)
+    monkeypatch.setattr("sage.pdf.ocr.shutil.which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
         "sage.pdf.ocr.pytesseract.image_to_string", fake_image_to_string
     )
@@ -106,11 +107,47 @@ def test_ocr_pages_uses_fallback_worker_count(
         return FakeDocument([])
 
     monkeypatch.setattr("sage.pdf.ocr.fitz.open", fake_open)
+    monkeypatch.setattr("sage.pdf.ocr.shutil.which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr("sage.pdf.ocr.os.cpu_count", lambda: None)
     monkeypatch.setattr("sage.pdf.ocr.ThreadPoolExecutor", FakeExecutor)
 
     assert ocr_pages(tmp_path / "empty.pdf") == []
     assert FakeExecutor.max_workers == 2
+
+
+def test_ocr_pages_fails_fast_when_tesseract_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sage.pdf.ocr.shutil.which", lambda name: None)
+
+    with pytest.raises(OcrError, match="system tesseract binary"):
+        ocr_pages(tmp_path / "scan.pdf")
+
+
+def test_ocr_pages_reports_missing_language_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_open(pdf_path: Path) -> FakeDocument:
+        return FakeDocument([FakePage(1)])
+
+    def fake_image_to_string(image: Image.Image, *, lang: str) -> str:
+        raise pytesseract.TesseractError(
+            1,
+            "Error opening data file rus.traineddata Failed loading language",
+        )
+
+    monkeypatch.setattr("sage.pdf.ocr.fitz.open", fake_open)
+    monkeypatch.setattr("sage.pdf.ocr.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        "sage.pdf.ocr.pytesseract.image_to_string",
+        fake_image_to_string,
+    )
+    monkeypatch.setattr("sage.pdf.ocr.ThreadPoolExecutor", FakeExecutor)
+
+    with pytest.raises(OcrError, match="language data"):
+        ocr_pages(tmp_path / "scan.pdf")
 
 
 @pytest.mark.skipif(not shutil.which("tesseract"), reason="tesseract is not installed")
