@@ -2,7 +2,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from app.config import Settings, get_settings
+from app.config import REPO_ROOT, Settings, get_settings
 from pydantic import ValidationError
 
 CONFIG_ENV_KEYS = (
@@ -17,6 +17,7 @@ CONFIG_ENV_KEYS = (
     "EMBEDDING_DIM",
 )
 ENV_KEYS = CONFIG_ENV_KEYS + tuple(key.lower() for key in CONFIG_ENV_KEYS)
+ENV_FILE_KEYS = ENV_KEYS + ("ALEMBIC_DATABASE_URL", "alembic_database_url")
 
 
 def set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,7 +34,7 @@ def set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     get_settings.cache_clear()
-    for key in ENV_KEYS:
+    for key in ENV_FILE_KEYS:
         monkeypatch.delenv(key, raising=False)
 
     yield
@@ -92,3 +93,29 @@ def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     second = get_settings()
 
     assert first is second
+
+
+def test_settings_env_file_points_to_repo_root() -> None:
+    assert Settings.model_config["env_file"] == REPO_ROOT / ".env"
+
+
+def test_settings_ignores_alembic_database_url_from_env_file(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus",
+                "ALEMBIC_DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus",
+                "REDIS_URL=redis://localhost:6379/0",
+                "QDRANT_URL=http://localhost:6333",
+                "LM_STUDIO_URL=http://localhost:1234/v1",
+                "LM_STUDIO_LLM_MODEL=local-llm",
+            )
+        )
+    )
+
+    settings = Settings(_env_file=env_file)  # type: ignore[call-arg]
+
+    assert settings.database_url == (
+        "postgresql+asyncpg://argus:argus@localhost:5432/argus"
+    )

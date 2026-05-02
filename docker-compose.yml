@@ -5,6 +5,11 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      LM_STUDIO_URL: http://host.docker.internal:1234/v1
     ports:
       - "8000:8000"
     volumes:
@@ -23,6 +28,11 @@ services:
       dockerfile: backend/Dockerfile
     command: celery -A app.celery_app worker --loglevel=info
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      LM_STUDIO_URL: http://host.docker.internal:1234/v1
     volumes:
       - ./data/uploads:/data/uploads
     depends_on:

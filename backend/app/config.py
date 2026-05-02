@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
     database_url: str
@@ -16,9 +18,10 @@ class Settings(BaseSettings):
     embedding_dim: int = 768
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=REPO_ROOT / ".env",
         env_prefix="",
         case_sensitive=False,
+        extra="ignore",
     )
 
 

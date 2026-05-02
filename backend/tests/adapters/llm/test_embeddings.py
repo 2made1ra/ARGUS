@@ -5,6 +5,7 @@ import pytest
 
 from app.adapters.llm.embeddings import (
     EmbeddingDimensionMismatch,
+    EmbeddingResponseError,
     LMStudioEmbeddings,
 )
 
@@ -54,6 +55,20 @@ class MismatchedDimensionAsyncClient:
 
     async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
         return FakeResponse({"data": [{"embedding": [0.0] * 384}]})
+
+
+class MissingDataAsyncClient:
+    def __init__(self, *, timeout: float) -> None:
+        self.timeout = timeout
+
+    async def __aenter__(self) -> "MissingDataAsyncClient":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+    async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
+        return FakeResponse({"error": "Unexpected endpoint or method"})
 
 
 class FailingAsyncClient:
@@ -136,6 +151,20 @@ async def test_embed_raises_for_embedding_dimension_mismatch(
 
     assert exc_info.value.actual == 384
     assert exc_info.value.expected == 768
+
+
+@pytest.mark.asyncio
+async def test_embed_raises_for_unexpected_response_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.adapters.llm.embeddings.httpx.AsyncClient",
+        MissingDataAsyncClient,
+    )
+    embeddings = LMStudioEmbeddings(base_url="http://localhost:1234")
+
+    with pytest.raises(EmbeddingResponseError):
+        await embeddings.embed(["text"])
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,12 @@
 import asyncio
-import os
 from logging.config import fileConfig
-
-from sqlalchemy.engine import Connection
+from pathlib import Path
 
 from alembic import context
 from app.adapters.sqlalchemy.models import Base
 from app.adapters.sqlalchemy.session import make_engine
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import Connection
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -19,13 +19,24 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+class MigrationSettings(BaseSettings):
+    alembic_database_url: str | None = None
+    database_url: str
+
+    model_config = SettingsConfigDict(
+        env_file=REPO_ROOT / ".env",
+        env_prefix="",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
 
 def get_database_url() -> str:
-    database_url = os.environ.get("DATABASE_URL")
-    if database_url is None:
-        raise RuntimeError("DATABASE_URL environment variable is required")
-
-    return database_url
+    settings = MigrationSettings()  # type: ignore[call-arg]
+    return settings.alembic_database_url or settings.database_url
 
 
 def run_migrations_offline() -> None:
