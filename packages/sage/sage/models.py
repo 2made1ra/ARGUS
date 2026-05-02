@@ -1,6 +1,6 @@
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Page(BaseModel):
@@ -19,27 +19,27 @@ class Chunk(BaseModel):
 
 
 class ContractFields(BaseModel):
-    document_type: Optional[str] = None
-    document_number: Optional[str] = None
-    document_date: Optional[str] = None
-    supplier_name: Optional[str] = None
-    customer_name: Optional[str] = None
-    service_date: Optional[str] = None
-    amount: Optional[str] = None
-    vat: Optional[str] = None
-    valid_until: Optional[str] = None
-    supplier_inn: Optional[str] = None
-    supplier_kpp: Optional[str] = None
-    supplier_bik: Optional[str] = None
-    supplier_account: Optional[str] = None
-    customer_inn: Optional[str] = None
-    customer_kpp: Optional[str] = None
-    customer_bik: Optional[str] = None
-    customer_account: Optional[str] = None
-    service_subject: Optional[str] = None
-    service_price: Optional[str] = None
-    signatory_name: Optional[str] = None
-    contact_phone: Optional[str] = None
+    document_type: str | None = None
+    document_number: str | None = None
+    document_date: str | None = None
+    supplier_name: str | None = None
+    customer_name: str | None = None
+    service_date: str | None = None
+    amount: str | None = None
+    vat: str | None = None
+    valid_until: str | None = None
+    supplier_inn: str | None = None
+    supplier_kpp: str | None = None
+    supplier_bik: str | None = None
+    supplier_account: str | None = None
+    customer_inn: str | None = None
+    customer_kpp: str | None = None
+    customer_bik: str | None = None
+    customer_account: str | None = None
+    service_subject: str | None = None
+    service_price: str | None = None
+    signatory_name: str | None = None
+    contact_phone: str | None = None
 
 
 class ExtractedDocument(BaseModel):
@@ -55,3 +55,4 @@ class ProcessingResult(BaseModel):
     pages: list[Page]
     document_kind: Literal["text", "scan"]
     partial: bool
+    failed_chunk_indices: list[int] = Field(default_factory=list)

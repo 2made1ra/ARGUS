@@ -27,6 +27,7 @@ from app.features.contractors.use_cases.list_contractor_documents import (
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
+from app.features.documents.use_cases.update_document_facts import UpdateDocumentFactsUseCase
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
 from app.features.search.use_cases.search_contractors import SearchContractorsUseCase
 from app.features.search.use_cases.search_documents import SearchDocumentsUseCase
@@ -75,6 +76,16 @@ def get_document_facts_uc(
         documents=SqlAlchemyDocumentRepository(session),
         fields=SqlAlchemyFieldsRepository(session),
         summaries=SqlAlchemySummaryRepository(session),
+    )
+
+
+def get_update_document_facts_uc(
+    session: AsyncSession = Depends(_session),
+) -> UpdateDocumentFactsUseCase:
+    return UpdateDocumentFactsUseCase(
+        fields=SqlAlchemyFieldsRepository(session),
+        summaries=SqlAlchemySummaryRepository(session),
+        uow=SessionUnitOfWork(session),
     )
 
 
@@ -162,5 +173,6 @@ __all__ = [
     "get_search_documents_uc",
     "get_search_within_uc",
     "get_sessionmaker",
+    "get_update_document_facts_uc",
     "get_upload_uc",
 ]

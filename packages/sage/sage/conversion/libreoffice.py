@@ -1,7 +1,6 @@
 import asyncio
 from pathlib import Path
 
-
 CONVERSION_TIMEOUT_SECONDS = 120
 OFFICE_SUFFIXES = {".doc", ".docx", ".rtf", ".odt"}
 

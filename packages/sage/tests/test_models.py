@@ -105,4 +105,5 @@ def test_processing_result_model_dump() -> None:
         "pages": [page.model_dump()],
         "document_kind": "text",
         "partial": False,
+        "failed_chunk_indices": [],
     }

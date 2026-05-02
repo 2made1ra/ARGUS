@@ -13,6 +13,11 @@ class EmbeddingDimensionMismatch(Exception):
         self.expected = expected
 
 
+class EmbeddingResponseError(Exception):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 class LMStudioEmbeddings:
     def __init__(
         self,
@@ -54,8 +59,14 @@ class LMStudioEmbeddings:
         return embeddings
 
     def _parse_embeddings(self, payload: dict[str, Any]) -> list[list[float]]:
+        data = payload.get("data")
+        if not isinstance(data, list):
+            raise EmbeddingResponseError(
+                "Embedding response does not contain a data list",
+            )
+
         embeddings: list[list[float]] = []
-        for item in payload["data"]:
+        for item in data:
             embedding = item["embedding"]
             if len(embedding) != self._embedding_dim:
                 raise EmbeddingDimensionMismatch(len(embedding), self._embedding_dim)
@@ -71,4 +82,8 @@ def _batches(texts: list[str], batch_size: int) -> Iterator[list[str]]:
         yield texts[start : start + batch_size]
 
 
-__all__ = ["EmbeddingDimensionMismatch", "LMStudioEmbeddings"]
+__all__ = [
+    "EmbeddingDimensionMismatch",
+    "EmbeddingResponseError",
+    "LMStudioEmbeddings",
+]

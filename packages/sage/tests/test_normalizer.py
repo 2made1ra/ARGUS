@@ -5,8 +5,7 @@ from sage.normalizer.clean import normalize_pages
 
 def pages(*texts: str) -> list[Page]:
     return [
-        Page(index=index, text=text, kind="text")
-        for index, text in enumerate(texts, 1)
+        Page(index=index, text=text, kind="text") for index, text in enumerate(texts, 1)
     ]
 
 
@@ -113,6 +112,18 @@ def test_normalize_pages_normalizes_page_markers(
     expected: str,
 ) -> None:
     assert normalized_texts(pages(source)) == [expected]
+
+
+def test_normalize_pages_removes_edo_noise_from_rules_file() -> None:
+    source_pages = pages(
+        "Договор оказания услуг\nДокумент подписан электронной подписью\nЦена 1000",
+        "Подписано с использованием УКЭП\nАкт выполненных работ",
+    )
+
+    assert normalized_texts(source_pages) == [
+        "Договор оказания услуг\nЦена 1000",
+        "Акт выполненных работ",
+    ]
 
 
 def test_normalize_pages_returns_new_pages_without_reordering() -> None:

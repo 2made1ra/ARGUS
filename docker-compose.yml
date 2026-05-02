@@ -1,36 +1,5 @@
 services:
 
-  api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    env_file: .env
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data/uploads:/data/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-
-  celery-worker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    command: celery -A app.celery_app worker --loglevel=info
-    env_file: .env
-    volumes:
-      - ./data/uploads:/data/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
   postgres:
     image: postgres:16
     environment:
@@ -69,6 +38,49 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  api:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      LM_STUDIO_URL: http://host.docker.internal:1234/v1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  celery-worker:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      LM_STUDIO_URL: http://host.docker.internal:1234/v1
+    volumes:
+      - ./data/uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pg_data:

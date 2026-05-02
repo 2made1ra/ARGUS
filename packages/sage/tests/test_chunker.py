@@ -106,7 +106,10 @@ def test_chunk_pages_headings_split_when_max_chars_forces_it() -> None:
 
 
 def test_chunk_pages_heading_chunk_section_type_is_header() -> None:
-    chunks = chunk_pages(pages("# Section heading\nBody text follows here."), max_chars=20)
+    chunks = chunk_pages(
+        pages("# Section heading\nBody text follows here."),
+        max_chars=20,
+    )
 
     header_chunks = [c for c in chunks if c.section_type == "header"]
     assert len(header_chunks) >= 1
@@ -114,7 +117,10 @@ def test_chunk_pages_heading_chunk_section_type_is_header() -> None:
 
 
 def test_chunk_pages_body_chunk_section_type_is_body() -> None:
-    chunks = chunk_pages(pages("Plain body text without any markdown headings."), max_chars=2000)
+    chunks = chunk_pages(
+        pages("Plain body text without any markdown headings."),
+        max_chars=2000,
+    )
 
     assert len(chunks) == 1
     assert chunks[0].section_type == "body"

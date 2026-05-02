@@ -14,12 +14,20 @@ from app.entrypoints.celery.composition import (
 from app.features.ingest.entities.document import DocumentStatus
 
 
-def run_async[T](coro: Coroutine[Any, Any, T]) -> T:
-    loop = asyncio.new_event_loop()
+def _worker_loop() -> asyncio.AbstractEventLoop:
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        loop = asyncio.get_event_loop()
+        if not loop.is_closed():
+            return loop
+    except RuntimeError:
+        pass
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop
+
+
+def run_async[T](coro: Coroutine[Any, Any, T]) -> T:
+    return _worker_loop().run_until_complete(coro)
 
 
 async def _mark_status(document_id: str, status: str) -> None:

@@ -45,11 +45,11 @@ frontend/
 
 ## План работы
 
-| PR | Заголовок | Файлы |
-|----|-----------|-------|
-| 10.1 | Vite + React skeleton | `package.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `src/{main, App, App.css, api}.tsx`, `src/pages/{Home, ContractorPage, DocumentPage}.tsx` (плейсхолдеры) |
-| 10.2 | Upload + status (SSE) | `components/UploadForm.tsx`, `components/DocumentStatus.tsx`, обновлённые `Home.tsx` и `DocumentPage.tsx` |
-| 10.3 | Drill-down search UI | `components/{SearchBar, ContractorSearchResults, DocumentResults, ChunkResults}.tsx`, обновлённые pages |
+| PR | Заголовок | Файлы | Статус |
+|----|-----------|-------|--------|
+| 10.1 | Vite + React skeleton | `package.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `src/{main, App, App.css, api}.tsx`, `src/pages/{Home, ContractorPage, DocumentPage}.tsx` (плейсхолдеры) | ✅ merged |
+| 10.2 | Upload + status (SSE) | `components/UploadForm.tsx`, `components/DocumentStatus.tsx`, обновлённые `Home.tsx` и `DocumentPage.tsx` | — |
+| 10.3 | Drill-down search UI | `components/{SearchBar, ContractorSearchResults, DocumentResults, ChunkResults}.tsx`, обновлённые pages | — |
 
 ## Критерии приёмки трека
 
@@ -69,7 +69,7 @@ frontend/
 
 ## Verification checklist
 
-- [ ] `cd frontend && npm install && npm run dev`
+- [x] `cd frontend && npm install && npm run dev`
 - [ ] Загрузить `sample.pdf`, дождаться INDEXED.
 - [ ] На главной — поиск даёт хотя бы один результат.
 - [ ] Drill-down работает на двух уровнях ниже.

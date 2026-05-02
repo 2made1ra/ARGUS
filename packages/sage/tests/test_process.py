@@ -53,7 +53,9 @@ async def test_process_document_orchestrates_text_pipeline(
         return raw_pages
 
     def fake_ocr_pages(received_pdf_path: Path) -> list[Page]:
-        pytest.fail(f"ocr_pages should not be called for text PDFs: {received_pdf_path}")
+        pytest.fail(
+            f"ocr_pages should not be called for text PDFs: {received_pdf_path}"
+        )
 
     def fake_normalize_pages(received_pages: list[Page]) -> list[Page]:
         assert received_pages == raw_pages
@@ -65,10 +67,17 @@ async def test_process_document_orchestrates_text_pipeline(
         calls.append("chunk_pages")
         return chunks
 
-    async def fake_extract_one(received_client: StubClient, chunk: Chunk) -> ContractFields:
+    async def fake_extract_one(
+        received_client: StubClient, chunk: Chunk
+    ) -> ContractFields:
         assert received_client is client
         calls.append(f"extract_one:{chunk.chunk_index}")
         return first_fields if chunk.chunk_index == 0 else second_fields
+
+    async def fake_summarize_chunk(received_client: StubClient, chunk: Chunk) -> str:
+        assert received_client is client
+        calls.append(f"summarize_chunk:{chunk.chunk_index}")
+        return f"summary {chunk.chunk_index}"
 
     def fake_merge_fields(
         left: ContractFields,
@@ -98,6 +107,7 @@ async def test_process_document_orchestrates_text_pipeline(
     monkeypatch.setattr("sage.process.normalize_pages", fake_normalize_pages)
     monkeypatch.setattr("sage.process.chunk_pages", fake_chunk_pages)
     monkeypatch.setattr("sage.process.extract_one", fake_extract_one)
+    monkeypatch.setattr("sage.process.summarize_chunk", fake_summarize_chunk)
     monkeypatch.setattr("sage.process.merge_fields", fake_merge_fields)
     monkeypatch.setattr("sage.process.summarize", fake_summarize)
 
@@ -110,11 +120,14 @@ async def test_process_document_orchestrates_text_pipeline(
         "normalize_pages",
         "chunk_pages",
         "extract_one:0",
+        "summarize_chunk:0",
         "merge_fields:42",
         "extract_one:1",
+        "summarize_chunk:1",
         "merge_fields:none",
         "summarize",
     ]
+    assert [chunk.chunk_summary for chunk in chunks] == ["summary 0", "summary 1"]
     assert result == ProcessingResult(
         chunks=chunks,
         fields=merged_twice,
@@ -122,6 +135,7 @@ async def test_process_document_orchestrates_text_pipeline(
         pages=normalized_pages,
         document_kind="text",
         partial=True,
+        failed_chunk_indices=[1],
     )
 
 

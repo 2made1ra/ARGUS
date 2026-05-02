@@ -3,7 +3,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from sage.conversion.libreoffice import ConversionError, ensure_pdf
 
 

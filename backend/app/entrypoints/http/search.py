@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.entrypoints.http.dependencies import get_search_contractors_uc
 from app.entrypoints.http.schemas.search import ContractorSearchResultOut
@@ -15,7 +16,15 @@ async def search_contractors(
     limit: int = 20,
     uc: SearchContractorsUseCase = Depends(get_search_contractors_uc),
 ) -> list[ContractorSearchResultOut]:
-    results = await uc.execute(query=q, limit=limit)
+    try:
+        results = await uc.execute(query=q, limit=limit)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 503:
+            raise HTTPException(
+                status_code=503,
+                detail="Сервис эмбеддингов недоступен — запустите LM Studio и загрузите модель эмбеддингов.",
+            ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [ContractorSearchResultOut.from_domain(r) for r in results]
 
 
