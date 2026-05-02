@@ -1,6 +1,6 @@
 from urllib.parse import urlsplit, urlunsplit
 
-from celery import Celery
+from celery import Celery  # type: ignore[import-untyped]
 
 from app.config import get_settings
 
@@ -45,6 +45,6 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 )
-celery_app.autodiscover_tasks(["app.entrypoints.celery.tasks"])
+celery_app.autodiscover_tasks(["app.entrypoints.celery.tasks"], related_name="ingest")
 
 __all__ = ["celery_app"]
