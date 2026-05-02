@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.entrypoints.http.contractors import router as contractors_router
 from app.entrypoints.http.documents import router as documents_router
 from app.entrypoints.http.search import router as search_router
+from app.entrypoints.http.streams import router as streams_router
 
 
 @asynccontextmanager
@@ -39,5 +40,6 @@ app.add_middleware(
 app.include_router(documents_router)
 app.include_router(contractors_router)
 app.include_router(search_router)
+app.include_router(streams_router)
 
 __all__ = ["app"]
