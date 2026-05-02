@@ -5,6 +5,8 @@ Document intelligence platform for contractor management and contract search.
 Users upload contracts; the system extracts structured fields, resolves contractor
 entities, indexes chunks in Qdrant, and exposes a drill-down semantic search UX.
 
+Do not make changes until you are 95 percent sure of the task. Ask questions until then.
+
 ---
 
 ## Repository state
