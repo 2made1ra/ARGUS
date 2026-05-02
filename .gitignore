@@ -41,3 +41,8 @@ htmlcov/
 # Mypy / ruff cache
 .mypy_cache/
 .ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
