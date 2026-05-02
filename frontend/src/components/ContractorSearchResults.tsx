@@ -11,7 +11,7 @@ export default function ContractorSearchResults({ results, query }: Props) {
   const navigate = useNavigate();
 
   if (results.length === 0) {
-    return <p className="muted">Контрагенты не найдены.</p>;
+    return <p className="muted">База данных пуста — загрузите документы, чтобы начать поиск.</p>;
   }
 
   return (

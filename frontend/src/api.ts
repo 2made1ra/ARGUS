@@ -100,3 +100,19 @@ export const searchWithinDocument = (id: string, q: string) =>
   apiFetch<WithinDocumentResult[]>(
     `/documents/${id}/search?q=${encodeURIComponent(q)}&limit=20`
   );
+
+export async function patchDocumentFacts(
+  id: string,
+  body: {
+    fields: Record<string, string | null>;
+    summary: string | null;
+    key_points: string[];
+  }
+): Promise<void> {
+  const res = await fetch(`${API_URL}/documents/${id}/facts`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+}

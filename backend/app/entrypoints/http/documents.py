@@ -10,16 +10,19 @@ from app.entrypoints.http.dependencies import (
     get_get_document_uc,
     get_list_documents_uc,
     get_search_within_uc,
+    get_update_document_facts_uc,
     get_upload_uc,
 )
 from app.entrypoints.http.schemas.documents import (
     DocumentFactsOut,
+    DocumentFactsPatch,
     DocumentOut,
     WithinDocumentResultOut,
 )
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
+from app.features.documents.use_cases.update_document_facts import UpdateDocumentFactsUseCase
 from app.features.ingest.entities.document import DocumentStatus
 from app.features.ingest.ports import DocumentNotFound
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
@@ -86,6 +89,25 @@ async def search_within_document(
 ) -> list[WithinDocumentResultOut]:
     results = await uc.execute(document_id=DocumentId(id), query=q, limit=limit)
     return [WithinDocumentResultOut.from_domain(r) for r in results]
+
+
+@router.patch("/{id}/facts", status_code=204)
+async def patch_document_facts(
+    id: UUID,
+    body: DocumentFactsPatch,
+    uc: UpdateDocumentFactsUseCase = Depends(get_update_document_facts_uc),
+) -> None:
+    from sage import ContractFields
+
+    try:
+        await uc.execute(
+            DocumentId(id),
+            fields=ContractFields(**{k: (v if v else None) for k, v in body.fields.items()}),
+            summary=body.summary,
+            key_points=body.key_points,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/{id}", response_model=DocumentOut)

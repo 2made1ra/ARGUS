@@ -78,4 +78,10 @@ class WithinDocumentResultOut(BaseModel):
         )
 
 
-__all__ = ["DocumentFactsOut", "DocumentOut", "WithinDocumentResultOut"]
+class DocumentFactsPatch(BaseModel):
+    fields: dict[str, Any] = {}
+    summary: str | None = None
+    key_points: list[str] = []
+
+
+__all__ = ["DocumentFactsOut", "DocumentFactsPatch", "DocumentOut", "WithinDocumentResultOut"]

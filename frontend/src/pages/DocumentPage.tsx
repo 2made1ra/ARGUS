@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ChunkResults from "../components/ChunkResults";
 import DocumentStatus from "../components/DocumentStatus";
+import FieldValidationForm from "../components/FieldValidationForm";
 import SearchBar from "../components/SearchBar";
 import { getDocument, getDocumentFacts, searchWithinDocument } from "../api";
 import type { DocumentOut, DocumentFactsOut, WithinDocumentResult } from "../api";
@@ -10,11 +11,10 @@ export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
   const [doc, setDoc] = useState<DocumentOut | null>(null);
   const [facts, setFacts] = useState<DocumentFactsOut | null>(null);
-  const [chunkResults, setChunkResults] = useState<WithinDocumentResult[] | null>(
-    null
-  );
+  const [chunkResults, setChunkResults] = useState<WithinDocumentResult[] | null>(null);
   const [query, setQuery] = useState("");
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -25,11 +25,15 @@ export default function DocumentPage() {
       .catch((err: unknown) => setLoadError(String(err)));
   }, [id]);
 
-  // Load facts once the document reaches INDEXED
   useEffect(() => {
     if (liveStatus !== "INDEXED" || !id) return;
     getDocumentFacts(id).then(setFacts).catch(() => {});
   }, [liveStatus, id]);
+
+  function handleStatusChange(status: string) {
+    setLiveStatus(status);
+    if (status === "INDEXED") setIsValidating(true);
+  }
 
   const status = liveStatus ?? doc?.status ?? null;
 
@@ -60,9 +64,13 @@ export default function DocumentPage() {
         ID: {doc.id}
       </p>
 
-      <DocumentStatus documentId={doc.id} onStatusChange={setLiveStatus} />
+      <DocumentStatus documentId={doc.id} onStatusChange={handleStatusChange} />
 
-      {status === "INDEXED" && facts && (
+      {status === "INDEXED" && facts && isValidating && (
+        <FieldValidationForm facts={facts} documentId={doc.id} />
+      )}
+
+      {status === "INDEXED" && facts && !isValidating && (
         <div style={{ marginTop: "2rem" }}>
           <section style={{ marginBottom: "1.5rem" }}>
             <h2 style={{ marginBottom: "0.75rem" }}>Поля</h2>
@@ -106,15 +114,17 @@ export default function DocumentPage() {
         </div>
       )}
 
-      <section className="panel document-search">
-        <h2>Поиск внутри документа</h2>
-        <SearchBar
-          onSearch={handleSearch}
-          placeholder="Найти фрагмент в тексте документа"
-        />
-        {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
-        {chunkResults && <ChunkResults results={chunkResults} query={query} />}
-      </section>
+      {status === "INDEXED" && !isValidating && (
+        <section className="panel document-search">
+          <h2>Поиск внутри документа</h2>
+          <SearchBar
+            onSearch={handleSearch}
+            placeholder="Найти фрагмент в тексте документа"
+          />
+          {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
+          {chunkResults && <ChunkResults results={chunkResults} query={query} />}
+        </section>
+      )}
     </div>
   );
 }
