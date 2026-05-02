@@ -1,8 +1,6 @@
 import os
-from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from pathlib import Path
-from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -19,6 +17,7 @@ from app.adapters.sqlalchemy.documents import SqlAlchemyDocumentRepository
 from app.adapters.sqlalchemy.fields import SqlAlchemyFieldsRepository
 from app.adapters.sqlalchemy.session import make_engine, make_sessionmaker
 from app.adapters.sqlalchemy.summaries import SqlAlchemySummaryRepository
+from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork
 from app.config import get_settings
 from app.core.ports.unit_of_work import UnitOfWork
 from app.features.contractors.use_cases.resolve_contractor import (
@@ -26,39 +25,6 @@ from app.features.contractors.use_cases.resolve_contractor import (
 )
 from app.features.ingest.use_cases.index_document import IndexDocumentUseCase
 from app.features.ingest.use_cases.process_document import ProcessDocumentUseCase
-
-
-class SessionUnitOfWork(UnitOfWork):
-    def __init__(
-        self,
-        session: AsyncSession,
-        on_close: Callable[[], Awaitable[None]] | None = None,
-    ) -> None:
-        self._session = session
-        self._on_close = on_close
-
-    async def __aenter__(self) -> "SessionUnitOfWork":
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        try:
-            if exc_type is not None:
-                await self.rollback()
-        finally:
-            if self._on_close is not None:
-                await self._on_close()
-            await self._session.close()
-
-    async def commit(self) -> None:
-        await self._session.commit()
-
-    async def rollback(self) -> None:
-        await self._session.rollback()
 
 
 @lru_cache
