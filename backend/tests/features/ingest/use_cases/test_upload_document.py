@@ -42,7 +42,14 @@ class FakeDocumentRepository:
     async def get(self, document_id: DocumentId) -> Document:
         raise NotImplementedError
 
-    async def list(self, *, limit: int, offset: int) -> list[Document]:
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        status: DocumentStatus | None = None,
+        contractor_entity_id: ContractorEntityId | None = None,
+    ) -> list[Document]:
         raise NotImplementedError
 
     async def update_status(

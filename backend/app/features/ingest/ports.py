@@ -30,7 +30,14 @@ class DocumentRepository(Protocol):
 
     async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]: ...
 
-    async def list(self, *, limit: int, offset: int) -> list[Document]: ...
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        status: DocumentStatus | None = None,
+        contractor_entity_id: ContractorEntityId | None = None,
+    ) -> list[Document]: ...
 
     async def update_status(
         self,

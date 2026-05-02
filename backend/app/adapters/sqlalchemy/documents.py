@@ -43,10 +43,23 @@ class SqlAlchemyDocumentRepository:
         documents = [_to_entity(row) for row in rows]
         return {document.id: document for document in documents}
 
-    async def list(self, *, limit: int, offset: int) -> list[Document]:
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        status: DocumentStatus | None = None,
+        contractor_entity_id: ContractorEntityId | None = None,
+    ) -> list[Document]:
+        statement = select(DocumentRow)
+        if status is not None:
+            statement = statement.where(DocumentRow.status == status)
+        if contractor_entity_id is not None:
+            statement = statement.where(
+                DocumentRow.contractor_entity_id == contractor_entity_id,
+            )
         statement = (
-            select(DocumentRow)
-            .order_by(DocumentRow.created_at.desc(), DocumentRow.id.desc())
+            statement.order_by(DocumentRow.created_at.desc(), DocumentRow.id.desc())
             .limit(limit)
             .offset(offset)
         )

@@ -9,7 +9,7 @@ from app.adapters.sqlalchemy.documents import (
     _to_entity,
 )
 from app.adapters.sqlalchemy.models import Document as DocumentRow
-from app.core.domain.ids import DocumentId
+from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.ingest.entities.document import DocumentStatus
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,3 +88,37 @@ async def test_get_many_short_circuits_empty_ids() -> None:
 
     assert documents == {}
     session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_applies_status_contractor_and_pagination_filters() -> None:
+    contractor_id = ContractorEntityId(uuid4())
+    row = _document_row()
+    row.contractor_entity_id = contractor_id
+    row.status = DocumentStatus.INDEXED.value
+    session = AsyncMock()
+    session.scalars.return_value = [row]
+    repository = SqlAlchemyDocumentRepository(cast(AsyncSession, session))
+
+    documents = await repository.list(
+        limit=10,
+        offset=20,
+        status=DocumentStatus.INDEXED,
+        contractor_entity_id=contractor_id,
+    )
+
+    session.scalars.assert_awaited_once()
+    statement = session.scalars.await_args.args[0]
+    compiled = statement.compile()
+    sql = str(compiled)
+    assert "WHERE documents.status = :status_1" in sql
+    assert "documents.contractor_entity_id = :contractor_entity_id_1" in sql
+    assert "ORDER BY documents.created_at DESC, documents.id DESC" in sql
+    assert "LIMIT :param_1 OFFSET :param_2" in sql
+    assert compiled.params == {
+        "status_1": DocumentStatus.INDEXED,
+        "contractor_entity_id_1": contractor_id,
+        "param_1": 10,
+        "param_2": 20,
+    }
+    assert [document.id for document in documents] == [DocumentId(row.id)]
