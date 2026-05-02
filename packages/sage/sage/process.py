@@ -3,45 +3,62 @@ from pathlib import Path
 
 from sage.chunker import chunk_pages
 from sage.conversion import ensure_pdf
-from sage.llm import LMStudioClient, extract_one, merge_fields, summarize
+from sage.llm import (
+    LMStudioClient,
+    extract_one,
+    merge_fields,
+    summarize,
+    summarize_chunk,
+)
+from sage.llm.client import ChatClient
 from sage.models import ContractFields, ProcessingResult
 from sage.normalizer import normalize_pages
-from sage.pdf import detect_kind, extract_text_pages, ocr_pages
+from sage.pdf import DetectorConfig, detect_kind, extract_text_pages, ocr_pages
 
 
 async def process_document(
     src: Path,
     work_dir: Path,
     *,
-    llm_client: LMStudioClient | None = None,
+    llm_client: ChatClient | None = None,
+    detector_config: DetectorConfig | None = None,
 ) -> ProcessingResult:
-    _owns_client = llm_client is None
-    client = llm_client or LMStudioClient(
-        base_url=os.environ["LM_STUDIO_URL"],
-        model=os.environ["LM_STUDIO_LLM_MODEL"],
-    )
-    if _owns_client:
+    if llm_client is None:
+        client = LMStudioClient(
+            base_url=os.environ["LM_STUDIO_URL"],
+            model=os.environ["LM_STUDIO_LLM_MODEL"],
+        )
         async with client:
-            return await _run_pipeline(client, src, work_dir)
-    return await _run_pipeline(client, src, work_dir)
+            return await _run_pipeline(client, src, work_dir, detector_config)
+
+    return await _run_pipeline(llm_client, src, work_dir, detector_config)
 
 
 async def _run_pipeline(
-    client: LMStudioClient,
+    client: ChatClient,
     src: Path,
     work_dir: Path,
+    detector_config: DetectorConfig | None,
 ) -> ProcessingResult:
     pdf_path = await ensure_pdf(src, work_dir)
-    kind = detect_kind(pdf_path)
+    kind = (
+        detect_kind(pdf_path, detector_config)
+        if detector_config is not None
+        else detect_kind(pdf_path)
+    )
     pages = extract_text_pages(pdf_path) if kind == "text" else ocr_pages(pdf_path)
     pages = normalize_pages(pages)
     chunks = chunk_pages(pages)
 
     fields = ContractFields()
     partial = False
+    failed_chunk_indices: list[int] = []
     for chunk in chunks:
         chunk_fields = await extract_one(client, chunk)
-        partial = partial or _all_fields_none(chunk_fields)
+        if _all_fields_none(chunk_fields):
+            partial = True
+            failed_chunk_indices.append(chunk.chunk_index)
+        chunk.chunk_summary = await summarize_chunk(client, chunk)
         fields = merge_fields(fields, chunk_fields)
 
     summary = await summarize(client, pages)
@@ -53,6 +70,7 @@ async def _run_pipeline(
         pages=pages,
         document_kind=kind,
         partial=partial,
+        failed_chunk_indices=failed_chunk_indices,
     )
 
 

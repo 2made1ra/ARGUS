@@ -2,8 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-
-from sage.pdf.detector import detect_kind
+from sage.pdf.detector import DetectorConfig, detect_kind
 from sage.pdf.text_extractor import extract_text_pages
 
 
@@ -76,6 +75,27 @@ def test_detect_kind_uses_sage_heuristics(
     assert all(page.calls == [("text",)] for page in pages)
 
 
+def test_detect_kind_accepts_configurable_thresholds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pages = [FakePage("short text"), FakePage("another short text")]
+
+    def fake_open(pdf_path: Path) -> FakeDocument:
+        assert pdf_path == tmp_path / "contract.pdf"
+        return FakeDocument(pages)
+
+    monkeypatch.setattr("sage.pdf.detector.fitz.open", fake_open)
+
+    assert (
+        detect_kind(
+            tmp_path / "contract.pdf",
+            DetectorConfig(min_chars_per_page=5, min_text_page_ratio=1.0),
+        )
+        == "text"
+    )
+
+
 def test_extract_text_pages_returns_text_pages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -94,4 +114,4 @@ def test_extract_text_pages_returns_text_pages(
         {"index": 1, "text": "First page text", "kind": "text"},
         {"index": 2, "text": "Second page text", "kind": "text"},
     ]
-    assert [page.calls for page in pages] == [[()], [()]]
+    assert [page.calls for page in pages] == [[("text",)], [("text",)]]

@@ -1,3 +1,4 @@
+import io
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -13,13 +14,12 @@ OCR_LANG = "rus+eng"
 
 
 def _pixmap_to_image(pix: fitz.Pixmap) -> Image.Image:
-    mode = "RGBA" if pix.alpha else "RGB"
-    return Image.frombytes(mode, (pix.width, pix.height), pix.samples)
+    return Image.open(io.BytesIO(pix.tobytes("png")))
 
 
 def _ocr_image(item: tuple[int, Image.Image]) -> Page:
     index, image = item
-    text = pytesseract.image_to_string(image, lang=OCR_LANG)
+    text = pytesseract.image_to_string(image, lang=OCR_LANG) or ""
     return Page(index=index, text=text, kind="scan")
 
 

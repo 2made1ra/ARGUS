@@ -1,0 +1,10 @@
+edo_noise_patterns:
+  - "Подписано с использованием УКЭП"
+  - "Документ подписан электронной подписью"
+  - "ЭЦП:"
+  - "Сертификат:"
+  - "Действителен:"
+
+repeating_footer_threshold: 0.6
+whitespace_collapse: true
+fix_mojibake: true

@@ -1,71 +1,30 @@
 import logging
+from typing import Any
 
 from pydantic import ValidationError
 
-from sage.llm.client import LMStudioClient
+from sage.llm.client import ChatClient, LLMError, parse_json_loose
+from sage.llm.prompts import (
+    SYSTEM_EXTRACT,
+    build_extract_retry_user,
+    build_extract_user,
+)
 from sage.models import Chunk, ContractFields
 
 logger = logging.getLogger(__name__)
 
-CONTRACT_FIELDS_SCHEMA = ", ".join(ContractFields.model_fields)
 
-EXTRACT_SYSTEM_PROMPT = f"""Ты извлекаешь реквизиты и ключевые поля из русских
-договоров и актов.
-Верни только строгий JSON-объект без markdown, комментариев и пояснений.
-JSON должен содержать только плоские поля модели ContractFields:
-{CONTRACT_FIELDS_SCHEMA}.
-Если значение поля отсутствует в тексте, укажи null.
-Запрещено выдумывать значения, достраивать по смыслу, делать правдоподобные
-догадки или брать данные не из текста.
-Все найденные значения возвращай строками, без изменения смысла исходного документа."""
-
-EXTRACT_USER_PROMPT_TEMPLATE = """Извлеки поля ContractFields из фрагмента документа.
-
-Фрагмент:
-{chunk_text}"""
-
-EXTRACT_RETRY_PROMPT_TEMPLATE = """Предыдущий ответ не прошёл валидацию ContractFields.
-Исправь ответ и верни только строгий JSON-объект.
-Для отсутствующих значений используй null.
-Не выдумывай и не угадывай значения.
-
-Ошибка валидации:
-{error}
-
-Фрагмент:
-{chunk_text}"""
-
-
-async def extract_one(client: LMStudioClient, chunk: Chunk) -> ContractFields:
-    messages = [
-        {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": EXTRACT_USER_PROMPT_TEMPLATE.format(chunk_text=chunk.text),
-        },
-    ]
-
-    last_error: ValidationError | None = None
+async def extract_one(client: ChatClient, chunk: Chunk) -> ContractFields:
+    user_prompt = build_extract_user(chunk.text)
+    last_error: ValidationError | LLMError | None = None
     for attempt in range(2):
-        raw = await client.chat(
-            messages,
-            response_format={"type": "json_object"},
-        )
         try:
-            return ContractFields.model_validate_json(raw)
-        except ValidationError as error:
+            raw = await _chat_json(client, SYSTEM_EXTRACT, user_prompt)
+            return ContractFields.model_validate(raw)
+        except (ValidationError, LLMError) as error:
             last_error = error
             if attempt == 0:
-                messages = [
-                    {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": EXTRACT_RETRY_PROMPT_TEMPLATE.format(
-                            error=str(error),
-                            chunk_text=chunk.text,
-                        ),
-                    },
-                ]
+                user_prompt = build_extract_retry_user(chunk.text, str(error))
 
     logger.warning("ContractFields extraction failed after retry: %s", last_error)
     return ContractFields()
@@ -76,9 +35,30 @@ def merge_fields(left: ContractFields, right: ContractFields) -> ContractFields:
         **{
             field_name: (
                 left_value
-                if (left_value := getattr(left, field_name)) is not None
+                if (left_value := getattr(left, field_name)) not in (None, "")
                 else getattr(right, field_name)
             )
             for field_name in ContractFields.model_fields
         }
     )
+
+
+async def _chat_json(
+    client: ChatClient,
+    system_prompt: str,
+    user_prompt: str,
+) -> dict[str, Any]:
+    chat_json = getattr(client, "chat_json", None)
+    if callable(chat_json):
+        result = await chat_json(system_prompt, user_prompt)
+        if isinstance(result, dict):
+            return result
+        raise LLMError(f"LLM JSON response must be object, got {type(result).__name__}")
+
+    raw = await client.chat(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+    )
+    return parse_json_loose(raw)

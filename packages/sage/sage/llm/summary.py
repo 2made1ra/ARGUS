@@ -1,56 +1,82 @@
-import asyncio
+import logging
 
-from sage.llm.client import LMStudioClient
-from sage.models import Page
+from sage.llm.client import ChatClient
+from sage.llm.prompts import (
+    SYSTEM_SUMMARY,
+    build_chunk_summary_user,
+    build_map_summary_user,
+    build_reduce_summary_user,
+)
+from sage.models import Chunk, Page
 
-SUMMARY_MAP_SYSTEM_PROMPT = """Ты кратко пересказываешь страницы русских договоров.
-Верни только краткое содержание страницы в 1-2 предложения.
-Не добавляй факты, которых нет в тексте, и не делай правдоподобные догадки."""
-
-SUMMARY_MAP_USER_PROMPT_TEMPLATE = """Составь краткое содержание страницы документа.
-
-Страница {page_index}:
-{page_text}"""
-
-SUMMARY_REDUCE_SYSTEM_PROMPT = """Ты объединяешь краткие содержания страниц
-русского договора.
-Верни только итоговое краткое содержание всего документа на русском языке.
-Ограничение: не более 500 символов.
-Не добавляй факты, которых нет в кратких содержаниях, и не делай правдоподобные
-догадки."""
-
-SUMMARY_REDUCE_USER_PROMPT_TEMPLATE = """Объедини краткие содержания страниц в
-одно summary документа.
-
-Краткие содержания:
-{page_summaries}"""
+logger = logging.getLogger(__name__)
 
 
-async def summarize(client: LMStudioClient, pages: list[Page]) -> str:
+async def summarize(client: ChatClient, pages: list[Page]) -> str:
     if not pages:
         return ""
 
-    async def _map_page(page: Page) -> str:
-        result = await client.chat([
-            {"role": "system", "content": SUMMARY_MAP_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": SUMMARY_MAP_USER_PROMPT_TEMPLATE.format(
-                    page_index=page.index,
-                    page_text=page.text,
-                ),
-            },
-        ])
-        return f"Страница {page.index}: {result}"
+    page_summaries: list[str] = []
+    for page in pages:
+        if not page.text.strip():
+            continue
+        try:
+            result = await client.chat(
+                [
+                    {"role": "system", "content": SYSTEM_SUMMARY},
+                    {
+                        "role": "user",
+                        "content": build_map_summary_user(page.text, page.index),
+                    },
+                ]
+            )
+        except Exception as exc:
+            logger.warning("page %s summary failed: %s", page.index, exc)
+            continue
+        page_summaries.append(f"Страница {page.index}: {result.strip()}")
 
-    page_summaries: list[str] = await asyncio.gather(*(_map_page(p) for p in pages))
+    if not page_summaries:
+        return ""
+    if len(page_summaries) == 1:
+        return page_summaries[0]
 
-    return await client.chat([
-        {"role": "system", "content": SUMMARY_REDUCE_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": SUMMARY_REDUCE_USER_PROMPT_TEMPLATE.format(
-                page_summaries="\n".join(page_summaries),
-            ),
-        },
-    ])
+    try:
+        return (
+            await client.chat(
+                [
+                    {"role": "system", "content": SYSTEM_SUMMARY},
+                    {
+                        "role": "user",
+                        "content": build_reduce_summary_user(page_summaries),
+                    },
+                ]
+            )
+        ).strip()
+    except Exception as exc:
+        logger.warning("reduce summary failed: %s; returning concatenation", exc)
+        return " ".join(page_summaries)
+
+
+async def summarize_chunk(client: ChatClient, chunk: Chunk) -> str | None:
+    if not chunk.text.strip():
+        return None
+
+    try:
+        result = await client.chat(
+            [
+                {"role": "system", "content": SYSTEM_SUMMARY},
+                {
+                    "role": "user",
+                    "content": build_chunk_summary_user(
+                        chunk.text,
+                        chunk.chunk_index,
+                    ),
+                },
+            ]
+        )
+    except Exception as exc:
+        logger.warning("chunk %s summary failed: %s", chunk.chunk_index, exc)
+        return None
+
+    summary = result.strip()
+    return summary or None

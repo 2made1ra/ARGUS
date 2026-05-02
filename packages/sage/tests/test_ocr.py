@@ -1,21 +1,22 @@
 import shutil
 from collections.abc import Callable, Iterator
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import fitz
-import pytest
 import pytesseract
+import pytest
 from PIL import Image
-
 from sage.pdf.ocr import OCR_DPI, OCR_LANG, ocr_pages
 
 
 class FakePixmap:
-    width = 1
-    height = 1
-    alpha = False
-    samples = b"\xff\xff\xff"
+    def tobytes(self, output: str) -> bytes:
+        assert output == "png"
+        buffer = BytesIO()
+        Image.new("RGB", (1, 1), "white").save(buffer, format="PNG")
+        return buffer.getvalue()
 
 
 class FakePage:
@@ -80,7 +81,9 @@ def test_ocr_pages_renders_300_dpi_and_returns_ordered_scan_pages(
         return f"text {len(calls)}"
 
     monkeypatch.setattr("sage.pdf.ocr.fitz.open", fake_open)
-    monkeypatch.setattr("sage.pdf.ocr.pytesseract.image_to_string", fake_image_to_string)
+    monkeypatch.setattr(
+        "sage.pdf.ocr.pytesseract.image_to_string", fake_image_to_string
+    )
     monkeypatch.setattr("sage.pdf.ocr.os.cpu_count", lambda: 8)
     monkeypatch.setattr("sage.pdf.ocr.ThreadPoolExecutor", FakeExecutor)
 
