@@ -1,6 +1,8 @@
 """Shared fixtures for HTTP entrypoint smoke tests."""
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 from fastapi import FastAPI
 
@@ -8,7 +10,7 @@ from app.main import app as _app
 
 
 @pytest.fixture()
-def app() -> FastAPI:
+def app() -> Generator[FastAPI, None, None]:
     """Return the app instance with a clean dependency_overrides slate."""
     _app.dependency_overrides.clear()
     yield _app

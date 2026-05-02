@@ -37,8 +37,13 @@ export default function UploadForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginBottom: "1.5rem" }}>
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+    <form className="upload-form" onSubmit={handleSubmit}>
+      <label className="file-target">
+        <span className="file-target__mark">V</span>
+        <span>
+          <strong>Выберите договор</strong>
+          <small>PDF или DOCX</small>
+        </span>
         <input
           ref={fileRef}
           type="file"
@@ -46,14 +51,12 @@ export default function UploadForm() {
           required
           disabled={uploading}
         />
-        <button type="submit" disabled={uploading} style={{ padding: "0.4rem 1rem" }}>
-          {uploading ? "Загружаю…" : "Загрузить"}
-        </button>
-      </div>
+      </label>
+      <button className="primary-action" type="submit" disabled={uploading}>
+        {uploading ? "Загружаю..." : "Загрузить и обработать"}
+      </button>
       {error && (
-        <p style={{ color: "#b91c1c", marginTop: "0.5rem", fontSize: "0.9rem" }}>
-          Ошибка: {error}
-        </p>
+        <p className="error">Ошибка: {error}</p>
       )}
     </form>
   );

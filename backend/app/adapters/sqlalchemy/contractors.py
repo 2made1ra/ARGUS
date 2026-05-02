@@ -1,4 +1,4 @@
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.sqlalchemy.models import (
@@ -73,6 +73,25 @@ class SqlAlchemyContractorRepository:
         )
         return await self._session.scalar(stmt) or 0
 
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:
+        if not ids:
+            return {}
+
+        stmt = (
+            select(DocumentRow.contractor_entity_id, func.count(DocumentRow.id))
+            .where(DocumentRow.contractor_entity_id.in_(ids))
+            .group_by(DocumentRow.contractor_entity_id)
+        )
+        rows = await self._session.execute(stmt)
+        return {
+            ContractorEntityId(contractor_id): int(count)
+            for contractor_id, count in rows
+            if contractor_id is not None
+        }
+
     async def list_for_contractor(
         self,
         id: ContractorEntityId,
@@ -89,6 +108,31 @@ class SqlAlchemyContractorRepository:
         )
         rows = await self._session.scalars(stmt)
         return [_document_to_entity(r) for r in rows]
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:
+        stmt = select(ContractorRow)
+        if q:
+            pattern = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    ContractorRow.display_name.ilike(pattern),
+                    ContractorRow.inn.ilike(pattern),
+                    ContractorRow.kpp.ilike(pattern),
+                ),
+            )
+        stmt = (
+            stmt.order_by(ContractorRow.created_at.desc(), ContractorRow.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = await self._session.scalars(stmt)
+        return [_contractor_to_entity(row) for row in rows]
 
 
 class SqlAlchemyRawContractorMappingRepository:
@@ -136,6 +180,7 @@ def _document_to_entity(row: DocumentRow) -> Document:
         contractor_entity_id=contractor_entity_id,
         title=_required(row.title, "documents.title"),
         file_path=_required(row.file_path, "documents.file_path"),
+        preview_file_path=row.preview_file_path,
         content_type=_required(row.content_type, "documents.content_type"),
         document_kind=row.document_kind,
         doc_type=row.doc_type,

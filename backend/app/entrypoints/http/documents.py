@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.entrypoints.http.dependencies import (
     get_document_facts_uc,
+    get_document_preview_uc,
+    get_document_rag_answer_uc,
     get_get_document_uc,
     get_list_documents_uc,
     get_search_within_uc,
@@ -19,13 +23,19 @@ from app.entrypoints.http.schemas.documents import (
     DocumentOut,
     WithinDocumentResultOut,
 )
+from app.entrypoints.http.schemas.rag import RagAnswerOut, RagAnswerRequest
+from app.features.documents.dto import DocumentPreviewUnavailable
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
+from app.features.documents.use_cases.get_document_preview import (
+    GetDocumentPreviewUseCase,
+)
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
 from app.features.documents.use_cases.update_document_facts import UpdateDocumentFactsUseCase
 from app.features.ingest.entities.document import DocumentStatus
 from app.features.ingest.ports import DocumentNotFound
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
+from app.features.search.use_cases.answer_document import AnswerDocumentUseCase
 from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
@@ -89,6 +99,44 @@ async def search_within_document(
 ) -> list[WithinDocumentResultOut]:
     results = await uc.execute(document_id=DocumentId(id), query=q, limit=limit)
     return [WithinDocumentResultOut.from_domain(r) for r in results]
+
+
+@router.post("/{id}/answer", response_model=RagAnswerOut)
+async def answer_document(
+    id: UUID,
+    body: RagAnswerRequest,
+    uc: AnswerDocumentUseCase = Depends(get_document_rag_answer_uc),
+) -> RagAnswerOut:
+    try:
+        answer = await uc.execute(
+            document_id=DocumentId(id),
+            message=body.message,
+            history=[item.to_domain() for item in body.history],
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 503:
+            raise HTTPException(
+                status_code=503,
+                detail="Сервис локальной LLM недоступен — запустите LM Studio и загрузите модель.",
+            ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RagAnswerOut.from_domain(answer)
+
+
+@router.get("/{id}/preview")
+async def get_document_preview(
+    id: UUID,
+    uc: GetDocumentPreviewUseCase = Depends(get_document_preview_uc),
+) -> FileResponse:
+    try:
+        preview = await uc.execute(DocumentId(id))
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
+    except DocumentPreviewUnavailable:
+        raise HTTPException(status_code=404, detail="Document preview not available")
+    return FileResponse(path=preview.path, media_type=preview.media_type)
 
 
 @router.patch("/{id}/facts", status_code=204)

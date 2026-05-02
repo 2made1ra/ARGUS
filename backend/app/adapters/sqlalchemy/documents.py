@@ -17,6 +17,7 @@ class SqlAlchemyDocumentRepository:
             contractor_entity_id=document.contractor_entity_id,
             title=document.title,
             file_path=document.file_path,
+            preview_file_path=document.preview_file_path,
             content_type=document.content_type,
             document_kind=document.document_kind,
             doc_type=document.doc_type,
@@ -101,6 +102,21 @@ class SqlAlchemyDocumentRepository:
         if result.scalar_one_or_none() is None:
             raise DocumentNotFound(document_id)
 
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None:
+        statement = (
+            update(DocumentRow)
+            .where(DocumentRow.id == document_id)
+            .values(preview_file_path=preview_file_path)
+            .returning(DocumentRow.id)
+        )
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
+
     async def set_error(self, document_id: DocumentId, message: str) -> None:
         statement = (
             update(DocumentRow)
@@ -145,6 +161,7 @@ def _to_entity(row: DocumentRow) -> Document:
         contractor_entity_id=contractor_entity_id,
         title=title,
         file_path=file_path,
+        preview_file_path=row.preview_file_path,
         content_type=content_type,
         document_kind=row.document_kind,
         doc_type=row.doc_type,

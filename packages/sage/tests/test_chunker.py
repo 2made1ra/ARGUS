@@ -40,6 +40,24 @@ def test_chunk_pages_splits_giant_page_respects_max_chars() -> None:
         assert word in combined
 
 
+def test_chunk_pages_supports_token_budget_with_overlap() -> None:
+    long_text = " ".join(f"word{i}" for i in range(120))
+    chunks = chunk_pages(pages(long_text), max_tokens=20, overlap_tokens=4)
+
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= 20 * 4 for chunk in chunks)
+    assert chunks[0].text.split()[-1] in chunks[1].text
+
+
+def test_chunk_pages_rejects_invalid_token_overlap() -> None:
+    try:
+        chunk_pages(pages("text"), max_tokens=10, overlap_tokens=10)
+    except ValueError as exc:
+        assert "overlap_tokens" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_chunk_pages_single_page_within_max_chars_is_one_chunk() -> None:
     chunks = chunk_pages(pages("Short page text"), max_chars=2000)
 

@@ -106,4 +106,5 @@ def test_processing_result_model_dump() -> None:
         "document_kind": "text",
         "partial": False,
         "failed_chunk_indices": [],
+        "preview_pdf_path": None,
     }

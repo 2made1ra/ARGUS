@@ -71,6 +71,7 @@ async def _run_pipeline(
         document_kind=kind,
         partial=partial,
         failed_chunk_indices=failed_chunk_indices,
+        preview_pdf_path=str(pdf_path),
     )
 
 

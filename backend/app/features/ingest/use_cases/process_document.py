@@ -49,6 +49,10 @@ class ProcessDocumentUseCase:
                     document_kind=result.document_kind,
                     partial_extraction=result.partial,
                 )
+                await self._documents.set_preview_file_path(
+                    document_id,
+                    result.preview_pdf_path,
+                )
                 await self._uow.commit()
         except Exception as exc:
             async with self._uow:

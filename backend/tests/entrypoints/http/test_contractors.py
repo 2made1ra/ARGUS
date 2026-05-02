@@ -10,15 +10,17 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.entrypoints.http.dependencies import (
+    get_contractor_rag_answer_uc,
     get_contractor_profile_uc,
+    get_list_contractors_uc,
     get_list_contractor_documents_uc,
     get_search_documents_uc,
 )
 from app.features.contractors.entities.contractor import Contractor
 from app.features.contractors.use_cases.get_contractor_profile import ContractorProfile
-from app.features.documents.dto import DocumentDTO
+from app.features.contractors.use_cases.list_contractors import ContractorCatalogItem
 from app.features.ingest.entities.document import Document, DocumentStatus
-from app.features.search.dto import ChunkSnippet, DocumentSearchResult
+from app.features.search.dto import ChunkSnippet, DocumentSearchResult, RagAnswer
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +53,37 @@ def _document(doc_id: DocumentId | None = None) -> Document:
         partial_extraction=False,
         created_at=datetime(2026, 4, 29, 12, 0, tzinfo=UTC),
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /contractors/
+# ---------------------------------------------------------------------------
+
+
+async def test_list_contractors_returns_200(app: FastAPI) -> None:
+    contractor_id = ContractorEntityId(uuid4())
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = [
+        ContractorCatalogItem(
+            id=contractor_id,
+            display_name="ООО Вектор",
+            normalized_key="ooo vektor",
+            inn="7701234567",
+            kpp=None,
+            document_count=3,
+        ),
+    ]
+    app.dependency_overrides[get_list_contractors_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/contractors/")
+
+    assert resp.status_code == 200
+    items = resp.json()
+    assert UUID(items[0]["id"]) == UUID(str(contractor_id))
+    assert items[0]["document_count"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -131,3 +164,27 @@ async def test_search_contractor_documents_returns_200(app: FastAPI) -> None:
     assert len(items) == 1
     assert items[0]["title"] == "agreement.pdf"
     assert items[0]["matched_chunks"][0]["snippet"] == "clause text"
+
+
+async def test_answer_contractor_returns_200(app: FastAPI) -> None:
+    contractor_id = ContractorEntityId(uuid4())
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = RagAnswer(
+        answer="Сотрудничество описано в договорах.",
+        sources=[],
+    )
+    app.dependency_overrides[get_contractor_rag_answer_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            f"/contractors/{contractor_id}/answer",
+            json={"message": "дай summary"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "answer": "Сотрудничество описано в договорах.",
+        "sources": [],
+    }

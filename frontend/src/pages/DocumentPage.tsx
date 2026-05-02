@@ -1,11 +1,17 @@
 import { Fragment, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { API_URL, answerDocument, getDocument, getDocumentFacts, searchWithinDocument } from "../api";
+import type {
+  ChatMessage,
+  DocumentFactsOut,
+  DocumentOut,
+  WithinDocumentResult,
+} from "../api";
 import ChunkResults from "../components/ChunkResults";
 import DocumentStatus from "../components/DocumentStatus";
 import FieldValidationForm from "../components/FieldValidationForm";
+import RagChat from "../components/RagChat";
 import SearchBar from "../components/SearchBar";
-import { getDocument, getDocumentFacts, searchWithinDocument } from "../api";
-import type { DocumentOut, DocumentFactsOut, WithinDocumentResult } from "../api";
 
 export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,9 +26,17 @@ export default function DocumentPage() {
 
   useEffect(() => {
     if (!id) return;
+    setLoadError(null);
     getDocument(id)
-      .then(setDoc)
-      .catch((err: unknown) => setLoadError(String(err)));
+      .then((nextDoc) => {
+        setDoc(nextDoc);
+        if (nextDoc.status === "INDEXED") {
+          getDocumentFacts(id).then(setFacts).catch(() => {});
+        }
+      })
+      .catch((err: unknown) =>
+        setLoadError(err instanceof Error ? err.message : String(err))
+      );
   }, [id]);
 
   useEffect(() => {
@@ -34,8 +48,6 @@ export default function DocumentPage() {
     setLiveStatus(status);
     if (status === "INDEXED") setIsValidating(true);
   }
-
-  const status = liveStatus ?? doc?.status ?? null;
 
   async function handleSearch(nextQuery: string) {
     if (!id) return;
@@ -49,20 +61,23 @@ export default function DocumentPage() {
     }
   }
 
-  if (loadError) {
-    return <p style={{ color: "#b91c1c" }}>Ошибка загрузки: {loadError}</p>;
-  }
+  if (loadError) return <p className="error">Ошибка загрузки: {loadError}</p>;
+  if (!doc) return <p className="muted">Загружаю документ...</p>;
 
-  if (!doc) {
-    return <p style={{ color: "#6b7280" }}>Загружаю…</p>;
-  }
+  const status = liveStatus ?? doc.status;
+  const previewUrl = `${API_URL}/documents/${doc.id}/preview`;
 
   return (
-    <div>
-      <h1 style={{ marginBottom: "0.25rem" }}>{doc.title}</h1>
-      <p style={{ color: "#6b7280", fontSize: "0.85rem", marginBottom: "1rem" }}>
-        ID: {doc.id}
-      </p>
+    <main className="workspace workspace--wide">
+      <header className="workspace-header">
+        <div>
+          <p className="eyebrow">Document</p>
+          <h1>{doc.title}</h1>
+        </div>
+        <p className="workspace-header__note">
+          {status} · {doc.document_kind ?? "kind не определен"}
+        </p>
+      </header>
 
       <DocumentStatus documentId={doc.id} onStatusChange={handleStatusChange} />
 
@@ -70,53 +85,43 @@ export default function DocumentPage() {
         <FieldValidationForm facts={facts} documentId={doc.id} />
       )}
 
-      {status === "INDEXED" && facts && !isValidating && (
-        <div style={{ marginTop: "2rem" }}>
-          <section style={{ marginBottom: "1.5rem" }}>
-            <h2 style={{ marginBottom: "0.75rem" }}>Поля</h2>
-            {Object.keys(facts.fields).length === 0 ? (
-              <p style={{ color: "#6b7280" }}>—</p>
-            ) : (
-              <dl
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "max-content 1fr",
-                  gap: "0.3rem 1rem",
-                }}
-              >
-                {Object.entries(facts.fields).map(([k, v]) => (
-                  <Fragment key={k}>
-                    <dt style={{ fontWeight: 600, color: "#374151" }}>{k}</dt>
-                    <dd style={{ margin: 0 }}>{String(v)}</dd>
-                  </Fragment>
-                ))}
-              </dl>
-            )}
-          </section>
-
-          {facts.summary && (
-            <section style={{ marginBottom: "1.5rem" }}>
-              <h2 style={{ marginBottom: "0.75rem" }}>Summary</h2>
-              <p style={{ lineHeight: 1.7 }}>{facts.summary}</p>
-            </section>
-          )}
-
-          {facts.key_points.length > 0 && (
-            <section>
-              <h2 style={{ marginBottom: "0.75rem" }}>Key points</h2>
-              <ul style={{ paddingLeft: "1.5rem", lineHeight: 1.8 }}>
-                {facts.key_points.map((pt, i) => (
-                  <li key={i}>{pt}</li>
-                ))}
-              </ul>
-            </section>
+      <section className="document-split">
+        <div className="document-preview">
+          <div className="section-heading">
+            <h2>Предпросмотр</h2>
+            <span className="meta">PDF</span>
+          </div>
+          {doc.preview_available ? (
+            <iframe title={doc.title} src={previewUrl} />
+          ) : (
+            <div className="empty-state empty-state--compact">
+              <h2>Preview пока недоступен</h2>
+              <p className="muted">
+                PDF появится после обработки или если исходный файл уже был PDF.
+              </p>
+            </div>
           )}
         </div>
-      )}
+
+        <div className="document-side">
+          <RagChat
+            title="Чат по договору"
+            placeholder="Например: дай summary договора или найди риски"
+            emptyHint="Вопросы здесь ограничены выбранным документом."
+            onAsk={(message: string, history: ChatMessage[]) =>
+              answerDocument(doc.id, message, history)
+            }
+          />
+
+          {status === "INDEXED" && facts && !isValidating && (
+            <DocumentFacts facts={facts} />
+          )}
+        </div>
+      </section>
 
       {status === "INDEXED" && !isValidating && (
-        <section className="panel document-search">
-          <h2>Поиск внутри документа</h2>
+        <section className="panel panel--flat document-search">
+          <h2>Точный поиск внутри документа</h2>
           <SearchBar
             onSearch={handleSearch}
             placeholder="Найти фрагмент в тексте документа"
@@ -125,6 +130,33 @@ export default function DocumentPage() {
           {chunkResults && <ChunkResults results={chunkResults} query={query} />}
         </section>
       )}
-    </div>
+    </main>
+  );
+}
+
+function DocumentFacts({ facts }: { facts: DocumentFactsOut }) {
+  return (
+    <section className="facts-panel">
+      <h2>Факты документа</h2>
+      {facts.summary && <p className="facts-summary">{facts.summary}</p>}
+      <dl className="facts-grid">
+        {Object.entries(facts.fields)
+          .filter(([, value]) => value !== null && value !== "")
+          .slice(0, 8)
+          .map(([key, value]) => (
+            <Fragment key={key}>
+              <dt>{key}</dt>
+              <dd>{String(value)}</dd>
+            </Fragment>
+          ))}
+      </dl>
+      {facts.key_points.length > 0 && (
+        <ul className="key-points">
+          {facts.key_points.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

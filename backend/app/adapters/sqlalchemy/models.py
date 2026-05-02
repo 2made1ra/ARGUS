@@ -49,6 +49,7 @@ class Document(Base):
     )
     title: Mapped[str | None] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(Text)
+    preview_file_path: Mapped[str | None] = mapped_column(Text)
     content_type: Mapped[str | None] = mapped_column(Text)
     document_kind: Mapped[str | None] = mapped_column(Text)
     doc_type: Mapped[str | None] = mapped_column(Text)

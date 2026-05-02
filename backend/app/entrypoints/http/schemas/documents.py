@@ -21,6 +21,7 @@ class DocumentOut(BaseModel):
     partial_extraction: bool
     error_message: str | None
     created_at: datetime
+    preview_available: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +40,7 @@ class DocumentOut(BaseModel):
             partial_extraction=dto.partial_extraction,
             error_message=dto.error_message,
             created_at=dto.created_at,
+            preview_available=dto.preview_available,
         )
 
 

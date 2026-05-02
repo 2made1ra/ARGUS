@@ -93,6 +93,13 @@ class FakeDocumentRepository:
     ) -> None:
         raise NotImplementedError
 
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None:
+        raise NotImplementedError
+
     async def set_error(self, document_id: DocumentId, message: str) -> None:
         raise NotImplementedError
 

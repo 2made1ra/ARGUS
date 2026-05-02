@@ -42,6 +42,9 @@ class FakeDocumentRepository:
     async def get(self, document_id: DocumentId) -> Document:
         raise NotImplementedError
 
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        raise NotImplementedError
+
     async def list(
         self,
         *,
@@ -69,6 +72,13 @@ class FakeDocumentRepository:
         raise NotImplementedError
 
     async def set_error(self, document_id: DocumentId, message: str) -> None:
+        raise NotImplementedError
+
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None:
         raise NotImplementedError
 
     async def set_contractor_entity_id(

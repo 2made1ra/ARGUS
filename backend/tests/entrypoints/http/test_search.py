@@ -8,8 +8,8 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.core.domain.ids import ContractorEntityId
-from app.entrypoints.http.dependencies import get_search_contractors_uc
-from app.features.search.dto import ContractorSearchResult
+from app.entrypoints.http.dependencies import get_global_rag_answer_uc, get_search_contractors_uc
+from app.features.search.dto import ContractorSearchResult, GlobalRagAnswer
 
 
 async def test_search_contractors_returns_200(app: FastAPI) -> None:
@@ -36,3 +36,28 @@ async def test_search_contractors_returns_200(app: FastAPI) -> None:
     assert UUID(items[0]["contractor_id"]) == UUID(str(contractor_id))
     assert items[0]["name"] == "ООО Вектор"
     assert items[0]["top_snippet"] == "supply of equipment"
+
+
+async def test_answer_global_search_returns_200(app: FastAPI) -> None:
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = GlobalRagAnswer(
+        answer="Подходящих подрядчиков не найдено.",
+        contractors=[],
+        sources=[],
+    )
+    app.dependency_overrides[get_global_rag_answer_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/search/answer",
+            json={"message": "мне нужны поставщики фруктов"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "answer": "Подходящих подрядчиков не найдено.",
+        "contractors": [],
+        "sources": [],
+    }
