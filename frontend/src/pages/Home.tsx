@@ -1,8 +1,10 @@
+import UploadForm from "../components/UploadForm";
+
 export default function Home() {
   return (
     <div>
-      <h1>ARGUS</h1>
-      <p>Home — upload &amp; search coming in PR 10.2</p>
+      <h1 style={{ marginBottom: "1.5rem" }}>ARGUS — тестовый интерфейс</h1>
+      <UploadForm />
     </div>
   );
 }
