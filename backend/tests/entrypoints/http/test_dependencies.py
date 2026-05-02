@@ -62,3 +62,27 @@ async def test_qdrant_dependency_closes_client(
 
     assert yielded is client
     assert client.closed is True
+
+
+async def test_qdrant_dependency_closes_client_after_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeQdrantClient()
+    settings = Settings(
+        database_url="postgresql+asyncpg://test:test@localhost/test",
+        redis_url="redis://localhost:6379/0",
+        qdrant_url="http://localhost:6333",
+        lm_studio_url="http://localhost:1234/v1",
+        lm_studio_llm_model="test-model",
+    )
+
+    monkeypatch.setattr(http_session, "make_qdrant_client", lambda url: client)
+
+    dep = http_session.get_qdrant_client(settings)
+    yielded = await anext(dep)
+
+    with pytest.raises(RuntimeError, match="request failed"):
+        await dep.athrow(RuntimeError("request failed"))
+
+    assert yielded is client
+    assert client.closed is True

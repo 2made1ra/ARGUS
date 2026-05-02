@@ -1,5 +1,5 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,14 +14,22 @@ from app.entrypoints.http.router import router
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     qdrant = make_qdrant_client(settings.qdrant_url)
-    await bootstrap_collection(qdrant, settings.qdrant_collection, settings.embedding_dim)
+    try:
+        await bootstrap_collection(
+            qdrant,
+            settings.qdrant_collection,
+            settings.embedding_dim,
+        )
+    finally:
+        await qdrant.close()
     yield
-    await qdrant.close()
 
 
 app = FastAPI(
     title="ARGUS",
-    description="Document intelligence platform for contractor management and contract search.",
+    description=(
+        "Document intelligence platform for contractor management and contract search."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )

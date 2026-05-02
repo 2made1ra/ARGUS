@@ -32,6 +32,11 @@ async def _mark_status(document_id: str, status: str) -> None:
         await uow.commit()
 
 
+async def _index_document(document_id: str) -> None:
+    async with build_index_uc() as use_case:
+        await use_case.execute(DocumentId(UUID(document_id)))
+
+
 @celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="ingest.process_document",
@@ -62,7 +67,7 @@ def resolve_contractor(self: Any, document_id: str) -> None:
     default_retry_delay=30,
 )
 def index_document(self: Any, document_id: str) -> None:
-    run_async(build_index_uc().execute(DocumentId(UUID(document_id))))
+    run_async(_index_document(document_id))
 
 
 __all__ = [

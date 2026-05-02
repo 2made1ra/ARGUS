@@ -1,4 +1,6 @@
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -69,24 +71,28 @@ def build_resolve_uc() -> ResolveContractorUseCase:
     )
 
 
-def build_index_uc() -> IndexDocumentUseCase:
+@asynccontextmanager
+async def build_index_uc() -> AsyncIterator[IndexDocumentUseCase]:
     settings = get_settings()
     session = _session()
     qdrant_client = make_qdrant_client(settings.qdrant_url)
-    return IndexDocumentUseCase(
-        documents=SqlAlchemyDocumentRepository(session),
-        chunks=SqlAlchemyChunkRepository(session),
-        fields=SqlAlchemyFieldsRepository(session),
-        summaries=SqlAlchemySummaryRepository(session),
-        contractors=SqlAlchemyContractorRepository(session),
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.embedding_dim,
-        ),
-        index=QdrantVectorIndex(qdrant_client, settings.qdrant_collection),
-        uow=SessionUnitOfWork(session, qdrant_client.close),
-    )
+    try:
+        yield IndexDocumentUseCase(
+            documents=SqlAlchemyDocumentRepository(session),
+            chunks=SqlAlchemyChunkRepository(session),
+            fields=SqlAlchemyFieldsRepository(session),
+            summaries=SqlAlchemySummaryRepository(session),
+            contractors=SqlAlchemyContractorRepository(session),
+            embeddings=LMStudioEmbeddings(
+                base_url=settings.lm_studio_url,
+                model=settings.lm_studio_embedding_model,
+                embedding_dim=settings.embedding_dim,
+            ),
+            index=QdrantVectorIndex(qdrant_client, settings.qdrant_collection),
+            uow=SessionUnitOfWork(session),
+        )
+    finally:
+        await qdrant_client.close()
 
 
 def build_document_repository() -> tuple[SqlAlchemyDocumentRepository, UnitOfWork]:
