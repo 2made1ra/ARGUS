@@ -7,6 +7,7 @@ from sage.models import Chunk, Page
 
 _HEADING_RE = re.compile(r"^#{1,6}\s", re.MULTILINE)
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
+_CHARS_PER_TOKEN_APPROX = 4
 
 
 @dataclass(frozen=True)
@@ -15,16 +16,27 @@ class _PageOffset:
     page_index: int
 
 
-def chunk_pages(pages: list[Page], max_chars: int = 2000) -> list[Chunk]:
+def chunk_pages(
+    pages: list[Page],
+    max_chars: int | None = None,
+    *,
+    max_tokens: int = 1024,
+    overlap_tokens: int = 128,
+) -> list[Chunk]:
     """Split normalized document pages into text chunks.
 
     All page texts are concatenated into one stream and split by
     RecursiveCharacterTextSplitter. Each chunk's page_start/page_end
-    is recovered from a character-offset table, so sections that span
-    page boundaries get accurate metadata.
+    is recovered from a character-offset table. By default the splitter
+    uses an approximate token budget so RAG retrieval gets stable
+    512-2048-token style chunks without adding a tokenizer dependency.
+    Passing ``max_chars`` preserves the legacy deterministic char budget.
     """
-    if max_chars < 1:
-        raise ValueError("max_chars must be greater than 0")
+    chunk_size, chunk_overlap = _split_budget(
+        max_chars=max_chars,
+        max_tokens=max_tokens,
+        overlap_tokens=overlap_tokens,
+    )
 
     non_empty = [p for p in pages if p.text]
     if not non_empty:
@@ -43,8 +55,8 @@ def chunk_pages(pages: list[Page], max_chars: int = 2000) -> list[Chunk]:
 
     # Phase 2: split with RCTS
     raw_chunks = RecursiveCharacterTextSplitter(
-        chunk_size=max_chars,
-        chunk_overlap=0,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
         separators=_SEPARATORS,
     ).split_text(combined)
 
@@ -84,3 +96,25 @@ def _page_for_offset(offset: int, offsets: list[_PageOffset]) -> int:
 
 def _section_type(text: str) -> str:
     return "header" if _HEADING_RE.match(text) else "body"
+
+
+def _split_budget(
+    *,
+    max_chars: int | None,
+    max_tokens: int,
+    overlap_tokens: int,
+) -> tuple[int, int]:
+    if max_chars is not None:
+        if max_chars < 1:
+            raise ValueError("max_chars must be greater than 0")
+        return max_chars, 0
+    if max_tokens < 1:
+        raise ValueError("max_tokens must be greater than 0")
+    if overlap_tokens < 0:
+        raise ValueError("overlap_tokens must be greater than or equal to 0")
+    if overlap_tokens >= max_tokens:
+        raise ValueError("overlap_tokens must be smaller than max_tokens")
+    return (
+        max_tokens * _CHARS_PER_TOKEN_APPROX,
+        overlap_tokens * _CHARS_PER_TOKEN_APPROX,
+    )

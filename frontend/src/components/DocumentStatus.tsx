@@ -4,6 +4,22 @@ import { API_URL } from "../api";
 const STEPS = ["QUEUED", "PROCESSING", "RESOLVING", "INDEXING", "INDEXED"] as const;
 type Step = (typeof STEPS)[number];
 
+const STEP_LABELS: Record<Step, string> = {
+  QUEUED: "В очереди",
+  PROCESSING: "Извлечение",
+  RESOLVING: "Проверка сторон",
+  INDEXING: "Индексация",
+  INDEXED: "Готово",
+};
+
+const STEP_DESCRIPTIONS: Record<Step, string> = {
+  QUEUED: "Файл принят и ожидает обработки.",
+  PROCESSING: "Распознаём документ и извлекаем содержимое.",
+  RESOLVING: "Сопоставляем поставщика и заказчика.",
+  INDEXING: "Готовим договор для поиска по базе.",
+  INDEXED: "Можно проверить поля и сохранить договор.",
+};
+
 interface SSEPayload {
   status: string;
   document_id: string;
@@ -12,12 +28,22 @@ interface SSEPayload {
 
 interface Props {
   documentId: string;
+  initialStatus?: string | null;
   onStatusChange?: (status: string) => void;
 }
 
-export default function DocumentStatus({ documentId, onStatusChange }: Props) {
-  const [status, setStatus] = useState<string | null>(null);
+export default function DocumentStatus({
+  documentId,
+  initialStatus = null,
+  onStatusChange,
+}: Props) {
+  const [status, setStatus] = useState<string | null>(initialStatus);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStatus(initialStatus);
+    setErrorMessage(null);
+  }, [documentId, initialStatus]);
 
   useEffect(() => {
     const es = new EventSource(`${API_URL}/documents/${documentId}/stream`);
@@ -40,54 +66,67 @@ export default function DocumentStatus({ documentId, onStatusChange }: Props) {
   }, [documentId]); // onStatusChange intentionally excluded — caller passes a stable setter
 
   const currentIndex = status ? STEPS.indexOf(status as Step) : -1;
+  const visibleIndex = currentIndex >= 0 ? currentIndex : 0;
+  const progress = currentIndex >= 0 ? Math.round(((currentIndex + 1) / STEPS.length) * 100) : 0;
+  const activeStep = currentIndex >= 0 ? STEPS[currentIndex] : null;
 
   return (
-    <div style={{ margin: "1.5rem 0" }}>
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-        {STEPS.map((step, i) => {
-          const done = currentIndex > i;
-          const active = status === step;
-          return (
-            <div key={step} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span
-                style={{
-                  padding: "0.25rem 0.75rem",
-                  borderRadius: "999px",
-                  fontSize: "0.85rem",
-                  fontWeight: active ? 700 : 400,
-                  background: active ? "#2563eb" : done ? "#93c5fd" : "#e5e7eb",
-                  color: active || done ? "#fff" : "#6b7280",
-                  transition: "background 0.3s, color 0.3s",
-                }}
-              >
-                {step}
-              </span>
-              {i < STEPS.length - 1 && (
-                <span style={{ color: "#9ca3af", userSelect: "none" }}>→</span>
-              )}
-            </div>
-          );
-        })}
+    <div className="document-status" aria-live="polite">
+      <div className="document-status__topline">
+        <div>
+          <p className="document-status__label">Ход загрузки и обработки</p>
+          <strong>
+            {activeStep ? STEP_LABELS[activeStep] : "Подключение к обработке"}
+          </strong>
+        </div>
+        <span>{progress}%</span>
       </div>
 
+      <div
+        className="document-status__bar"
+        aria-label="Прогресс обработки документа"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={progress}
+        role="progressbar"
+      >
+        <span style={{ width: `${progress}%` }} />
+      </div>
+
+      <ol className="document-status__steps">
+        {STEPS.map((step, i) => {
+          const done = visibleIndex > i;
+          const active = status === step;
+          return (
+            <li
+              className={[
+                "document-status__step",
+                done ? "document-status__step--done" : "",
+                active ? "document-status__step--active" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={step}
+            >
+              <span>{i + 1}</span>
+              <div>
+                <strong>{STEP_LABELS[step]}</strong>
+                <small>{STEP_DESCRIPTIONS[step]}</small>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
       {status === "FAILED" && (
-        <div
-          style={{
-            marginTop: "1rem",
-            padding: "0.75rem 1rem",
-            background: "#fef2f2",
-            border: "1px solid #fca5a5",
-            borderRadius: "6px",
-            color: "#b91c1c",
-          }}
-        >
+        <div className="document-status__error">
           <strong>Ошибка обработки:</strong>{" "}
           {errorMessage ?? "Неизвестная ошибка"}
         </div>
       )}
 
       {!status && (
-        <p style={{ color: "#6b7280", fontSize: "0.9rem", marginTop: "0.5rem" }}>
+        <p className="muted">
           Подключение к потоку…
         </p>
       )}

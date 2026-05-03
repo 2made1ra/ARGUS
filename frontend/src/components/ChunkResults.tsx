@@ -1,16 +1,13 @@
 import type { WithinDocumentResult } from "../api";
+import {
+  formatPageRange,
+  matchLabel,
+} from "../utils/searchPresentation";
 import SnippetHighlight from "./SnippetHighlight";
 
 interface Props {
   results: WithinDocumentResult[];
   query: string;
-}
-
-function formatPages(start: number | null, end: number | null): string {
-  if (start === null && end === null) return "стр. ?";
-  if (start === end || end === null) return `стр. ${start ?? "?"}`;
-  if (start === null) return `стр. ?-${end}`;
-  return `стр. ${start}-${end}`;
 }
 
 export default function ChunkResults({ results, query }: Props) {
@@ -23,8 +20,8 @@ export default function ChunkResults({ results, query }: Props) {
       {results.map((result) => (
         <article className="result-card" key={result.chunk_index}>
           <div className="result-card__header">
-            <h3>{formatPages(result.page_start, result.page_end)}</h3>
-            <span className="score">{result.score.toFixed(3)}</span>
+            <h3>{formatPageRange(result.page_start, result.page_end)}</h3>
+            <span className="match-badge">{matchLabel(result.score)}</span>
           </div>
           <p className="meta">
             {result.section_type ?? "section_type не определён"} · chunk{" "}

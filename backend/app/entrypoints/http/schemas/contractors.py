@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.features.contractors.use_cases.list_contractors import ContractorCatalogItem
 from app.features.contractors.use_cases.get_contractor_profile import ContractorProfile
 from app.features.search.dto import ChunkSnippet, DocumentSearchResult
 
@@ -40,6 +41,26 @@ class ContractorProfileOut(BaseModel):
         )
 
 
+class ContractorCatalogItemOut(BaseModel):
+    id: UUID
+    display_name: str
+    normalized_key: str
+    inn: str | None
+    kpp: str | None
+    document_count: int
+
+    @classmethod
+    def from_domain(cls, item: ContractorCatalogItem) -> "ContractorCatalogItemOut":
+        return cls(
+            id=UUID(str(item.id)),
+            display_name=item.display_name,
+            normalized_key=item.normalized_key,
+            inn=item.inn,
+            kpp=item.kpp,
+            document_count=item.document_count,
+        )
+
+
 class ChunkSnippetOut(BaseModel):
     page: int | None
     snippet: str
@@ -67,6 +88,7 @@ class DocumentSearchResultOut(BaseModel):
 
 __all__ = [
     "ChunkSnippetOut",
+    "ContractorCatalogItemOut",
     "ContractorOut",
     "ContractorProfileOut",
     "DocumentSearchResultOut",

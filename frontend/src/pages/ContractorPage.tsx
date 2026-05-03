@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { ContractorProfileOut, DocumentOut, DocumentSearchResult } from "../api";
+import type {
+  ChatMessage,
+  ContractorProfileOut,
+  DocumentOut,
+  DocumentSearchResult,
+} from "../api";
 import {
+  answerContractor,
   getContractor,
   listContractorDocuments,
   searchDocumentsForContractor,
 } from "../api";
 import DocumentResults from "../components/DocumentResults";
+import RagChat from "../components/RagChat";
 import SearchBar from "../components/SearchBar";
 
 export default function ContractorPage() {
@@ -54,7 +61,7 @@ export default function ContractorPage() {
   const contractor = profile.contractor;
 
   return (
-    <div>
+    <main className="workspace">
       <header className="page-header">
         <p className="eyebrow">Контрагент</p>
         <h1>{contractor.display_name}</h1>
@@ -63,27 +70,38 @@ export default function ContractorPage() {
         </p>
       </header>
 
-      <section className="panel">
-        <div className="section-heading">
-          <h2>Документы</h2>
-          <span className="meta">первые 20 · всего {profile.document_count}</span>
-        </div>
-        {documents.length === 0 ? (
-          <p className="muted">Документы пока не привязаны.</p>
-        ) : (
-          <div className="document-list">
-            {documents.map((doc) => (
-              <Link className="document-row" to={`/documents/${doc.id}`} key={doc.id}>
-                <span>{doc.title}</span>
-                <span className="meta">{doc.created_at.slice(0, 10)}</span>
-              </Link>
-            ))}
+      <section className="contractor-grid">
+        <div className="panel panel--flat">
+          <div className="section-heading">
+            <h2>Документы</h2>
+            <span className="meta">первые 20 · всего {profile.document_count}</span>
           </div>
-        )}
+          {documents.length === 0 ? (
+            <p className="muted">Документы пока не привязаны.</p>
+          ) : (
+            <div className="document-list">
+              {documents.map((doc) => (
+                <Link className="document-row" to={`/documents/${doc.id}`} key={doc.id}>
+                  <span>{doc.title}</span>
+                  <span className="meta">{doc.created_at.slice(0, 10)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <RagChat
+          title="Чат по подрядчику"
+          placeholder="Например: дай общее summary сотрудничества"
+          emptyHint="Задайте вопрос по всем договорам этого подрядчика."
+          onAsk={(message: string, history: ChatMessage[]) =>
+            answerContractor(contractor.id, message, history)
+          }
+        />
       </section>
 
-      <section className="panel">
-        <h2>Поиск внутри контрагента</h2>
+      <section className="panel panel--flat">
+        <h2>Поиск по договорам подрядчика</h2>
         <SearchBar
           onSearch={handleSearch}
           placeholder="Например: штрафы, срок оплаты, расторжение"
@@ -91,6 +109,6 @@ export default function ContractorPage() {
         {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
         {results && <DocumentResults results={results} query={query} />}
       </section>
-    </div>
+    </main>
   );
 }

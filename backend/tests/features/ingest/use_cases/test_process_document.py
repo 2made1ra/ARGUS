@@ -21,11 +21,15 @@ class FakeDocumentRepository:
         self.documents = documents
         self.status_updates: list[tuple[DocumentId, DocumentStatus]] = []
         self.processing_results: list[tuple[DocumentId, str, bool]] = []
+        self.preview_paths: list[tuple[DocumentId, str | None]] = []
         self.errors: list[tuple[DocumentId, str]] = []
 
     async def get(self, document_id: DocumentId) -> Document:
         self.calls.append("documents.get")
         return self.documents[document_id]
+
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        raise NotImplementedError
 
     async def update_status(
         self,
@@ -50,6 +54,15 @@ class FakeDocumentRepository:
         self.processing_results.append(
             (document_id, document_kind, partial_extraction),
         )
+
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None:
+        self.calls.append("documents.set_preview_file_path")
+        self.documents[document_id].preview_file_path = preview_file_path
+        self.preview_paths.append((document_id, preview_file_path))
 
     async def set_error(self, document_id: DocumentId, message: str) -> None:
         self.calls.append("documents.set_error")
@@ -215,6 +228,7 @@ def _processing_result() -> ProcessingResult:
         pages=[Page(index=1, text="Contract chunk", kind="text")],
         document_kind="text",
         partial=False,
+        preview_pdf_path="/fake/uploads/work/contract.pdf",
     )
 
 
@@ -264,8 +278,12 @@ async def test_process_document_persists_sage_result_after_processing_commit() -
     assert document.status == DocumentStatus.PROCESSING
     assert document.document_kind == "text"
     assert document.partial_extraction is False
+    assert document.preview_file_path == "/fake/uploads/work/contract.pdf"
     assert documents.status_updates == [(document_id, DocumentStatus.PROCESSING)]
     assert documents.processing_results == [(document_id, "text", False)]
+    assert documents.preview_paths == [
+        (document_id, "/fake/uploads/work/contract.pdf"),
+    ]
     assert chunks.added == [(document_id, result.chunks)]
     assert fields.upserts == [(document_id, result.fields)]
     assert summaries.upserts == [(document_id, "Document summary", [])]

@@ -1,0 +1,45 @@
+@startuml
+!include <C4/C4_Container>
+
+LAYOUT_LEFT_RIGHT()
+
+title C4 диаграмма контейнеров - загрузка документа (высокий уровень)
+
+Person(user, "User", "Загружает документы контрагентов")
+
+System_Boundary(system, "ARGUS Document Intelligence Platform") {
+
+  Container(web_app, "Web App", "React / Vite", "Экран загрузки и статус обработки")
+
+  Container(api, "Backend API", "Python / FastAPI", "Принимает файлы и запускает обработку")
+
+  ContainerDb(file_storage, "File Storage", "Локальная файловая система", "Исходные загруженные документы")
+
+  ContainerDb(postgres, "PostgreSQL", "Реляционная БД", "Статусы документов, фрагменты, поля, саммари и связи с контрагентами")
+
+  ContainerDb(redis, "Redis", "Очередь задач", "Асинхронные задания обработки")
+
+  Container(worker, "Ingestion Pipeline", "Celery Worker", "Обрабатывает документ, связывает контрагента и готовит поисковый индекс")
+
+  Container(sage, "SAGE Processor", "Python-пакет", "Извлекает текст, нарезает документ на фрагменты и формирует структурированные данные")
+
+  ContainerDb(qdrant, "Qdrant", "Векторная БД", "Поисковые векторы фрагментов и саммари документов")
+}
+
+System_Ext(lm_studio, "LM Studio", "Локальный LLM API для извлечения данных, саммари и эмбеддингов")
+System_Ext(document_tools, "Document Tools", "Поддержка конвертации LibreOffice и OCR")
+
+Rel(user, web_app, "Загружает документ")
+Rel(web_app, api, "Передает файл", "HTTPS")
+Rel(api, file_storage, "Сохраняет исходный файл")
+Rel(api, postgres, "Создает документ в статусе QUEUED")
+Rel(api, redis, "Ставит задание обработки в очередь")
+Rel(redis, worker, "Запускает задание асинхронно")
+Rel(worker, file_storage, "Читает исходный файл")
+Rel(worker, sage, "Передает файл на обработку")
+Rel(sage, document_tools, "Конвертирует и запускает OCR при необходимости")
+Rel(worker, lm_studio, "Извлекает, суммаризирует и векторизует содержимое")
+Rel(worker, postgres, "Сохраняет извлеченные данные и статус жизненного цикла")
+Rel(worker, qdrant, "Индексирует поисковые векторы")
+
+@enduml

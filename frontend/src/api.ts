@@ -11,6 +11,7 @@ export interface DocumentOut {
   partial_extraction: boolean;
   error_message: string | null;
   created_at: string;
+  preview_available: boolean;
 }
 
 export interface DocumentFactsOut {
@@ -33,6 +34,15 @@ export interface ContractorProfileOut {
   contractor: ContractorOut;
   document_count: number;
   raw_mapping_count: number;
+}
+
+export interface ContractorCatalogItem {
+  id: string;
+  display_name: string;
+  normalized_key: string;
+  inn: string | null;
+  kpp: string | null;
+  document_count: number;
 }
 
 export interface ContractorSearchResult {
@@ -65,6 +75,41 @@ export interface WithinDocumentResult {
   score: number;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface SourceRef {
+  document_id: string;
+  contractor_id: string | null;
+  page_start: number | null;
+  page_end: number | null;
+  chunk_index: number;
+  score: number;
+  snippet: string;
+  document_title: string | null;
+  contractor_name: string | null;
+}
+
+export interface RagAnswer {
+  answer: string;
+  sources: SourceRef[];
+}
+
+export interface RagContractorResult {
+  contractor_id: string;
+  name: string;
+  score: number;
+  matched_chunks_count: number;
+  document_count: number;
+  top_snippet: string;
+}
+
+export interface GlobalRagAnswer extends RagAnswer {
+  contractors: RagContractorResult[];
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -82,6 +127,11 @@ export const listDocuments = () =>
 
 export const getContractor = (id: string) =>
   apiFetch<ContractorProfileOut>(`/contractors/${id}`);
+
+export const listContractors = (q = "") =>
+  apiFetch<ContractorCatalogItem[]>(
+    `/contractors/?limit=50${q ? `&q=${encodeURIComponent(q)}` : ""}`
+  );
 
 export const listContractorDocuments = (id: string) =>
   apiFetch<DocumentOut[]>(`/contractors/${id}/documents?limit=20`);
@@ -101,6 +151,45 @@ export const searchWithinDocument = (id: string, q: string) =>
     `/documents/${id}/search?q=${encodeURIComponent(q)}&limit=20`
   );
 
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
+
+export const answerGlobalSearch = (
+  message: string,
+  history: ChatMessage[] = [],
+) =>
+  postJson<GlobalRagAnswer>("/search/answer", {
+    message,
+    history,
+  });
+
+export const answerContractor = (
+  id: string,
+  message: string,
+  history: ChatMessage[] = [],
+) =>
+  postJson<RagAnswer>(`/contractors/${id}/answer`, {
+    message,
+    history,
+  });
+
+export const answerDocument = (
+  id: string,
+  message: string,
+  history: ChatMessage[] = [],
+) =>
+  postJson<RagAnswer>(`/documents/${id}/answer`, {
+    message,
+    history,
+  });
+
 export async function patchDocumentFacts(
   id: string,
   body: {
@@ -113,6 +202,13 @@ export async function patchDocumentFacts(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/documents/${id}`, {
+    method: "DELETE",
   });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
 }

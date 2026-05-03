@@ -84,6 +84,12 @@ class FakeContractorRepository:
     async def count_documents_for(self, id: ContractorEntityId) -> int:
         raise NotImplementedError
 
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:
+        raise NotImplementedError
+
     async def list_for_contractor(
         self,
         id: ContractorEntityId,
@@ -91,6 +97,15 @@ class FakeContractorRepository:
         limit: int,
         offset: int,
     ) -> list[Document]:
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:
         raise NotImplementedError
 
 

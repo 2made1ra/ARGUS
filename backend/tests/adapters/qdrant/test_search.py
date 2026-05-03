@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from app.adapters.qdrant.search import QdrantVectorSearch
+from app.features.search.dto import SearchGroup, SearchHit
 
 
 @dataclass
@@ -96,17 +97,20 @@ async def test_search_uses_query_points_for_plain_hits() -> None:
     assert call["query"] == [0.1, 0.2]
     assert call["limit"] == 10
     assert call["with_payload"] is True
+    must = cast(list[dict[str, Any]], query_filter["must"])
+    match = cast(dict[str, str], must[0]["match"])
     assert call["query_filter"] == Filter(
         must=[
             FieldCondition(
                 key="document_id",
-                match=MatchValue(value=query_filter["must"][0]["match"]["value"]),
+                match=MatchValue(value=match["value"]),
             ),
         ],
     )
-    assert hits[0].id == client.points_response.points[0].id
-    assert hits[0].score == 0.71
-    assert hits[0].payload == {"text": "first"}
+    plain_hits = cast(list[SearchHit], hits)
+    assert plain_hits[0].id == client.points_response.points[0].id
+    assert plain_hits[0].score == 0.71
+    assert plain_hits[0].payload == {"text": "first"}
 
 
 @pytest.mark.asyncio
@@ -133,7 +137,8 @@ async def test_search_uses_query_points_groups_for_grouped_hits() -> None:
             "with_payload": True,
         },
     ]
-    assert len(groups) == 1
-    assert groups[0].group_key == client.groups_response.groups[0].id
-    assert groups[0].hits[0].score == 0.95
-    assert groups[0].hits[0].payload == {"text": "group hit"}
+    grouped_hits = cast(list[SearchGroup], groups)
+    assert len(grouped_hits) == 1
+    assert grouped_hits[0].group_key == client.groups_response.groups[0].id
+    assert grouped_hits[0].hits[0].score == 0.95
+    assert grouped_hits[0].hits[0].payload == {"text": "group hit"}

@@ -41,6 +41,7 @@ class Document:
     error_message: str | None
     partial_extraction: bool
     created_at: datetime
+    preview_file_path: str | None = None
 
     def __post_init__(self) -> None:
         self.status = DocumentStatus(self.status)

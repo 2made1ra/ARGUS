@@ -1,7 +1,8 @@
 """Regression tests for HTTP dependency resource cleanup."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
+from typing import Any, cast
 
 import pytest
 from app.config import Settings
@@ -34,7 +35,7 @@ async def test_session_dependency_closes_session(
 
     monkeypatch.setattr(http_session, "get_sessionmaker", fake_sessionmaker)
 
-    dep = http_session._session()
+    dep = cast(AsyncGenerator[Any, None], http_session._session())
     yielded = await anext(dep)
     await dep.aclose()
 
@@ -56,7 +57,7 @@ async def test_qdrant_dependency_closes_client(
 
     monkeypatch.setattr(http_session, "make_qdrant_client", lambda url: client)
 
-    dep = http_session.get_qdrant_client(settings)
+    dep = cast(AsyncGenerator[Any, None], http_session.get_qdrant_client(settings))
     yielded = await anext(dep)
     await dep.aclose()
 
@@ -78,7 +79,7 @@ async def test_qdrant_dependency_closes_client_after_error(
 
     monkeypatch.setattr(http_session, "make_qdrant_client", lambda url: client)
 
-    dep = http_session.get_qdrant_client(settings)
+    dep = cast(AsyncGenerator[Any, None], http_session.get_qdrant_client(settings))
     yielded = await anext(dep)
 
     with pytest.raises(RuntimeError, match="request failed"):

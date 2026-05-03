@@ -1,0 +1,33 @@
+@startuml
+!include <C4/C4_Container>
+
+LAYOUT_LEFT_RIGHT()
+
+title C4 диаграмма контейнеров - поисковый поток (высокий уровень)
+
+Person(user, "User", "Ищет по теме и проваливается в документы")
+
+System_Boundary(system, "ARGUS Document Intelligence Platform") {
+
+  Container(web_app, "Web App", "React / Vite", "Поисковый интерфейс: тема -> контрагент -> документы -> фрагменты")
+
+  Container(api, "Search API", "Python / FastAPI", "Принимает глобальные, контрагентские и документные поисковые запросы")
+
+  Container(search_service, "Search Orchestrator", "Прикладной слой", "Векторизует запрос, применяет фильтры области, группирует совпадения и собирает результаты")
+
+  ContainerDb(qdrant, "Qdrant", "Векторная БД", "Векторы фрагментов и саммари с привязкой к контрагентам и документам")
+
+  ContainerDb(postgres, "PostgreSQL", "Реляционная БД", "Метаданные контрагентов, документов, полей и саммари")
+}
+
+System_Ext(lm_studio, "LM Studio", "Локальный LLM API для эмбеддингов и генерации ответов")
+
+Rel(user, web_app, "Запускает поиск и открывает детализированные результаты")
+Rel(web_app, api, "Отправляет поисковые запросы и запросы ответа", "HTTPS")
+Rel(api, search_service, "Передает запрос")
+Rel(search_service, lm_studio, "Векторизует запросы и генерирует ответы")
+Rel(search_service, qdrant, "Выполняет векторный поиск с фильтрами области")
+Rel(search_service, postgres, "Дополняет совпадения метаданными")
+Rel(search_service, web_app, "Возвращает контрагентов, документы или фрагменты")
+
+@enduml

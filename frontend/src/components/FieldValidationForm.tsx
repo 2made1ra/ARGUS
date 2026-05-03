@@ -76,7 +76,7 @@ export default function FieldValidationForm({ facts, documentId }: Props) {
       });
       setShowToast(true);
       setTimeout(() => {
-        navigate("/?tab=search");
+        navigate("/");
       }, 1200);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));

@@ -1,5 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import type { DocumentSearchResult } from "../api";
+import {
+  compactDocumentTitle,
+  formatSinglePage,
+  matchLabel,
+} from "../utils/searchPresentation";
 import SnippetHighlight from "./SnippetHighlight";
 
 interface Props {
@@ -24,14 +29,14 @@ export default function DocumentResults({ results, query }: Props) {
           onClick={() => navigate(`/documents/${result.document_id}`)}
         >
           <div className="result-card__header">
-            <h3>{result.title}</h3>
+            <h3 className="compact-title">{compactDocumentTitle(result.title)}</h3>
             {result.date && <span className="meta">{result.date}</span>}
           </div>
           <div className="chunk-stack">
             {result.matched_chunks.map((chunk, index) => (
               <div className="chunk-preview" key={`${chunk.page}-${index}`}>
                 <span className="meta">
-                  Стр. {chunk.page ?? "?"} · score {chunk.score.toFixed(3)}
+                  {formatSinglePage(chunk.page)} · {matchLabel(chunk.score)}
                 </span>
                 <p className="snippet">
                   <SnippetHighlight text={chunk.snippet} query={query} />

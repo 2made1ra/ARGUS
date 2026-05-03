@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
+
 from app.core.domain.ids import DocumentId
 from app.entrypoints.http.streams import _status_stream
 from app.features.ingest.entities.document import Document, DocumentStatus
@@ -27,7 +29,9 @@ def _make_doc(document_id: DocumentId, status: DocumentStatus) -> Document:
     )
 
 
-async def test_stream_emits_three_events_and_closes(monkeypatch: object) -> None:
+async def test_stream_emits_three_events_and_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
     monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
@@ -58,7 +62,9 @@ async def test_stream_emits_three_events_and_closes(monkeypatch: object) -> None
     assert call_idx == 3
 
 
-async def test_stream_includes_error_message_on_failed(monkeypatch: object) -> None:
+async def test_stream_includes_error_message_on_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
     monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
@@ -80,7 +86,9 @@ async def test_stream_includes_error_message_on_failed(monkeypatch: object) -> N
     assert payload["error_message"] == "OCR crashed"
 
 
-async def test_stream_retries_on_transient_error(monkeypatch: object) -> None:
+async def test_stream_retries_on_transient_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
     monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))

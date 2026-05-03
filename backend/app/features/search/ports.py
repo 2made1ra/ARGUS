@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from app.features.search.dto import SearchGroup, SearchHit
+from app.features.search.dto import ChatMessage, RagContextChunk, SearchGroup, SearchHit
 
 
 @runtime_checkable
@@ -18,4 +18,31 @@ class VectorSearch(Protocol):
     ) -> list[SearchHit] | list[SearchGroup]: ...
 
 
-__all__ = ["VectorSearch"]
+@runtime_checkable
+class ChatLLM(Protocol):
+    async def complete(self, messages: list[ChatMessage]) -> str: ...
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    async def rerank(
+        self,
+        *,
+        query: str,
+        chunks: list[RagContextChunk],
+        top_k: int,
+    ) -> list[RagContextChunk]: ...
+
+
+class NoopReranker:
+    async def rerank(
+        self,
+        *,
+        query: str,
+        chunks: list[RagContextChunk],
+        top_k: int,
+    ) -> list[RagContextChunk]:
+        return chunks[:top_k]
+
+
+__all__ = ["ChatLLM", "NoopReranker", "Reranker", "VectorSearch"]

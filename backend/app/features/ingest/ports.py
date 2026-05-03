@@ -53,6 +53,12 @@ class DocumentRepository(Protocol):
         partial_extraction: bool,
     ) -> None: ...
 
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None: ...
+
     async def set_error(self, document_id: DocumentId, message: str) -> None: ...
 
     async def set_contractor_entity_id(
@@ -60,6 +66,8 @@ class DocumentRepository(Protocol):
         document_id: DocumentId,
         contractor_entity_id: ContractorEntityId | None,
     ) -> None: ...
+
+    async def delete(self, document_id: DocumentId) -> None: ...
 
 
 @runtime_checkable

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.entrypoints.http.dependencies import (
+    get_delete_document_uc,
     get_document_facts_uc,
+    get_document_preview_uc,
+    get_document_rag_answer_uc,
     get_get_document_uc,
     get_list_documents_uc,
     get_search_within_uc,
@@ -17,15 +22,25 @@ from app.entrypoints.http.schemas.documents import (
     DocumentFactsOut,
     DocumentFactsPatch,
     DocumentOut,
+    UploadDocumentOut,
     WithinDocumentResultOut,
 )
+from app.entrypoints.http.schemas.rag import RagAnswerOut, RagAnswerRequest
+from app.features.documents.dto import DocumentPreviewUnavailable
+from app.features.documents.use_cases.delete_document import DeleteDocumentUseCase
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
+from app.features.documents.use_cases.get_document_preview import (
+    GetDocumentPreviewUseCase,
+)
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
-from app.features.documents.use_cases.update_document_facts import UpdateDocumentFactsUseCase
+from app.features.documents.use_cases.update_document_facts import (
+    UpdateDocumentFactsUseCase,
+)
 from app.features.ingest.entities.document import DocumentStatus
 from app.features.ingest.ports import DocumentNotFound
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
+from app.features.search.use_cases.answer_document import AnswerDocumentUseCase
 from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
@@ -33,12 +48,23 @@ from app.features.search.use_cases.search_within_document import (
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.post("/upload", status_code=202)
+@router.post(
+    "/upload",
+    status_code=202,
+    response_model=UploadDocumentOut,
+    operation_id="uploadDocument",
+    summary="Upload a document",
+    description=(
+        "Stores the source file, creates a document in QUEUED status, and enqueues "
+        "the explicit ingestion pipeline: process document, resolve contractor, "
+        "then index chunks."
+    ),
+)
 async def upload_document(
     file: UploadFile,
     content_type: str = Form(default=None),
     uc: UploadDocumentUseCase = Depends(get_upload_uc),
-) -> dict[str, str]:
+) -> UploadDocumentOut:
     ct = content_type or file.content_type or "application/octet-stream"
     try:
         doc_id = await uc.execute(
@@ -48,10 +74,19 @@ async def upload_document(
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"document_id": str(doc_id)}
+    return UploadDocumentOut(document_id=UUID(str(doc_id)))
 
 
-@router.get("/", response_model=list[DocumentOut])
+@router.get(
+    "/",
+    response_model=list[DocumentOut],
+    operation_id="listDocuments",
+    summary="List documents",
+    description=(
+        "Returns uploaded documents with status, contractor link, and preview "
+        "availability."
+    ),
+)
 async def list_documents(
     limit: int = 50,
     offset: int = 0,
@@ -68,7 +103,16 @@ async def list_documents(
     return [DocumentOut.from_dto(dto) for dto in dtos]
 
 
-@router.get("/{id}/facts", response_model=DocumentFactsOut)
+@router.get(
+    "/{id}/facts",
+    response_model=DocumentFactsOut,
+    operation_id="getDocumentFacts",
+    summary="Get extracted document facts",
+    description=(
+        "Returns LLM-extracted contract fields, summary, key points, and partial "
+        "extraction state."
+    ),
+)
 async def get_document_facts(
     id: UUID,
     uc: GetDocumentFactsUseCase = Depends(get_document_facts_uc),
@@ -80,7 +124,16 @@ async def get_document_facts(
     return DocumentFactsOut.from_dto(dto)
 
 
-@router.get("/{id}/search", response_model=list[WithinDocumentResultOut])
+@router.get(
+    "/{id}/search",
+    response_model=list[WithinDocumentResultOut],
+    operation_id="searchWithinDocument",
+    summary="Search inside a document",
+    description=(
+        "Runs semantic search scoped to one document and returns matching chunks "
+        "with page spans."
+    ),
+)
 async def search_within_document(
     id: UUID,
     q: str,
@@ -91,7 +144,81 @@ async def search_within_document(
     return [WithinDocumentResultOut.from_domain(r) for r in results]
 
 
-@router.patch("/{id}/facts", status_code=204)
+@router.post(
+    "/{id}/answer",
+    response_model=RagAnswerOut,
+    operation_id="answerDocumentQuestion",
+    summary="Answer a question about one document",
+    description=(
+        "Builds a RAG answer from chunks and facts scoped to the selected document."
+    ),
+)
+async def answer_document(
+    id: UUID,
+    body: RagAnswerRequest,
+    uc: AnswerDocumentUseCase = Depends(get_document_rag_answer_uc),
+) -> RagAnswerOut:
+    try:
+        answer = await uc.execute(
+            document_id=DocumentId(id),
+            message=body.message,
+            history=[item.to_domain() for item in body.history],
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 503:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Сервис локальной LLM недоступен — запустите LM Studio "
+                    "и загрузите модель."
+                ),
+            ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RagAnswerOut.from_domain(answer)
+
+
+@router.get(
+    "/{id}/preview",
+    response_class=FileResponse,
+    operation_id="getDocumentPreview",
+    summary="Download document preview",
+    description=(
+        "Returns the stored PDF preview when one is available for the document."
+    ),
+    responses={
+        200: {
+            "description": "PDF preview stream.",
+            "content": {
+                "application/pdf": {"schema": {"type": "string", "format": "binary"}}
+            },
+        },
+        404: {"description": "Document or preview was not found."},
+    },
+)
+async def get_document_preview(
+    id: UUID,
+    uc: GetDocumentPreviewUseCase = Depends(get_document_preview_uc),
+) -> FileResponse:
+    try:
+        preview = await uc.execute(DocumentId(id))
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
+    except DocumentPreviewUnavailable:
+        raise HTTPException(status_code=404, detail="Document preview not available")
+    return FileResponse(path=preview.path, media_type=preview.media_type)
+
+
+@router.patch(
+    "/{id}/facts",
+    status_code=204,
+    operation_id="updateDocumentFacts",
+    summary="Update extracted document facts",
+    description=(
+        "Replaces editable extracted fields, summary, and key points for a document."
+    ),
+)
 async def patch_document_facts(
     id: UUID,
     body: DocumentFactsPatch,
@@ -102,7 +229,9 @@ async def patch_document_facts(
     try:
         await uc.execute(
             DocumentId(id),
-            fields=ContractFields(**{k: (v if v else None) for k, v in body.fields.items()}),
+            fields=ContractFields(
+                **{k: (v if v else None) for k, v in body.fields.items()}
+            ),
             summary=body.summary,
             key_points=body.key_points,
         )
@@ -110,7 +239,35 @@ async def patch_document_facts(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get("/{id}", response_model=DocumentOut)
+@router.delete(
+    "/{id}",
+    status_code=204,
+    operation_id="deleteDocument",
+    summary="Delete a document",
+    description=(
+        "Deletes document metadata and removes its vectors from the Qdrant collection."
+    ),
+)
+async def delete_document(
+    id: UUID,
+    uc: DeleteDocumentUseCase = Depends(get_delete_document_uc),
+) -> None:
+    try:
+        await uc.execute(DocumentId(id))
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+
+@router.get(
+    "/{id}",
+    response_model=DocumentOut,
+    operation_id="getDocument",
+    summary="Get document metadata",
+    description=(
+        "Returns one document by id, including lifecycle status and contractor "
+        "resolution result."
+    ),
+)
 async def get_document(
     id: UUID,
     uc: GetDocumentUseCase = Depends(get_get_document_uc),

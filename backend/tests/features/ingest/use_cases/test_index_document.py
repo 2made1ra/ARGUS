@@ -28,6 +28,9 @@ class FakeDocumentRepository:
         self.calls.append("documents.get")
         return self.documents[document_id]
 
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        raise NotImplementedError
+
     async def update_status(
         self,
         document_id: DocumentId,
@@ -43,6 +46,13 @@ class FakeDocumentRepository:
         document.status = DocumentStatus.FAILED
         document.error_message = message
         self.errors.append((document_id, message))
+
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
+    ) -> None:
+        raise NotImplementedError
 
     async def add(self, document: Document) -> None:
         raise NotImplementedError
@@ -141,6 +151,12 @@ class FakeContractorRepository:
         self.gets.append(id)
         return self.contractors[id]
 
+    async def get_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, Contractor]:
+        raise NotImplementedError
+
     async def add(self, contractor: Contractor) -> None:
         raise NotImplementedError
 
@@ -156,6 +172,12 @@ class FakeContractorRepository:
     async def count_documents_for(self, id: ContractorEntityId) -> int:
         raise NotImplementedError
 
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:
+        raise NotImplementedError
+
     async def list_for_contractor(
         self,
         id: ContractorEntityId,
@@ -163,6 +185,15 @@ class FakeContractorRepository:
         limit: int,
         offset: int,
     ) -> list[Document]:
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:
         raise NotImplementedError
 
 

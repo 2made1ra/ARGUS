@@ -39,6 +39,12 @@ class FakeContractorRepository:
     async def get(self, id: ContractorEntityId) -> Contractor:  # pragma: no cover
         raise NotImplementedError
 
+    async def get_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, Contractor]:  # pragma: no cover
+        raise NotImplementedError
+
     async def find_by_inn(self, inn: str) -> Contractor | None:  # pragma: no cover
         raise NotImplementedError
 
@@ -49,6 +55,21 @@ class FakeContractorRepository:
         raise NotImplementedError
 
     async def count_documents_for(self, id: ContractorEntityId) -> int:  # pragma: no cover
+        raise NotImplementedError
+
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:  # pragma: no cover
         raise NotImplementedError
 
 

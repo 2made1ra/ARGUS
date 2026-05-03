@@ -46,10 +46,22 @@ class FakeContractorRepository:
     async def get(self, id: ContractorEntityId) -> Contractor:  # pragma: no cover
         raise NotImplementedError
 
+    async def get_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, Contractor]:  # pragma: no cover
+        raise NotImplementedError
+
     async def count_documents_for(
         self,
         id: ContractorEntityId,
     ) -> int:  # pragma: no cover
+        raise NotImplementedError
+
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:  # pragma: no cover
         raise NotImplementedError
 
     async def list_for_contractor(
@@ -59,6 +71,15 @@ class FakeContractorRepository:
         limit: int,
         offset: int,
     ) -> list[Document]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -90,6 +111,9 @@ class FakeDocumentRepository:
         self.calls.append("documents.get")
         return self._document
 
+    async def get_many(self, ids: list[DocumentId]) -> dict[DocumentId, Document]:
+        raise NotImplementedError
+
     async def add(self, document: Document) -> None:  # pragma: no cover
         raise NotImplementedError
 
@@ -98,6 +122,8 @@ class FakeDocumentRepository:
         *,
         limit: int,
         offset: int,
+        status: DocumentStatus | None = None,
+        contractor_entity_id: ContractorEntityId | None = None,
     ) -> list[Document]:  # pragma: no cover
         raise NotImplementedError
 
@@ -121,6 +147,13 @@ class FakeDocumentRepository:
         self,
         document_id: DocumentId,
         message: str,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def set_preview_file_path(
+        self,
+        document_id: DocumentId,
+        preview_file_path: str | None,
     ) -> None:  # pragma: no cover
         raise NotImplementedError
 

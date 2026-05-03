@@ -1,0 +1,1132 @@
+openapi: 3.1.0
+info:
+  title: ARGUS
+  description: Document intelligence platform for contractor management and contract
+    search.
+  version: 0.1.0
+paths:
+  /documents/upload:
+    post:
+      tags:
+      - documents
+      summary: Upload a document
+      description: 'Stores the source file, creates a document in QUEUED status, and
+        enqueues the explicit ingestion pipeline: process document, resolve contractor,
+        then index chunks.'
+      operationId: uploadDocument
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_uploadDocument'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/:
+    get:
+      tags:
+      - documents
+      summary: List documents
+      description: Returns uploaded documents with status, contractor link, and preview
+        availability.
+      operationId: listDocuments
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/DocumentStatus'
+          - type: 'null'
+          title: Status
+      - name: contractor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Contractor Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentOut'
+                title: Response Listdocuments
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}/facts:
+    get:
+      tags:
+      - documents
+      summary: Get extracted document facts
+      description: Returns LLM-extracted contract fields, summary, key points, and
+        partial extraction state.
+      operationId: getDocumentFacts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFactsOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - documents
+      summary: Update extracted document facts
+      description: Replaces editable extracted fields, summary, and key points for
+        a document.
+      operationId: updateDocumentFacts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentFactsPatch'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}/search:
+    get:
+      tags:
+      - documents
+      summary: Search inside a document
+      description: Runs semantic search scoped to one document and returns matching
+        chunks with page spans.
+      operationId: searchWithinDocument
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WithinDocumentResultOut'
+                title: Response Searchwithindocument
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}/answer:
+    post:
+      tags:
+      - documents
+      summary: Answer a question about one document
+      description: Builds a RAG answer from chunks and facts scoped to the selected
+        document.
+      operationId: answerDocumentQuestion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagAnswerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RagAnswerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}/preview:
+    get:
+      tags:
+      - documents
+      summary: Download document preview
+      description: Returns the stored PDF preview when one is available for the document.
+      operationId: getDocumentPreview
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: PDF preview stream.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Document or preview was not found.
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}:
+    delete:
+      tags:
+      - documents
+      summary: Delete a document
+      description: Deletes document metadata and removes its vectors from the Qdrant
+        collection.
+      operationId: deleteDocument
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - documents
+      summary: Get document metadata
+      description: Returns one document by id, including lifecycle status and contractor
+        resolution result.
+      operationId: getDocument
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /contractors/:
+    get:
+      tags:
+      - contractors
+      summary: List contractors
+      description: Returns resolved contractor entities with document counts and optional
+        name search.
+      operationId: listContractors
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractorCatalogItemOut'
+                title: Response Listcontractors
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /contractors/{id}:
+    get:
+      tags:
+      - contractors
+      summary: Get contractor profile
+      description: Returns contractor metadata plus counts for linked documents and
+        raw name mappings.
+      operationId: getContractor
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractorProfileOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /contractors/{id}/documents:
+    get:
+      tags:
+      - contractors
+      summary: List contractor documents
+      description: Returns documents linked to one resolved contractor entity.
+      operationId: listContractorDocuments
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentOut'
+                title: Response Listcontractordocuments
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /contractors/{id}/search:
+    get:
+      tags:
+      - contractors
+      summary: Search contractor documents
+      description: Runs semantic search across documents for one contractor and groups
+        matches by document.
+      operationId: searchContractorDocuments
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentSearchResultOut'
+                title: Response Searchcontractordocuments
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /contractors/{id}/answer:
+    post:
+      tags:
+      - contractors
+      summary: Answer a question about one contractor
+      description: Builds a RAG answer from documents linked to the selected contractor.
+      operationId: answerContractorQuestion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagAnswerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RagAnswerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search:
+    get:
+      tags:
+      - search
+      summary: Search contractors
+      description: Runs global semantic search and aggregates matching chunks by contractor.
+      operationId: searchContractors
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractorSearchResultOut'
+                title: Response Searchcontractors
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search/answer:
+    post:
+      tags:
+      - search
+      summary: Answer a global search question
+      description: Builds a RAG answer across all indexed documents and returns ranked
+        contractors and sources.
+      operationId: answerGlobalSearchQuestion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagAnswerRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalRagAnswerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /documents/{id}/stream:
+    get:
+      tags:
+      - documents
+      summary: Stream document status
+      description: Server-Sent Events stream for document lifecycle transitions. Events
+        close after INDEXED or FAILED.
+      operationId: streamDocumentStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: SSE stream with data events containing document_id, status,
+            and optional error_message.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: 'data: {"document_id":"...","status":"PROCESSING"}
+
+
+                '
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    Body_uploadDocument:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        content_type:
+          type: string
+          title: Content Type
+      type: object
+      required:
+      - file
+      title: Body_uploadDocument
+    ChatMessageIn:
+      properties:
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: ChatMessageIn
+    ChunkSnippetOut:
+      properties:
+        page:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page
+        snippet:
+          type: string
+          title: Snippet
+        score:
+          type: number
+          title: Score
+      type: object
+      required:
+      - page
+      - snippet
+      - score
+      title: ChunkSnippetOut
+    ContractorCatalogItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        display_name:
+          type: string
+          title: Display Name
+        normalized_key:
+          type: string
+          title: Normalized Key
+        inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inn
+        kpp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kpp
+        document_count:
+          type: integer
+          title: Document Count
+      type: object
+      required:
+      - id
+      - display_name
+      - normalized_key
+      - inn
+      - kpp
+      - document_count
+      title: ContractorCatalogItemOut
+    ContractorOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        display_name:
+          type: string
+          title: Display Name
+        normalized_key:
+          type: string
+          title: Normalized Key
+        inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inn
+        kpp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kpp
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - display_name
+      - normalized_key
+      - inn
+      - kpp
+      - created_at
+      title: ContractorOut
+    ContractorProfileOut:
+      properties:
+        contractor:
+          $ref: '#/components/schemas/ContractorOut'
+        document_count:
+          type: integer
+          title: Document Count
+        raw_mapping_count:
+          type: integer
+          title: Raw Mapping Count
+      type: object
+      required:
+      - contractor
+      - document_count
+      - raw_mapping_count
+      title: ContractorProfileOut
+    ContractorSearchResultOut:
+      properties:
+        contractor_id:
+          type: string
+          format: uuid
+          title: Contractor Id
+        name:
+          type: string
+          title: Name
+        score:
+          type: number
+          title: Score
+        matched_chunks_count:
+          type: integer
+          title: Matched Chunks Count
+        top_snippet:
+          type: string
+          title: Top Snippet
+      type: object
+      required:
+      - contractor_id
+      - name
+      - score
+      - matched_chunks_count
+      - top_snippet
+      title: ContractorSearchResultOut
+    DocumentFactsOut:
+      properties:
+        fields:
+          additionalProperties: true
+          type: object
+          title: Fields
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        key_points:
+          items:
+            type: string
+          type: array
+          title: Key Points
+        partial_extraction:
+          type: boolean
+          title: Partial Extraction
+      type: object
+      required:
+      - fields
+      - summary
+      - key_points
+      - partial_extraction
+      title: DocumentFactsOut
+    DocumentFactsPatch:
+      properties:
+        fields:
+          additionalProperties: true
+          type: object
+          title: Fields
+          default: {}
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        key_points:
+          items:
+            type: string
+          type: array
+          title: Key Points
+          default: []
+      type: object
+      title: DocumentFactsPatch
+    DocumentOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        title:
+          type: string
+          title: Title
+        status:
+          type: string
+          title: Status
+        doc_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Doc Type
+        document_kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Document Kind
+        contractor_entity_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Contractor Entity Id
+        content_type:
+          type: string
+          title: Content Type
+        partial_extraction:
+          type: boolean
+          title: Partial Extraction
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        preview_available:
+          type: boolean
+          title: Preview Available
+      type: object
+      required:
+      - id
+      - title
+      - status
+      - doc_type
+      - document_kind
+      - contractor_entity_id
+      - content_type
+      - partial_extraction
+      - error_message
+      - created_at
+      - preview_available
+      title: DocumentOut
+    DocumentSearchResultOut:
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          title: Document Id
+        title:
+          type: string
+          title: Title
+        date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date
+        matched_chunks:
+          items:
+            $ref: '#/components/schemas/ChunkSnippetOut'
+          type: array
+          title: Matched Chunks
+      type: object
+      required:
+      - document_id
+      - title
+      - date
+      - matched_chunks
+      title: DocumentSearchResultOut
+    DocumentStatus:
+      type: string
+      enum:
+      - QUEUED
+      - PROCESSING
+      - RESOLVING
+      - INDEXING
+      - INDEXED
+      - FAILED
+      title: DocumentStatus
+    GlobalRagAnswerOut:
+      properties:
+        answer:
+          type: string
+          title: Answer
+        contractors:
+          items:
+            $ref: '#/components/schemas/RagContractorOut'
+          type: array
+          title: Contractors
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceRefOut'
+          type: array
+          title: Sources
+      type: object
+      required:
+      - answer
+      - contractors
+      - sources
+      title: GlobalRagAnswerOut
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    RagAnswerOut:
+      properties:
+        answer:
+          type: string
+          title: Answer
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceRefOut'
+          type: array
+          title: Sources
+      type: object
+      required:
+      - answer
+      - sources
+      title: RagAnswerOut
+    RagAnswerRequest:
+      properties:
+        message:
+          type: string
+          title: Message
+        history:
+          items:
+            $ref: '#/components/schemas/ChatMessageIn'
+          type: array
+          title: History
+        limit:
+          type: integer
+          title: Limit
+          default: 10
+      type: object
+      required:
+      - message
+      title: RagAnswerRequest
+    RagContractorOut:
+      properties:
+        contractor_id:
+          type: string
+          format: uuid
+          title: Contractor Id
+        name:
+          type: string
+          title: Name
+        score:
+          type: number
+          title: Score
+        matched_chunks_count:
+          type: integer
+          title: Matched Chunks Count
+        document_count:
+          type: integer
+          title: Document Count
+        top_snippet:
+          type: string
+          title: Top Snippet
+      type: object
+      required:
+      - contractor_id
+      - name
+      - score
+      - matched_chunks_count
+      - document_count
+      - top_snippet
+      title: RagContractorOut
+    SourceRefOut:
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          title: Document Id
+        contractor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Contractor Id
+        page_start:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page Start
+        page_end:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page End
+        chunk_index:
+          type: integer
+          title: Chunk Index
+        score:
+          type: number
+          title: Score
+        snippet:
+          type: string
+          title: Snippet
+        document_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Document Title
+        contractor_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Contractor Name
+      type: object
+      required:
+      - document_id
+      - contractor_id
+      - page_start
+      - page_end
+      - chunk_index
+      - score
+      - snippet
+      - document_title
+      - contractor_name
+      title: SourceRefOut
+    UploadDocumentOut:
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          title: Document Id
+      type: object
+      required:
+      - document_id
+      title: UploadDocumentOut
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WithinDocumentResultOut:
+      properties:
+        chunk_index:
+          type: integer
+          title: Chunk Index
+        page_start:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page Start
+        page_end:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page End
+        section_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Section Type
+        snippet:
+          type: string
+          title: Snippet
+        score:
+          type: number
+          title: Score
+      type: object
+      required:
+      - chunk_index
+      - page_start
+      - page_end
+      - section_type
+      - snippet
+      - score
+      title: WithinDocumentResultOut

@@ -56,3 +56,4 @@ class ProcessingResult(BaseModel):
     document_kind: Literal["text", "scan"]
     partial: bool
     failed_chunk_indices: list[int] = Field(default_factory=list)
+    preview_pdf_path: str | None = None

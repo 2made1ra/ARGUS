@@ -58,7 +58,30 @@ async def _status_stream(
         await asyncio.sleep(1)
 
 
-@router.get("/{id}/stream")
+@router.get(
+    "/{id}/stream",
+    response_class=StreamingResponse,
+    operation_id="streamDocumentStatus",
+    summary="Stream document status",
+    description=(
+        "Server-Sent Events stream for document lifecycle transitions. Events close "
+        "after INDEXED or FAILED."
+    ),
+    responses={
+        200: {
+            "description": (
+                "SSE stream with data events containing document_id, status, "
+                "and optional error_message."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "example": 'data: {"document_id":"...","status":"PROCESSING"}\n\n',
+                },
+            },
+        },
+    },
+)
 async def stream_document_status(
     id: UUID,
     sm: async_sessionmaker[AsyncSession] = Depends(get_sessionmaker),

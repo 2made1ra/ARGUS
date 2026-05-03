@@ -8,6 +8,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture overview and development conventions
 
 See [ARCHITECTURE_ROADMAP.md](docs/architecture/ARCHITECTURE_ROADMAP.md) for the implementation roadmap.
 
+See [OpenAPI contract](docs/api/openapi.yaml) for the current HTTP API snapshot.
+
 ## Packages
 
 | Package | Path | Purpose |

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("/data/uploads")
     qdrant_collection: str = "document_chunks"
     embedding_dim: int = 768
+    rag_similarity_top_k: int = 15
+    rag_context_top_k: int = 5
+    rag_reranker_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=REPO_ROOT / ".env",

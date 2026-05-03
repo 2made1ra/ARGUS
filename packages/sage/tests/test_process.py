@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sage.models import Chunk, ContractFields, Page, ProcessingResult
@@ -6,7 +7,12 @@ from sage.process import process_document
 
 
 class StubClient:
-    pass
+    async def chat(
+        self,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        raise NotImplementedError
 
 
 def make_chunk(index: int) -> Chunk:
@@ -136,6 +142,7 @@ async def test_process_document_orchestrates_text_pipeline(
         document_kind="text",
         partial=True,
         failed_chunk_indices=[1],
+        preview_pdf_path=str(pdf_path),
     )
 
 
@@ -157,10 +164,12 @@ async def test_process_document_uses_ocr_for_scan_pdfs(
         "sage.process.extract_text_pages",
         lambda pdf_path: pytest.fail("extract_text_pages should not be called"),
     )
-    monkeypatch.setattr(
-        "sage.process.ocr_pages",
-        lambda pdf_path: calls.append("ocr_pages") or pages,
-    )
+
+    def fake_ocr_pages(pdf_path: Path) -> list[Page]:
+        calls.append("ocr_pages")
+        return pages
+
+    monkeypatch.setattr("sage.process.ocr_pages", fake_ocr_pages)
     monkeypatch.setattr("sage.process.normalize_pages", lambda received_pages: pages)
     monkeypatch.setattr("sage.process.chunk_pages", lambda received_pages: [])
 
@@ -173,6 +182,7 @@ async def test_process_document_uses_ocr_for_scan_pdfs(
 
     assert calls == ["ensure_pdf", "ocr_pages"]
     assert result.document_kind == "scan"
+    assert result.preview_pdf_path == str(tmp_path / "scan.pdf")
     assert result.pages == pages
     assert result.chunks == []
     assert result.fields == ContractFields()
@@ -195,6 +205,13 @@ async def test_process_document_creates_default_lm_studio_client(
 
         async def __aexit__(self, *args: object) -> None:
             pass
+
+        async def chat(
+            self,
+            messages: list[dict[str, Any]],
+            response_format: dict[str, Any] | None = None,
+        ) -> str:
+            raise NotImplementedError
 
     async def fake_ensure_pdf(src: Path, work_dir: Path) -> Path:
         return src
@@ -225,4 +242,5 @@ async def test_process_document_creates_default_lm_studio_client(
         pages=[],
         document_kind="text",
         partial=False,
+        preview_pdf_path=str(tmp_path / "source.pdf"),
     )

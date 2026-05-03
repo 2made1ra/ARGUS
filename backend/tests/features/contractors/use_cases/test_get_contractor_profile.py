@@ -30,9 +30,21 @@ class FakeContractorRepository:
             raise ContractorNotFound(id)
         return self.store[id]
 
+    async def get_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, Contractor]:  # pragma: no cover
+        raise NotImplementedError
+
     async def count_documents_for(self, id: ContractorEntityId) -> int:
         self.calls.append("contractors.count_documents_for")
         return self.doc_counts.get(id, 0)
+
+    async def count_documents_for_many(
+        self,
+        ids: list[ContractorEntityId],
+    ) -> dict[ContractorEntityId, int]:  # pragma: no cover
+        raise NotImplementedError
 
     async def add(self, contractor: Contractor) -> None:  # pragma: no cover
         raise NotImplementedError
@@ -52,6 +64,15 @@ class FakeContractorRepository:
     async def list_for_contractor(
         self, id: ContractorEntityId, *, limit: int, offset: int
     ) -> list[Document]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> list[Contractor]:  # pragma: no cover
         raise NotImplementedError
 
 

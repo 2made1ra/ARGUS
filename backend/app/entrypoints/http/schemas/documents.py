@@ -21,11 +21,12 @@ class DocumentOut(BaseModel):
     partial_extraction: bool
     error_message: str | None
     created_at: datetime
+    preview_available: bool
 
     model_config = ConfigDict(from_attributes=True)
 
     @classmethod
-    def from_dto(cls, dto: DocumentDTO) -> "DocumentOut":
+    def from_dto(cls, dto: DocumentDTO) -> DocumentOut:
         return cls(
             id=UUID(str(dto.id)),
             title=dto.title,
@@ -39,7 +40,12 @@ class DocumentOut(BaseModel):
             partial_extraction=dto.partial_extraction,
             error_message=dto.error_message,
             created_at=dto.created_at,
+            preview_available=dto.preview_available,
         )
+
+
+class UploadDocumentOut(BaseModel):
+    document_id: UUID
 
 
 class DocumentFactsOut(BaseModel):
@@ -49,7 +55,7 @@ class DocumentFactsOut(BaseModel):
     partial_extraction: bool
 
     @classmethod
-    def from_dto(cls, dto: DocumentFactsDTO) -> "DocumentFactsOut":
+    def from_dto(cls, dto: DocumentFactsDTO) -> DocumentFactsOut:
         return cls(
             fields=dto.fields,
             summary=dto.summary,
@@ -67,7 +73,7 @@ class WithinDocumentResultOut(BaseModel):
     score: float
 
     @classmethod
-    def from_domain(cls, r: WithinDocumentResult) -> "WithinDocumentResultOut":
+    def from_domain(cls, r: WithinDocumentResult) -> WithinDocumentResultOut:
         return cls(
             chunk_index=r.chunk_index,
             page_start=r.page_start,
@@ -84,4 +90,10 @@ class DocumentFactsPatch(BaseModel):
     key_points: list[str] = []
 
 
-__all__ = ["DocumentFactsOut", "DocumentFactsPatch", "DocumentOut", "WithinDocumentResultOut"]
+__all__ = [
+    "DocumentFactsOut",
+    "DocumentFactsPatch",
+    "DocumentOut",
+    "UploadDocumentOut",
+    "WithinDocumentResultOut",
+]

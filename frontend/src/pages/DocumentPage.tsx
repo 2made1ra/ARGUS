@@ -1,130 +1,124 @@
-import { Fragment, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import ChunkResults from "../components/ChunkResults";
-import DocumentStatus from "../components/DocumentStatus";
-import FieldValidationForm from "../components/FieldValidationForm";
-import SearchBar from "../components/SearchBar";
-import { getDocument, getDocumentFacts, searchWithinDocument } from "../api";
-import type { DocumentOut, DocumentFactsOut, WithinDocumentResult } from "../api";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import { useEffect, useState } from "react";
+import { API_URL, answerDocument, deleteDocument, getDocument } from "../api";
+import type {
+  ChatMessage,
+  DocumentOut,
+} from "../api";
+import RagChat from "../components/RagChat";
 
 export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [doc, setDoc] = useState<DocumentOut | null>(null);
-  const [facts, setFacts] = useState<DocumentFactsOut | null>(null);
-  const [chunkResults, setChunkResults] = useState<WithinDocumentResult[] | null>(null);
-  const [query, setQuery] = useState("");
-  const [liveStatus, setLiveStatus] = useState<string | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
+    setLoadError(null);
     getDocument(id)
       .then(setDoc)
-      .catch((err: unknown) => setLoadError(String(err)));
+      .catch((err: unknown) =>
+        setLoadError(err instanceof Error ? err.message : String(err))
+      );
   }, [id]);
 
-  useEffect(() => {
-    if (liveStatus !== "INDEXED" || !id) return;
-    getDocumentFacts(id).then(setFacts).catch(() => {});
-  }, [liveStatus, id]);
+  async function handleDelete() {
+    if (!doc || deleting) return;
+    const confirmed = window.confirm(
+      "Удалить договор из базы? Связанные поля, summary и чанки будут удалены."
+    );
+    if (!confirmed) return;
 
-  function handleStatusChange(status: string) {
-    setLiveStatus(status);
-    if (status === "INDEXED") setIsValidating(true);
-  }
-
-  const status = liveStatus ?? doc?.status ?? null;
-
-  async function handleSearch(nextQuery: string) {
-    if (!id) return;
-    setQuery(nextQuery);
-    setSearchError(null);
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      setChunkResults(await searchWithinDocument(id, nextQuery));
+      await deleteDocument(doc.id);
+      navigate("/catalog");
     } catch (err) {
-      setChunkResults(null);
-      setSearchError(err instanceof Error ? err.message : String(err));
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
     }
   }
 
-  if (loadError) {
-    return <p style={{ color: "#b91c1c" }}>Ошибка загрузки: {loadError}</p>;
-  }
+  if (loadError) return <p className="error">Ошибка загрузки: {loadError}</p>;
+  if (!doc) return <p className="muted">Загружаю документ...</p>;
 
-  if (!doc) {
-    return <p style={{ color: "#6b7280" }}>Загружаю…</p>;
-  }
+  const previewUrl = `${API_URL}/documents/${doc.id}/preview${documentPreviewHash(
+    location.hash,
+  )}`;
 
   return (
-    <div>
-      <h1 style={{ marginBottom: "0.25rem" }}>{doc.title}</h1>
-      <p style={{ color: "#6b7280", fontSize: "0.85rem", marginBottom: "1rem" }}>
-        ID: {doc.id}
-      </p>
-
-      <DocumentStatus documentId={doc.id} onStatusChange={handleStatusChange} />
-
-      {status === "INDEXED" && facts && isValidating && (
-        <FieldValidationForm facts={facts} documentId={doc.id} />
-      )}
-
-      {status === "INDEXED" && facts && !isValidating && (
-        <div style={{ marginTop: "2rem" }}>
-          <section style={{ marginBottom: "1.5rem" }}>
-            <h2 style={{ marginBottom: "0.75rem" }}>Поля</h2>
-            {Object.keys(facts.fields).length === 0 ? (
-              <p style={{ color: "#6b7280" }}>—</p>
-            ) : (
-              <dl
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "max-content 1fr",
-                  gap: "0.3rem 1rem",
-                }}
-              >
-                {Object.entries(facts.fields).map(([k, v]) => (
-                  <Fragment key={k}>
-                    <dt style={{ fontWeight: 600, color: "#374151" }}>{k}</dt>
-                    <dd style={{ margin: 0 }}>{String(v)}</dd>
-                  </Fragment>
-                ))}
-              </dl>
-            )}
-          </section>
-
-          {facts.summary && (
-            <section style={{ marginBottom: "1.5rem" }}>
-              <h2 style={{ marginBottom: "0.75rem" }}>Summary</h2>
-              <p style={{ lineHeight: 1.7 }}>{facts.summary}</p>
-            </section>
-          )}
-
-          {facts.key_points.length > 0 && (
-            <section>
-              <h2 style={{ marginBottom: "0.75rem" }}>Key points</h2>
-              <ul style={{ paddingLeft: "1.5rem", lineHeight: 1.8 }}>
-                {facts.key_points.map((pt, i) => (
-                  <li key={i}>{pt}</li>
-                ))}
-              </ul>
-            </section>
+    <main className="workspace workspace--wide document-workspace">
+      <header className="workspace-header document-header">
+        <div>
+          <p className="eyebrow">Document</p>
+          <h1>{doc.title}</h1>
+        </div>
+        <div className="document-actions">
+          <p className="workspace-header__note">
+            {doc.status} · {doc.document_kind ?? "kind не определен"}
+          </p>
+          <div className="document-action-row">
+            <Link className="secondary-action" to={`/documents/${doc.id}/validate`}>
+              Редактировать поля
+            </Link>
+            <button
+              className="danger-action"
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Удаляю..." : "Удалить договор"}
+            </button>
+          </div>
+          {deleteError && (
+            <p className="error">Ошибка удаления: {deleteError}</p>
           )}
         </div>
-      )}
+      </header>
 
-      {status === "INDEXED" && !isValidating && (
-        <section className="panel document-search">
-          <h2>Поиск внутри документа</h2>
-          <SearchBar
-            onSearch={handleSearch}
-            placeholder="Найти фрагмент в тексте документа"
-          />
-          {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
-          {chunkResults && <ChunkResults results={chunkResults} query={query} />}
-        </section>
-      )}
-    </div>
+      <section className="document-split">
+        <div className="document-preview">
+          <div className="section-heading">
+            <h2>Предпросмотр</h2>
+            <span className="meta">PDF</span>
+          </div>
+          {doc.preview_available ? (
+            <iframe title={doc.title} src={previewUrl} />
+          ) : (
+            <div className="empty-state empty-state--compact">
+              <h2>Preview пока недоступен</h2>
+              <p className="muted">
+                PDF появится после обработки или если исходный файл уже был PDF.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <RagChat
+          title="Чат по договору"
+          placeholder="Например: дай summary договора или найди риски"
+          emptyHint="Вопросы здесь ограничены выбранным документом."
+          onAsk={(message: string, history: ChatMessage[]) =>
+            answerDocument(doc.id, message, history)
+          }
+        />
+      </section>
+    </main>
   );
+}
+
+function documentPreviewHash(hash: string): string {
+  const pageMatch = hash.match(/^#page=(\d+)$/);
+  if (!pageMatch) return "";
+  return `#page=${pageMatch[1]}`;
 }
