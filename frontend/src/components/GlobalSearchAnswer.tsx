@@ -8,6 +8,7 @@ import {
   compactDocumentTitle,
   formatPageRange,
   matchLabel,
+  sourceDocumentTarget,
 } from "../utils/searchPresentation";
 
 export default function GlobalSearchAnswer() {
@@ -72,7 +73,11 @@ export default function GlobalSearchAnswer() {
               <span className="meta">RAG · LM Studio</span>
             </div>
             <div className="global-answer__body">
-              <AssistantContent content={latestAnswer.answer} />
+              <AssistantContent
+                citationAnchorPrefix="global-source"
+                citationCount={latestAnswer.sources.length}
+                content={latestAnswer.answer}
+              />
             </div>
           </section>
 
@@ -86,7 +91,10 @@ export default function GlobalSearchAnswer() {
                   {latestAnswer.sources.length} фрагментов
                 </span>
               </div>
-              <SourceList sources={latestAnswer.sources} />
+              <SourceList
+                anchorPrefix="global-source"
+                sources={latestAnswer.sources}
+              />
             </section>
           )}
         </>
@@ -139,7 +147,7 @@ function ContractorResults({
                       <Link
                         className="contractor-source"
                         key={`${source.document_id}-${source.chunk_index}-${index}`}
-                        to={`/documents/${source.document_id}`}
+                        to={sourceDocumentTarget(source)}
                       >
                         <span className="source-chip__index">S{index + 1}</span>
                         <span className="contractor-source__body">

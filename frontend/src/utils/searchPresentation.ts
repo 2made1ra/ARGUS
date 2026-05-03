@@ -1,3 +1,5 @@
+import type { SourceRef } from "../api";
+
 export function matchLabel(similarity: number): string {
   if (similarity >= 0.75) return "Высокое совпадение";
   if (similarity >= 0.55) return "Среднее совпадение";
@@ -38,4 +40,14 @@ export function compactDocumentTitle(
   return `${titleWithoutExtension.slice(0, headLength)}${marker}${titleWithoutExtension.slice(
     -tailLength,
   )}${extension}`;
+}
+
+export function sourceAnchorId(prefix: string, index: number): string {
+  return `${prefix}-${index + 1}`;
+}
+
+export function sourceDocumentTarget(source: SourceRef): string {
+  const basePath = `/documents/${source.document_id}`;
+  if (source.page_start === null) return basePath;
+  return `${basePath}#page=${source.page_start}`;
 }

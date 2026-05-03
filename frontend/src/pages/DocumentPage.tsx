@@ -1,4 +1,9 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { useEffect, useState } from "react";
 import { API_URL, answerDocument, deleteDocument, getDocument } from "../api";
 import type {
@@ -9,6 +14,7 @@ import RagChat from "../components/RagChat";
 
 export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const [doc, setDoc] = useState<DocumentOut | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -46,7 +52,9 @@ export default function DocumentPage() {
   if (loadError) return <p className="error">Ошибка загрузки: {loadError}</p>;
   if (!doc) return <p className="muted">Загружаю документ...</p>;
 
-  const previewUrl = `${API_URL}/documents/${doc.id}/preview`;
+  const previewUrl = `${API_URL}/documents/${doc.id}/preview${documentPreviewHash(
+    location.hash,
+  )}`;
 
   return (
     <main className="workspace workspace--wide document-workspace">
@@ -107,4 +115,10 @@ export default function DocumentPage() {
       </section>
     </main>
   );
+}
+
+function documentPreviewHash(hash: string): string {
+  const pageMatch = hash.match(/^#page=(\d+)$/);
+  if (!pageMatch) return "";
+  return `#page=${pageMatch[1]}`;
 }

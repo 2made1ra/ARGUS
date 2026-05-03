@@ -547,6 +547,26 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
+.citation-marker {
+  align-items: center;
+  background: rgba(201, 162, 75, 0.14);
+  border: 1px solid rgba(201, 162, 75, 0.34);
+  color: #8b6b20;
+  display: inline-flex;
+  font-size: 0.72em;
+  font-weight: 900;
+  line-height: 1;
+  margin: 0 0.12rem;
+  padding: 0.16rem 0.28rem;
+  text-decoration: none;
+  vertical-align: 0.08em;
+}
+
+.citation-marker:hover {
+  background: var(--gold);
+  color: #fff;
+}
+
 .result-card,
 .catalog-card,
 .document-row,
@@ -728,6 +748,13 @@ button:disabled {
   max-width: 100%;
   min-width: 0;
   padding: 0.55rem 0.65rem;
+  scroll-margin-top: 1rem;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.source-chip:target {
+  background: rgba(201, 162, 75, 0.08);
+  border-color: var(--gold);
 }
 
 .source-chip__index {
@@ -736,10 +763,40 @@ button:disabled {
   font-weight: 900;
 }
 
-.source-chip__body,
-.source-chip span:last-child {
+.source-chip__body {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.source-chip__title,
+.source-chip__meta,
+.source-chip__snippet {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.source-chip__title {
+  display: -webkit-box;
+  font-weight: 900;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.source-chip__meta {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.source-chip__snippet {
+  color: var(--ink-2);
+  display: -webkit-box;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .catalog-filter {
