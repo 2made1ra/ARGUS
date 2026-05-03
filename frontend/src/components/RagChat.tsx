@@ -8,6 +8,8 @@ interface Props {
   emptyHint: string;
   onAsk: (message: string, history: ChatMessage[]) => Promise<RagAnswer>;
   initialPrompt?: string;
+  composerPlacement?: "top" | "bottom";
+  showSources?: boolean;
 }
 
 export default function RagChat({
@@ -16,6 +18,8 @@ export default function RagChat({
   emptyHint,
   onAsk,
   initialPrompt = "",
+  composerPlacement = "bottom",
+  showSources = true,
 }: Props) {
   const [input, setInput] = useState(initialPrompt);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -46,12 +50,28 @@ export default function RagChat({
     }
   }
 
+  const composer = (
+    <form className="chat-composer" onSubmit={handleSubmit}>
+      <textarea
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+      />
+      <button type="submit" disabled={loading || !input.trim()}>
+        {loading ? "Думаю..." : "Спросить"}
+      </button>
+    </form>
+  );
+
   return (
     <section className="rag-chat">
       <div className="section-heading">
         <h2>{title}</h2>
         <span className="meta">RAG · LM Studio</span>
       </div>
+
+      {composerPlacement === "top" && composer}
 
       <div className="chat-thread" aria-live="polite">
         {messages.length === 0 ? (
@@ -68,20 +88,9 @@ export default function RagChat({
         )}
       </div>
 
-      <form className="chat-composer" onSubmit={handleSubmit}>
-        <textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder={placeholder}
-          rows={3}
-        />
-        <button type="submit" disabled={loading || !input.trim()}>
-          {loading ? "Думаю..." : "Спросить"}
-        </button>
-      </form>
-
+      {composerPlacement === "bottom" && composer}
       {error && <p className="error">Ошибка RAG: {error}</p>}
-      <SourceList sources={sources} />
+      {showSources && <SourceList sources={sources} />}
     </section>
   );
 }

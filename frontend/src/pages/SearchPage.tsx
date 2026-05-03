@@ -15,52 +15,54 @@ export default function SearchPage() {
   }
 
   return (
-    <main className="workspace">
+    <main className="workspace search-workspace">
       <header className="workspace-header">
         <div>
           <p className="eyebrow">AI Search</p>
-          <h1>Поиск по всей базе договоров</h1>
+          <h1>Поиск подрядчиков по базе договоров</h1>
         </div>
         <p className="workspace-header__note">
           Ответы формируются локальной LLM и привязаны к найденным фрагментам.
         </p>
       </header>
 
-      <section className="search-grid">
+      <section className="search-flow">
         <RagChat
-          title="Умный поиск"
-          placeholder="Например: мне нужны поставщики фруктов"
-          emptyHint="Сформулируйте запрос обычным языком. ARGUS найдет релевантные договоры, сгруппирует их по подрядчикам и даст ответ с источниками."
+          title="Что нужно найти"
+          placeholder="Например: нужно организовать спортивное мероприятие"
+          emptyHint="Опишите задачу обычным языком. ARGUS найдет релевантные договоры, сгруппирует их по подрядчикам и покажет источники ниже."
           onAsk={handleAsk}
+          composerPlacement="top"
+          showSources={false}
         />
-        <GlobalResultMirror answer={latestAnswer} />
+
+        {latestAnswer && <ContractorResults answer={latestAnswer} />}
+
+        {latestAnswer && latestAnswer.sources.length > 0 && (
+          <section className="search-results-section">
+            <div className="section-heading">
+              <h2>Источники</h2>
+              <span className="meta">{latestAnswer.sources.length} фрагментов</span>
+            </div>
+            <SourceList sources={latestAnswer.sources} />
+          </section>
+        )}
       </section>
     </main>
   );
 }
 
-function GlobalResultMirror({
+function ContractorResults({
   answer,
 }: {
-  answer: GlobalRagAnswer | null;
+  answer: GlobalRagAnswer;
 }) {
-  if (!answer) {
-    return (
-      <aside className="insight-panel">
-        <p className="eyebrow">Results</p>
-        <h2>Подрядчики появятся здесь</h2>
-        <p className="muted">
-          После ответа ARGUS покажет карточки подрядчиков и источники, чтобы
-          можно было перейти глубже.
-        </p>
-      </aside>
-    );
-  }
-
   return (
-    <aside className="insight-panel">
-      <p className="eyebrow">Results</p>
-      <h2>Подходящие подрядчики</h2>
+    <section className="search-results-section">
+      <div className="section-heading">
+        <h2>Подходящие подрядчики</h2>
+        <span className="meta">{answer.contractors.length} найдено</span>
+      </div>
       <div className="result-list">
         {answer.contractors.map((contractor) => (
           <Link
@@ -70,7 +72,6 @@ function GlobalResultMirror({
           >
             <div className="result-card__header">
               <h3>{contractor.name}</h3>
-              <span className="score">{contractor.score.toFixed(3)}</span>
             </div>
             <p className="snippet">{contractor.top_snippet}</p>
             <p className="meta">
@@ -80,7 +81,6 @@ function GlobalResultMirror({
           </Link>
         ))}
       </div>
-      <SourceList sources={answer.sources} />
-    </aside>
+    </section>
   );
 }

@@ -140,6 +140,15 @@ a {
   padding-top: 1rem;
 }
 
+.search-workspace {
+  align-content: start;
+  display: grid;
+  gap: 1rem;
+  max-width: 78rem;
+  min-width: 0;
+  width: 100%;
+}
+
 .workspace-header,
 .page-header {
   align-items: flex-start;
@@ -164,6 +173,31 @@ a {
   color: var(--muted);
   line-height: 1.5;
   max-width: 24rem;
+}
+
+.search-workspace .workspace-header h1 {
+  font-family: inherit;
+  font-size: clamp(1.55rem, 2.2vw, 2.25rem);
+  font-weight: 800;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.search-workspace .workspace-header {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.search-workspace .workspace-header > div {
+  min-width: 0;
+}
+
+.search-workspace .workspace-header__note {
+  margin: 0;
+  max-width: 42rem;
 }
 
 .eyebrow {
@@ -222,11 +256,16 @@ h2 {
 
 .upload-layout,
 .search-grid,
+.search-flow,
 .contractor-grid,
 .document-split {
   display: grid;
   gap: 1rem;
   min-width: 0;
+}
+
+.search-flow {
+  gap: 1.1rem;
 }
 
 .upload-layout {
@@ -380,6 +419,26 @@ button:disabled {
   display: grid;
   gap: 1rem;
   min-width: 0;
+}
+
+.search-workspace .rag-chat {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.search-workspace .chat-thread {
+  min-height: 8rem;
+}
+
+.search-results-section {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.search-workspace .section-heading {
+  flex-wrap: wrap;
 }
 
 .chat-thread {
