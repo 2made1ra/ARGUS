@@ -29,7 +29,7 @@ export default function UploadForm() {
         throw new Error(`${res.status}: ${body}`);
       }
       const { document_id } = (await res.json()) as { document_id: string };
-      navigate(`/documents/${document_id}`);
+      navigate(`/documents/${document_id}/validate`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setUploading(false);

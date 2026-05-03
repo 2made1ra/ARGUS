@@ -67,6 +67,8 @@ class DocumentRepository(Protocol):
         contractor_entity_id: ContractorEntityId | None,
     ) -> None: ...
 
+    async def delete(self, document_id: DocumentId) -> None: ...
+
 
 @runtime_checkable
 class ChunkRepository(Protocol):

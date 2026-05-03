@@ -8,6 +8,7 @@ from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
 from app.adapters.llm.chat import LMStudioChatClient
 from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
+from app.adapters.qdrant.index import QdrantVectorIndex
 from app.adapters.qdrant.search import QdrantVectorSearch
 from app.adapters.sqlalchemy.contractors import (
     SqlAlchemyContractorRepository,
@@ -26,6 +27,7 @@ from app.features.contractors.use_cases.list_contractors import ListContractorsU
 from app.features.contractors.use_cases.list_contractor_documents import (
     ListContractorDocumentsUseCase,
 )
+from app.features.documents.use_cases.delete_document import DeleteDocumentUseCase
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
 from app.features.documents.use_cases.get_document_preview import (
@@ -99,6 +101,18 @@ def get_update_document_facts_uc(
     return UpdateDocumentFactsUseCase(
         fields=SqlAlchemyFieldsRepository(session),
         summaries=SqlAlchemySummaryRepository(session),
+        uow=SessionUnitOfWork(session),
+    )
+
+
+def get_delete_document_uc(
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(_session),
+    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+) -> DeleteDocumentUseCase:
+    return DeleteDocumentUseCase(
+        documents=SqlAlchemyDocumentRepository(session),
+        vectors=QdrantVectorIndex(qdrant, settings.qdrant_collection),
         uow=SessionUnitOfWork(session),
     )
 
@@ -257,6 +271,7 @@ def get_document_rag_answer_uc(
 __all__ = [
     "get_contractor_profile_uc",
     "get_contractor_rag_answer_uc",
+    "get_delete_document_uc",
     "get_document_facts_uc",
     "get_document_preview_uc",
     "get_document_rag_answer_uc",

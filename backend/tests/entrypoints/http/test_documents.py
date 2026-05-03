@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.entrypoints.http.dependencies import (
+    get_delete_document_uc,
     get_document_facts_uc,
     get_document_preview_uc,
     get_document_rag_answer_uc,
@@ -22,6 +23,7 @@ from app.entrypoints.http.dependencies import (
 )
 from app.features.documents.dto import DocumentDTO, DocumentFactsDTO, DocumentPreviewDTO
 from app.features.ingest.entities.document import DocumentStatus
+from app.features.ingest.ports import DocumentNotFound
 from app.features.search.dto import RagAnswer, WithinDocumentResult
 
 
@@ -216,3 +218,32 @@ async def test_document_preview_returns_pdf(
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("application/pdf")
     assert resp.content == b"%PDF-1.4\n"
+
+
+async def test_delete_document_returns_204(app: FastAPI) -> None:
+    doc_id = DocumentId(uuid4())
+    fake_uc = AsyncMock()
+    app.dependency_overrides[get_delete_document_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(f"/documents/{doc_id}")
+
+    assert resp.status_code == 204
+    fake_uc.execute.assert_awaited_once_with(doc_id)
+
+
+async def test_delete_document_returns_404_when_missing(app: FastAPI) -> None:
+    doc_id = DocumentId(uuid4())
+    fake_uc = AsyncMock()
+    fake_uc.execute.side_effect = DocumentNotFound(doc_id)
+    app.dependency_overrides[get_delete_document_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(f"/documents/{doc_id}")
+
+    assert resp.status_code == 404
+    assert resp.json() == {"detail": "Document not found"}

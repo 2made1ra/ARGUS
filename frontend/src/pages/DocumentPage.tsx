@@ -1,89 +1,82 @@
-import { Fragment, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { API_URL, answerDocument, getDocument, getDocumentFacts, searchWithinDocument } from "../api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { API_URL, answerDocument, deleteDocument, getDocument } from "../api";
 import type {
   ChatMessage,
-  DocumentFactsOut,
   DocumentOut,
-  WithinDocumentResult,
 } from "../api";
-import ChunkResults from "../components/ChunkResults";
-import DocumentStatus from "../components/DocumentStatus";
-import FieldValidationForm from "../components/FieldValidationForm";
 import RagChat from "../components/RagChat";
-import SearchBar from "../components/SearchBar";
 
 export default function DocumentPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [doc, setDoc] = useState<DocumentOut | null>(null);
-  const [facts, setFacts] = useState<DocumentFactsOut | null>(null);
-  const [chunkResults, setChunkResults] = useState<WithinDocumentResult[] | null>(null);
-  const [query, setQuery] = useState("");
-  const [liveStatus, setLiveStatus] = useState<string | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     setLoadError(null);
     getDocument(id)
-      .then((nextDoc) => {
-        setDoc(nextDoc);
-        if (nextDoc.status === "INDEXED") {
-          getDocumentFacts(id).then(setFacts).catch(() => {});
-        }
-      })
+      .then(setDoc)
       .catch((err: unknown) =>
         setLoadError(err instanceof Error ? err.message : String(err))
       );
   }, [id]);
 
-  useEffect(() => {
-    if (liveStatus !== "INDEXED" || !id) return;
-    getDocumentFacts(id).then(setFacts).catch(() => {});
-  }, [liveStatus, id]);
+  async function handleDelete() {
+    if (!doc || deleting) return;
+    const confirmed = window.confirm(
+      "Удалить договор из базы? Связанные поля, summary и чанки будут удалены."
+    );
+    if (!confirmed) return;
 
-  function handleStatusChange(status: string) {
-    setLiveStatus(status);
-    if (status === "INDEXED") setIsValidating(true);
-  }
-
-  async function handleSearch(nextQuery: string) {
-    if (!id) return;
-    setQuery(nextQuery);
-    setSearchError(null);
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      setChunkResults(await searchWithinDocument(id, nextQuery));
+      await deleteDocument(doc.id);
+      navigate("/catalog");
     } catch (err) {
-      setChunkResults(null);
-      setSearchError(err instanceof Error ? err.message : String(err));
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
     }
   }
 
   if (loadError) return <p className="error">Ошибка загрузки: {loadError}</p>;
   if (!doc) return <p className="muted">Загружаю документ...</p>;
 
-  const status = liveStatus ?? doc.status;
   const previewUrl = `${API_URL}/documents/${doc.id}/preview`;
 
   return (
-    <main className="workspace workspace--wide">
-      <header className="workspace-header">
+    <main className="workspace workspace--wide document-workspace">
+      <header className="workspace-header document-header">
         <div>
           <p className="eyebrow">Document</p>
           <h1>{doc.title}</h1>
         </div>
-        <p className="workspace-header__note">
-          {status} · {doc.document_kind ?? "kind не определен"}
-        </p>
+        <div className="document-actions">
+          <p className="workspace-header__note">
+            {doc.status} · {doc.document_kind ?? "kind не определен"}
+          </p>
+          <div className="document-action-row">
+            <Link className="secondary-action" to={`/documents/${doc.id}/validate`}>
+              Редактировать поля
+            </Link>
+            <button
+              className="danger-action"
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Удаляю..." : "Удалить договор"}
+            </button>
+          </div>
+          {deleteError && (
+            <p className="error">Ошибка удаления: {deleteError}</p>
+          )}
+        </div>
       </header>
-
-      <DocumentStatus documentId={doc.id} onStatusChange={handleStatusChange} />
-
-      {status === "INDEXED" && facts && isValidating && (
-        <FieldValidationForm facts={facts} documentId={doc.id} />
-      )}
 
       <section className="document-split">
         <div className="document-preview">
@@ -103,60 +96,15 @@ export default function DocumentPage() {
           )}
         </div>
 
-        <div className="document-side">
-          <RagChat
-            title="Чат по договору"
-            placeholder="Например: дай summary договора или найди риски"
-            emptyHint="Вопросы здесь ограничены выбранным документом."
-            onAsk={(message: string, history: ChatMessage[]) =>
-              answerDocument(doc.id, message, history)
-            }
-          />
-
-          {status === "INDEXED" && facts && !isValidating && (
-            <DocumentFacts facts={facts} />
-          )}
-        </div>
+        <RagChat
+          title="Чат по договору"
+          placeholder="Например: дай summary договора или найди риски"
+          emptyHint="Вопросы здесь ограничены выбранным документом."
+          onAsk={(message: string, history: ChatMessage[]) =>
+            answerDocument(doc.id, message, history)
+          }
+        />
       </section>
-
-      {status === "INDEXED" && !isValidating && (
-        <section className="panel panel--flat document-search">
-          <h2>Точный поиск внутри документа</h2>
-          <SearchBar
-            onSearch={handleSearch}
-            placeholder="Найти фрагмент в тексте документа"
-          />
-          {searchError && <p className="error">Ошибка поиска: {searchError}</p>}
-          {chunkResults && <ChunkResults results={chunkResults} query={query} />}
-        </section>
-      )}
     </main>
-  );
-}
-
-function DocumentFacts({ facts }: { facts: DocumentFactsOut }) {
-  return (
-    <section className="facts-panel">
-      <h2>Факты документа</h2>
-      {facts.summary && <p className="facts-summary">{facts.summary}</p>}
-      <dl className="facts-grid">
-        {Object.entries(facts.fields)
-          .filter(([, value]) => value !== null && value !== "")
-          .slice(0, 8)
-          .map(([key, value]) => (
-            <Fragment key={key}>
-              <dt>{key}</dt>
-              <dd>{String(value)}</dd>
-            </Fragment>
-          ))}
-      </dl>
-      {facts.key_points.length > 0 && (
-        <ul className="key-points">
-          {facts.key_points.map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

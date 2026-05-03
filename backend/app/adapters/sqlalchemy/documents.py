@@ -1,3 +1,4 @@
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -137,6 +138,16 @@ class SqlAlchemyDocumentRepository:
             update(DocumentRow)
             .where(DocumentRow.id == document_id)
             .values(contractor_entity_id=contractor_entity_id)
+            .returning(DocumentRow.id)
+        )
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise DocumentNotFound(document_id)
+
+    async def delete(self, document_id: DocumentId) -> None:
+        statement = (
+            sa_delete(DocumentRow)
+            .where(DocumentRow.id == document_id)
             .returning(DocumentRow.id)
         )
         result = await self._session.execute(statement)

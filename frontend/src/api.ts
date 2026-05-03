@@ -205,3 +205,10 @@ export async function patchDocumentFacts(
   });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
 }
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/documents/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+}

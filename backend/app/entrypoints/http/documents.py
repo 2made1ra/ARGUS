@@ -11,6 +11,7 @@ from app.entrypoints.http.dependencies import (
     get_document_facts_uc,
     get_document_preview_uc,
     get_document_rag_answer_uc,
+    get_delete_document_uc,
     get_get_document_uc,
     get_list_documents_uc,
     get_search_within_uc,
@@ -25,6 +26,7 @@ from app.entrypoints.http.schemas.documents import (
 )
 from app.entrypoints.http.schemas.rag import RagAnswerOut, RagAnswerRequest
 from app.features.documents.dto import DocumentPreviewUnavailable
+from app.features.documents.use_cases.delete_document import DeleteDocumentUseCase
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
 from app.features.documents.use_cases.get_document_preview import (
@@ -156,6 +158,17 @@ async def patch_document_facts(
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/{id}", status_code=204)
+async def delete_document(
+    id: UUID,
+    uc: DeleteDocumentUseCase = Depends(get_delete_document_uc),
+) -> None:
+    try:
+        await uc.execute(DocumentId(id))
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document not found")
 
 
 @router.get("/{id}", response_model=DocumentOut)

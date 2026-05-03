@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import CatalogPage from "./pages/CatalogPage";
 import ContractorPage from "./pages/ContractorPage";
 import DocumentPage from "./pages/DocumentPage";
+import DocumentValidationPage from "./pages/DocumentValidationPage";
 import Home from "./pages/Home";
 import SearchPage from "./pages/SearchPage";
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/contractors/:id" element={<ContractorPage />} />
+        <Route path="/documents/:id/validate" element={<DocumentValidationPage />} />
         <Route path="/documents/:id" element={<DocumentPage />} />
       </Routes>
     </div>
