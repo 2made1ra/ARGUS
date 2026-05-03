@@ -15,7 +15,15 @@ from app.features.search.use_cases.search_contractors import SearchContractorsUs
 router = APIRouter(tags=["search"])
 
 
-@router.get("/search", response_model=list[ContractorSearchResultOut])
+@router.get(
+    "/search",
+    response_model=list[ContractorSearchResultOut],
+    operation_id="searchContractors",
+    summary="Search contractors",
+    description=(
+        "Runs global semantic search and aggregates matching chunks by contractor."
+    ),
+)
 async def search_contractors(
     q: str,
     limit: int = 20,
@@ -27,13 +35,25 @@ async def search_contractors(
         if exc.response.status_code == 503:
             raise HTTPException(
                 status_code=503,
-                detail="Сервис эмбеддингов недоступен — запустите LM Studio и загрузите модель эмбеддингов.",
+                detail=(
+                    "Сервис эмбеддингов недоступен — запустите LM Studio "
+                    "и загрузите модель эмбеддингов."
+                ),
             ) from exc
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [ContractorSearchResultOut.from_domain(r) for r in results]
 
 
-@router.post("/search/answer", response_model=GlobalRagAnswerOut)
+@router.post(
+    "/search/answer",
+    response_model=GlobalRagAnswerOut,
+    operation_id="answerGlobalSearchQuestion",
+    summary="Answer a global search question",
+    description=(
+        "Builds a RAG answer across all indexed documents and returns ranked "
+        "contractors and sources."
+    ),
+)
 async def answer_global_search(
     body: RagAnswerRequest,
     uc: AnswerGlobalSearchUseCase = Depends(get_global_rag_answer_uc),
@@ -48,7 +68,10 @@ async def answer_global_search(
         if exc.response.status_code == 503:
             raise HTTPException(
                 status_code=503,
-                detail="Сервис локальной LLM недоступен — запустите LM Studio и загрузите модель.",
+                detail=(
+                    "Сервис локальной LLM недоступен — запустите LM Studio "
+                    "и загрузите модель."
+                ),
             ) from exc
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return GlobalRagAnswerOut.from_domain(answer)
