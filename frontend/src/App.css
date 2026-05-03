@@ -335,6 +335,7 @@ h2 {
 .search-bar__button,
 .chat-composer button,
 .global-search-form button,
+.contractor-card__cta,
 .validation-save-btn {
   background: var(--ink);
   border: 1px solid var(--ink);
@@ -353,6 +354,7 @@ h2 {
 .search-bar__button:hover,
 .chat-composer button:hover,
 .global-search-form button:hover,
+.contractor-card__cta:hover,
 .validation-save-btn:hover {
   background: var(--ink-2);
 }
@@ -548,6 +550,8 @@ button:disabled {
 .result-card,
 .catalog-card,
 .document-row,
+.contractor-card,
+.contractor-source,
 .source-chip {
   background: #fff;
   border: 1px solid var(--line);
@@ -557,7 +561,8 @@ button:disabled {
 }
 
 .result-card,
-.catalog-card {
+.catalog-card,
+.contractor-card {
   border-radius: 8px;
   padding: 0.9rem;
 }
@@ -572,15 +577,116 @@ button:disabled {
 .result-card:hover,
 .catalog-card:hover,
 .document-row:hover,
+.contractor-source:hover,
 .source-chip:hover {
   border-color: var(--cyan);
 }
 
 .result-card h3,
-.catalog-card h2 {
+.catalog-card h2,
+.contractor-card h3 {
   font-size: 1rem;
   line-height: 1.35;
   margin: 0;
+}
+
+.contractor-card {
+  border-color: rgba(10, 20, 46, 0.16);
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.contractor-card__top {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.contractor-card__top > * {
+  min-width: 0;
+}
+
+.contractor-card__stats,
+.contractor-card__reason p {
+  margin: 0;
+}
+
+.contractor-card__stats {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.contractor-card__reason,
+.contractor-card__sources {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.contractor-card__reason > span,
+.contractor-card__sources > span {
+  color: var(--gold);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contractor-card__reason p {
+  display: -webkit-box;
+  line-height: 1.6;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.contractor-card__sources > div {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.contractor-source {
+  align-items: flex-start;
+  border-radius: 8px;
+  display: flex;
+  gap: 0.6rem;
+  line-height: 1.35;
+  padding: 0.65rem;
+}
+
+.contractor-source__body {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.contractor-source__snippet {
+  color: var(--ink-2);
+  display: -webkit-box;
+  font-size: 0.88rem;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.contractor-card__actions {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.contractor-card__cta {
+  border-radius: 0;
+  min-width: 0;
 }
 
 .compact-title {
@@ -1121,11 +1227,17 @@ button:disabled {
   .page-header,
   .document-actions,
   .search-bar,
+  .contractor-card__top,
+  .contractor-card__actions,
   .catalog-card,
   .document-row,
   .file-target {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .contractor-card__cta {
+    width: 100%;
   }
 
   .document-actions {

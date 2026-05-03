@@ -1,10 +1,14 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import type { GlobalRagAnswer } from "../api";
+import type { GlobalRagAnswer, SourceRef } from "../api";
 import { answerGlobalSearch } from "../api";
 import AssistantContent from "./AssistantContent";
 import SourceList from "./SourceList";
-import { matchLabel } from "../utils/searchPresentation";
+import {
+  compactDocumentTitle,
+  formatPageRange,
+  matchLabel,
+} from "../utils/searchPresentation";
 
 export default function GlobalSearchAnswer() {
   const [input, setInput] = useState("");
@@ -96,6 +100,8 @@ function ContractorResults({
 }: {
   answer: GlobalRagAnswer;
 }) {
+  const sourcesByContractor = groupSourcesByContractor(answer);
+
   return (
     <section className="search-results-section">
       <div className="section-heading">
@@ -103,24 +109,84 @@ function ContractorResults({
         <span className="meta">{answer.contractors.length} найдено</span>
       </div>
       <div className="result-list">
-        {answer.contractors.map((contractor) => (
-          <Link
-            className="result-card result-card--link"
-            key={contractor.contractor_id}
-            to={`/contractors/${contractor.contractor_id}`}
-          >
-            <div className="result-card__header">
-              <h3 className="compact-title">{contractor.name}</h3>
-              <span className="match-badge">{matchLabel(contractor.score)}</span>
-            </div>
-            <p className="snippet">{contractor.top_snippet}</p>
-            <p className="meta">
-              {contractor.document_count} договоров ·{" "}
-              {contractor.matched_chunks_count} совпадений
-            </p>
-          </Link>
-        ))}
+        {answer.contractors.map((contractor) => {
+          const keySources =
+            sourcesByContractor.get(contractor.contractor_id)?.slice(0, 2) ?? [];
+
+          return (
+            <article className="contractor-card" key={contractor.contractor_id}>
+              <div className="contractor-card__top">
+                <div>
+                  <h3 className="compact-title">{contractor.name}</h3>
+                  <p className="contractor-card__stats">
+                    {contractor.document_count} договоров ·{" "}
+                    {contractor.matched_chunks_count} найденных фрагментов
+                  </p>
+                </div>
+                <span className="match-badge">{matchLabel(contractor.score)}</span>
+              </div>
+
+              <div className="contractor-card__reason">
+                <span>Почему подходит</span>
+                <p>{contractor.top_snippet}</p>
+              </div>
+
+              {keySources.length > 0 && (
+                <div className="contractor-card__sources">
+                  <span>Ключевые источники</span>
+                  <div>
+                    {keySources.map(({ source, index }) => (
+                      <Link
+                        className="contractor-source"
+                        key={`${source.document_id}-${source.chunk_index}-${index}`}
+                        to={`/documents/${source.document_id}`}
+                      >
+                        <span className="source-chip__index">S{index + 1}</span>
+                        <span className="contractor-source__body">
+                          <span className="compact-title">
+                            {compactDocumentTitle(source.document_title)}
+                          </span>
+                          <span className="meta">
+                            {formatPageRange(source.page_start, source.page_end)}
+                          </span>
+                          <span className="contractor-source__snippet">
+                            {source.snippet}
+                          </span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="contractor-card__actions">
+                <Link
+                  className="contractor-card__cta"
+                  to={`/contractors/${contractor.contractor_id}`}
+                >
+                  Открыть подрядчика
+                </Link>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
+}
+
+function groupSourcesByContractor(
+  answer: GlobalRagAnswer,
+): Map<string, Array<{ source: SourceRef; index: number }>> {
+  const grouped = new Map<string, Array<{ source: SourceRef; index: number }>>();
+
+  answer.sources.forEach((source, index) => {
+    if (source.contractor_id === null) return;
+
+    const group = grouped.get(source.contractor_id) ?? [];
+    group.push({ source, index });
+    grouped.set(source.contractor_id, group);
+  });
+
+  return grouped;
 }
