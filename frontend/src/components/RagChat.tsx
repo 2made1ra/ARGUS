@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatMessage, RagAnswer } from "../api";
+import AssistantContent from "./AssistantContent";
 import SourceList from "./SourceList";
 
 interface Props {
@@ -82,7 +83,11 @@ export default function RagChat({
               className={`chat-bubble chat-bubble--${message.role}`}
               key={`${message.role}-${index}`}
             >
-              <p>{message.content}</p>
+              {message.role === "assistant" ? (
+                <AssistantContent content={message.content} />
+              ) : (
+                <p>{message.content}</p>
+              )}
             </article>
           ))
         )}

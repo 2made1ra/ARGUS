@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import type { ContractorSearchResult } from "../api";
+import { matchLabel } from "../utils/searchPresentation";
 import SnippetHighlight from "./SnippetHighlight";
 
 interface Props {
@@ -24,8 +25,8 @@ export default function ContractorSearchResults({ results, query }: Props) {
           onClick={() => navigate(`/contractors/${result.contractor_id}`)}
         >
           <div className="result-card__header">
-            <h3>{result.name}</h3>
-            <span className="score">{result.score.toFixed(3)}</span>
+            <h3 className="compact-title">{result.name}</h3>
+            <span className="match-badge">{matchLabel(result.score)}</span>
           </div>
           <p className="snippet">
             <SnippetHighlight text={result.top_snippet} query={query} />

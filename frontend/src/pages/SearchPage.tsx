@@ -4,6 +4,7 @@ import type { ChatMessage, GlobalRagAnswer } from "../api";
 import { answerGlobalSearch } from "../api";
 import RagChat from "../components/RagChat";
 import SourceList from "../components/SourceList";
+import { matchLabel } from "../utils/searchPresentation";
 
 export default function SearchPage() {
   const [latestAnswer, setLatestAnswer] = useState<GlobalRagAnswer | null>(null);
@@ -71,7 +72,8 @@ function ContractorResults({
             to={`/contractors/${contractor.contractor_id}`}
           >
             <div className="result-card__header">
-              <h3>{contractor.name}</h3>
+              <h3 className="compact-title">{contractor.name}</h3>
+              <span className="match-badge">{matchLabel(contractor.score)}</span>
             </div>
             <p className="snippet">{contractor.top_snippet}</p>
             <p className="meta">
