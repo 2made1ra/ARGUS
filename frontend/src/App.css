@@ -334,6 +334,7 @@ h2 {
 .danger-action,
 .search-bar__button,
 .chat-composer button,
+.global-search-form button,
 .validation-save-btn {
   background: var(--ink);
   border: 1px solid var(--ink);
@@ -351,6 +352,7 @@ h2 {
 .secondary-action:hover,
 .search-bar__button:hover,
 .chat-composer button:hover,
+.global-search-form button:hover,
 .validation-save-btn:hover {
   background: var(--ink-2);
 }
@@ -406,6 +408,7 @@ button:disabled {
 .search-bar__input,
 .catalog-filter input,
 .chat-composer textarea,
+.global-search-form textarea,
 .validation-field input {
   background: #fff;
   border: 1px solid #cfd5d8;
@@ -423,16 +426,6 @@ button:disabled {
   display: grid;
   gap: 1rem;
   min-width: 0;
-}
-
-.search-workspace .rag-chat {
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.search-workspace .chat-thread {
-  min-height: 8rem;
 }
 
 .search-results-section {
@@ -494,6 +487,62 @@ button:disabled {
 .chat-composer textarea {
   line-height: 1.5;
   resize: vertical;
+}
+
+.global-search {
+  display: grid;
+  gap: 1.1rem;
+  min-width: 0;
+}
+
+.global-search-form {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.global-search-form label {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.global-search-form textarea {
+  line-height: 1.5;
+  min-height: 7.5rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.global-search-empty {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 42rem;
+}
+
+.global-answer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.global-answer__body {
+  line-height: 1.65;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.global-answer__body p {
+  margin: 0;
+}
+
+.global-answer__body p + p {
+  margin-top: 0.75rem;
 }
 
 .result-card,
