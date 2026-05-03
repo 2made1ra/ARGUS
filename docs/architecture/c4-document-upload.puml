@@ -1,0 +1,45 @@
+@startuml
+!include <C4/C4_Container>
+
+LAYOUT_LEFT_RIGHT()
+
+title C4 Container Diagram - Document Upload (High Level)
+
+Person(user, "User", "Uploads contractor documents")
+
+System_Boundary(system, "ARGUS Document Intelligence Platform") {
+
+  Container(web_app, "Web App", "React / Vite", "Upload screen and processing status")
+
+  Container(api, "Backend API", "Python / FastAPI", "Accepts uploads and starts ingestion")
+
+  ContainerDb(file_storage, "File Storage", "Local filesystem", "Original uploaded documents")
+
+  ContainerDb(postgres, "PostgreSQL", "Relational DB", "Document status, chunks, fields, summaries and contractor links")
+
+  ContainerDb(redis, "Redis", "Task queue", "Asynchronous ingestion jobs")
+
+  Container(worker, "Ingestion Pipeline", "Celery Worker", "Processes the document, resolves contractor and prepares search index")
+
+  Container(sage, "SAGE Processor", "Python package", "Extracts text, chunks content and produces structured document data")
+
+  ContainerDb(qdrant, "Qdrant", "Vector DB", "Searchable vectors for document chunks and summaries")
+}
+
+System_Ext(lm_studio, "LM Studio", "Local LLM API for extraction, summaries and embeddings")
+System_Ext(document_tools, "Document Tools", "LibreOffice and OCR support")
+
+Rel(user, web_app, "Uploads a document")
+Rel(web_app, api, "Sends file", "HTTPS")
+Rel(api, file_storage, "Stores original file")
+Rel(api, postgres, "Creates document in QUEUED state")
+Rel(api, redis, "Schedules ingestion job")
+Rel(redis, worker, "Runs job asynchronously")
+Rel(worker, file_storage, "Reads source file")
+Rel(worker, sage, "Processes source file")
+Rel(sage, document_tools, "Converts and OCRs when needed")
+Rel(worker, lm_studio, "Extracts, summarizes and embeds content")
+Rel(worker, postgres, "Stores extracted data and lifecycle status")
+Rel(worker, qdrant, "Indexes searchable vectors")
+
+@enduml

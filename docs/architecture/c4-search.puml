@@ -1,0 +1,33 @@
+@startuml
+!include <C4/C4_Container>
+
+LAYOUT_LEFT_RIGHT()
+
+title C4 Container Diagram - Search Flow (High Level)
+
+Person(user, "User", "Searches by topic and drills down into documents")
+
+System_Boundary(system, "ARGUS Document Intelligence Platform") {
+
+  Container(web_app, "Web App", "React / Vite", "Search UI: topic -> contractor -> documents -> fragments")
+
+  Container(api, "Search API", "Python / FastAPI", "Accepts global, contractor-scoped and document-scoped queries")
+
+  Container(search_service, "Search Orchestrator", "Application layer", "Embeds the query, applies scope filters, groups hits and builds results")
+
+  ContainerDb(qdrant, "Qdrant", "Vector DB", "Chunk and summary vectors with contractor and document payload")
+
+  ContainerDb(postgres, "PostgreSQL", "Relational DB", "Contractor, document, field and summary metadata")
+}
+
+System_Ext(lm_studio, "LM Studio", "Local LLM API for embeddings and answer generation")
+
+Rel(user, web_app, "Runs search and opens drill-down results")
+Rel(web_app, api, "Search and answer requests", "HTTPS")
+Rel(api, search_service, "Delegates query")
+Rel(search_service, lm_studio, "Embeds queries and generates answers")
+Rel(search_service, qdrant, "Vector search with scope filters")
+Rel(search_service, postgres, "Enriches hits with metadata")
+Rel(search_service, web_app, "Returns contractors, documents or fragments")
+
+@enduml
