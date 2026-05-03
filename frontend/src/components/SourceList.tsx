@@ -3,21 +3,26 @@ import type { SourceRef } from "../api";
 import {
   compactDocumentTitle,
   formatPageRange,
+  type IndexedSourceRef,
   sourceAnchorId,
   sourceDocumentTarget,
 } from "../utils/searchPresentation";
 
 interface Props {
-  sources: SourceRef[];
+  sources: SourceRef[] | IndexedSourceRef[];
   anchorPrefix?: string;
 }
 
 export default function SourceList({ sources, anchorPrefix = "source" }: Props) {
   if (sources.length === 0) return null;
 
+  const sourceItems = sources.map((source, index) =>
+    isIndexedSourceRef(source) ? source : { source, index },
+  );
+
   return (
     <div className="source-list">
-      {sources.map((source, index) => (
+      {sourceItems.map(({ source, index }) => (
         <Link
           className="source-chip"
           id={sourceAnchorId(anchorPrefix, index)}
@@ -39,4 +44,10 @@ export default function SourceList({ sources, anchorPrefix = "source" }: Props) 
       ))}
     </div>
   );
+}
+
+function isIndexedSourceRef(
+  source: SourceRef | IndexedSourceRef,
+): source is IndexedSourceRef {
+  return "source" in source;
 }

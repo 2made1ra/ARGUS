@@ -1,5 +1,10 @@
 import type { SourceRef } from "../api";
 
+export interface IndexedSourceRef {
+  source: SourceRef;
+  index: number;
+}
+
 export function matchLabel(similarity: number): string {
   if (similarity >= 0.75) return "Высокое совпадение";
   if (similarity >= 0.55) return "Среднее совпадение";
@@ -44,6 +49,41 @@ export function compactDocumentTitle(
 
 export function sourceAnchorId(prefix: string, index: number): string {
   return `${prefix}-${index + 1}`;
+}
+
+export function extractCitationSourceIndexes(
+  content: string,
+  sourceCount: number,
+): number[] {
+  const indexes: number[] = [];
+  const seen = new Set<number>();
+  const citationPattern = /\[S(\d+)\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = citationPattern.exec(content)) !== null) {
+    const citationNumber = Number.parseInt(match[1], 10);
+    const sourceIndex = citationNumber - 1;
+    if (
+      sourceIndex >= 0 &&
+      sourceIndex < sourceCount &&
+      !seen.has(sourceIndex)
+    ) {
+      seen.add(sourceIndex);
+      indexes.push(sourceIndex);
+    }
+  }
+
+  return indexes;
+}
+
+export function indexedSourcesForCitations(
+  content: string,
+  sources: SourceRef[],
+): IndexedSourceRef[] {
+  return extractCitationSourceIndexes(content, sources.length).map((index) => ({
+    source: sources[index],
+    index,
+  }));
 }
 
 export function sourceDocumentTarget(source: SourceRef): string {

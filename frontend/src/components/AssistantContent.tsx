@@ -4,12 +4,16 @@ interface Props {
   content: string;
   citationAnchorPrefix?: string;
   citationCount?: number;
+  citationIndexes?: ReadonlySet<number>;
+  onCitationClick?: (sourceIndex: number) => void;
 }
 
 function renderInlineMarkdown(
   text: string,
   citationAnchorPrefix?: string,
   citationCount = 0,
+  citationIndexes?: ReadonlySet<number>,
+  onCitationClick?: (sourceIndex: number) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   const inlinePattern = /(\*\*(.+?)\*\*|\[S(\d+)\])/g;
@@ -28,18 +32,30 @@ function renderInlineMarkdown(
       nodes.push(
         <strong key={`strong-${match.index}`}>{boldText}</strong>,
       );
-    } else if (
-      citationAnchorPrefix &&
-      citationNumber !== null &&
-      citationNumber >= 1 &&
-      citationNumber <= citationCount
-    ) {
+    } else if (citationNumber !== null) {
+      const sourceIndex = citationNumber - 1;
+      if (
+        citationAnchorPrefix === undefined ||
+        sourceIndex < 0 ||
+        sourceIndex >= citationCount ||
+        (citationIndexes !== undefined && !citationIndexes.has(sourceIndex))
+      ) {
+        nodes.push(match[0]);
+        lastIndex = match.index + match[0].length;
+        continue;
+      }
+
       nodes.push(
         <a
           aria-label={`Перейти к источнику S${citationNumber}`}
           className="citation-marker"
           href={`#${sourceAnchorId(citationAnchorPrefix, citationNumber - 1)}`}
           key={`citation-${match.index}`}
+          onClick={(event) => {
+            if (onCitationClick === undefined) return;
+            event.preventDefault();
+            onCitationClick(sourceIndex);
+          }}
         >
           S{citationNumber}
         </a>,
@@ -62,6 +78,8 @@ export default function AssistantContent({
   content,
   citationAnchorPrefix,
   citationCount = 0,
+  citationIndexes,
+  onCitationClick,
 }: Props) {
   const paragraphs = content
     .split(/\n{2,}/)
@@ -77,7 +95,13 @@ export default function AssistantContent({
           {paragraph.split("\n").map((line, lineIndex) => (
             <span key={`line-${lineIndex}`}>
               {lineIndex > 0 && <br />}
-              {renderInlineMarkdown(line, citationAnchorPrefix, citationCount)}
+              {renderInlineMarkdown(
+                line,
+                citationAnchorPrefix,
+                citationCount,
+                citationIndexes,
+                onCitationClick,
+              )}
             </span>
           ))}
         </p>

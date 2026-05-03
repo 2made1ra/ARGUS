@@ -1,13 +1,16 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import type { GlobalRagAnswer, SourceRef } from "../api";
+import type { GlobalRagAnswer } from "../api";
 import { answerGlobalSearch } from "../api";
 import AssistantContent from "./AssistantContent";
 import SourceList from "./SourceList";
 import {
   compactDocumentTitle,
   formatPageRange,
+  indexedSourcesForCitations,
+  type IndexedSourceRef,
   matchLabel,
+  sourceAnchorId,
   sourceDocumentTarget,
 } from "../utils/searchPresentation";
 
@@ -16,6 +19,8 @@ export default function GlobalSearchAnswer() {
   const [latestAnswer, setLatestAnswer] = useState<GlobalRagAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const answerView = latestAnswer ? buildAnswerView(latestAnswer) : null;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,6 +30,7 @@ export default function GlobalSearchAnswer() {
     setLoading(true);
     setError(null);
     setLatestAnswer(null);
+    setSourcesOpen(false);
     try {
       const answer = await answerGlobalSearch(question, []);
       setLatestAnswer(answer);
@@ -34,6 +40,22 @@ export default function GlobalSearchAnswer() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleCitationClick(sourceIndex: number) {
+    setSourcesOpen(true);
+    window.setTimeout(() => {
+      const sourceId = sourceAnchorId("global-source", sourceIndex);
+      const sourceElement = document.getElementById(sourceId);
+      if (sourceElement === null) return;
+
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}#${sourceId}`,
+      );
+      sourceElement.scrollIntoView({ block: "center" });
+    }, 0);
   }
 
   return (
@@ -65,7 +87,7 @@ export default function GlobalSearchAnswer() {
 
       {error && <p className="error">Ошибка глобального поиска: {error}</p>}
 
-      {latestAnswer && (
+      {latestAnswer && answerView && (
         <>
           <section className="global-answer" aria-live="polite">
             <div className="section-heading">
@@ -76,26 +98,24 @@ export default function GlobalSearchAnswer() {
               <AssistantContent
                 citationAnchorPrefix="global-source"
                 citationCount={latestAnswer.sources.length}
+                citationIndexes={answerView.visibleSourceIndexes}
                 content={latestAnswer.answer}
+                onCitationClick={handleCitationClick}
               />
             </div>
           </section>
 
-          <ContractorResults answer={latestAnswer} />
+          <ContractorResults
+            contractors={answerView.visibleContractors}
+            sourceItems={answerView.visibleSourceItems}
+          />
 
-          {latestAnswer.sources.length > 0 && (
-            <section className="search-results-section">
-              <div className="section-heading">
-                <h2>Источники</h2>
-                <span className="meta">
-                  {latestAnswer.sources.length} фрагментов
-                </span>
-              </div>
-              <SourceList
-                anchorPrefix="global-source"
-                sources={latestAnswer.sources}
-              />
-            </section>
+          {answerView.visibleSourceItems.length > 0 && (
+            <SourceDisclosure
+              open={sourcesOpen}
+              sourceItems={answerView.visibleSourceItems}
+              onToggle={setSourcesOpen}
+            />
           )}
         </>
       )}
@@ -104,20 +124,22 @@ export default function GlobalSearchAnswer() {
 }
 
 function ContractorResults({
-  answer,
+  contractors,
+  sourceItems,
 }: {
-  answer: GlobalRagAnswer;
+  contractors: GlobalRagAnswer["contractors"];
+  sourceItems: IndexedSourceRef[];
 }) {
-  const sourcesByContractor = groupSourcesByContractor(answer);
+  const sourcesByContractor = groupSourcesByContractor(sourceItems);
 
   return (
     <section className="search-results-section">
       <div className="section-heading">
         <h2>Подходящие подрядчики</h2>
-        <span className="meta">{answer.contractors.length} найдено</span>
+        <span className="meta">{contractors.length} найдено</span>
       </div>
       <div className="result-list">
-        {answer.contractors.map((contractor) => {
+        {contractors.map((contractor) => {
           const keySources =
             sourcesByContractor.get(contractor.contractor_id)?.slice(0, 2) ?? [];
 
@@ -184,17 +206,74 @@ function ContractorResults({
 }
 
 function groupSourcesByContractor(
-  answer: GlobalRagAnswer,
-): Map<string, Array<{ source: SourceRef; index: number }>> {
-  const grouped = new Map<string, Array<{ source: SourceRef; index: number }>>();
+  sourceItems: IndexedSourceRef[],
+): Map<string, IndexedSourceRef[]> {
+  const grouped = new Map<string, IndexedSourceRef[]>();
 
-  answer.sources.forEach((source, index) => {
+  sourceItems.forEach((sourceItem) => {
+    const { source } = sourceItem;
     if (source.contractor_id === null) return;
 
     const group = grouped.get(source.contractor_id) ?? [];
-    group.push({ source, index });
+    group.push(sourceItem);
     grouped.set(source.contractor_id, group);
   });
 
   return grouped;
+}
+
+function SourceDisclosure({
+  open,
+  sourceItems,
+  onToggle,
+}: {
+  open: boolean;
+  sourceItems: IndexedSourceRef[];
+  onToggle: (open: boolean) => void;
+}) {
+  return (
+    <details
+      className="search-results-section source-disclosure"
+      open={open}
+      onToggle={(event) => onToggle(event.currentTarget.open)}
+    >
+      <summary className="source-disclosure__summary">
+        <span className="source-disclosure__title">Источники</span>
+        <span className="meta">{sourceItems.length} фрагментов</span>
+      </summary>
+      <SourceList anchorPrefix="global-source" sources={sourceItems} />
+    </details>
+  );
+}
+
+function buildAnswerView(answer: GlobalRagAnswer) {
+  const citedSourceItems = indexedSourcesForCitations(
+    answer.answer,
+    answer.sources,
+  );
+  const recommendedContractorIds = new Set(
+    citedSourceItems
+      .map(({ source }) => source.contractor_id)
+      .filter((contractorId): contractorId is string => contractorId !== null),
+  );
+  const visibleContractors = answer.contractors.filter((contractor) =>
+    recommendedContractorIds.has(contractor.contractor_id),
+  );
+  const visibleContractorIds = new Set(
+    visibleContractors.map((contractor) => contractor.contractor_id),
+  );
+  const visibleSourceItems = citedSourceItems.filter(
+    ({ source }) =>
+      source.contractor_id !== null &&
+      visibleContractorIds.has(source.contractor_id),
+  );
+  const visibleSourceIndexes = new Set(
+    visibleSourceItems.map(({ index }) => index),
+  );
+
+  return {
+    visibleContractors,
+    visibleSourceIndexes,
+    visibleSourceItems,
+  };
 }
