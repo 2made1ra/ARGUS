@@ -36,3 +36,36 @@ Filter(must=[FieldCondition("document_id", MatchValue(id))])
 - One vector search per call, filtered — no multiple search strategies per request.
 - Search use cases combine Qdrant (semantic) + Postgres (metadata: title, date, contractor name).
 - `is_summary: true` chunks are included in global search; filter them out when searching within a document if needed.
+
+## RAG / Answer endpoints
+
+All answer endpoints accept `POST` with body:
+```json
+{ "message": "string", "history": [{"role": "user|assistant", "content": "string"}], "limit": 10 }
+```
+
+**Per-document:** `POST /documents/{id}/answer`
+- Scoped to one document's chunks + extracted facts.
+- Returns `{ answer, sources: [{ document_id, contractor_id, page_start, page_end, chunk_index, score, snippet, document_title, contractor_name }] }`
+
+**Per-contractor:** `POST /contractors/{id}/answer`
+- Scoped to all documents linked to the contractor.
+- Returns same shape as per-document.
+
+**Global:** `POST /search/answer`
+- RAG across all indexed documents, supports multi-turn via `history`.
+- Returns `{ answer, contractors: [...], sources: [...] }`
+
+## SSE status stream
+
+```
+GET /documents/{id}/stream  →  text/event-stream
+```
+
+Polls document status every ~1 s, yields on each status transition, closes on
+`INDEXED` or `FAILED`. On `FAILED`, adds `"error_message"` to the event payload.
+
+```
+data: {"document_id": "uuid", "status": "PROCESSING"}\n\n
+data: {"document_id": "uuid", "status": "INDEXED"}\n\n
+```

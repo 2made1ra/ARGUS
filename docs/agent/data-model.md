@@ -32,7 +32,8 @@ document_kind        text          -- "text" | "scan"
 doc_type             text          -- "contract" | "act" | "invoice" | ...
 status               text          -- QUEUED | PROCESSING | RESOLVING | INDEXING | INDEXED | FAILED
 error_message        text          -- null unless status=FAILED
-partial_extraction   bool
+partial_extraction   bool          -- true if LLM extraction was incomplete
+preview_file_path    text          -- path to PDF preview (nullable, added migration 3)
 created_at           timestamptz
 ```
 

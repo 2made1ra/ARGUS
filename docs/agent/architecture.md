@@ -42,6 +42,13 @@ argus/
 │   ├── migrations/                  # Alembic
 │   └── tests/
 │
+├── frontend/                            # React 18 + Vite + TypeScript SPA
+│   └── src/
+│
+├── docs/
+│   └── api/
+│       └── openapi.yaml                 # HTTP API contract
+│
 ├── docker-compose.yml
 └── CLAUDE.md
 ```
@@ -61,8 +68,8 @@ argus/
 |---------|---------------|
 | `ingest` | File upload, SAGE processing, chunk/field/summary storage, Celery chain |
 | `contractors` | Entity resolution, contractor profiles, raw-to-entity mappings |
-| `search` | Drill-down semantic search via Qdrant (global → contractor → document) |
-| `documents` | Document detail, list, extracted facts view |
+| `search` | Drill-down semantic search + RAG answer use cases (global, per-contractor, per-document) |
+| `documents` | Document detail, list, extracted facts, PDF preview |
 
 ## packages/sage
 
@@ -73,6 +80,11 @@ No database, no HTTP, no Celery. Single public entry point:
 from sage import process_document, ProcessingResult
 result: ProcessingResult = await process_document(src=Path("contract.docx"), work_dir=tmp)
 ```
+
+## OpenAPI spec
+
+Live spec is at `docs/api/openapi.yaml`. Use it as the reference for
+request/response shapes rather than reading router files directly.
 
 ## Tech stack
 
@@ -85,4 +97,4 @@ result: ProcessingResult = await process_document(src=Path("contract.docx"), wor
 | Vector DB | Qdrant |
 | Document processing | packages/sage (pymupdf, pytesseract, LibreOffice) |
 | LLM | LM Studio (local) via OpenAI-compatible API |
-| Python | 3.12+ |
+| Python | 3.13+ |
