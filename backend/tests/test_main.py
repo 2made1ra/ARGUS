@@ -28,21 +28,44 @@ async def test_lifespan_closes_qdrant_client_after_bootstrap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _FakeQdrantClient()
-    bootstrap_calls: list[tuple[object, str, int]] = []
+    bootstrap_calls: list[dict[str, object]] = []
 
-    async def fake_bootstrap_collection(
+    async def fake_bootstrap_qdrant_collections(
         qdrant: object,
-        collection: str,
-        dim: int,
+        *,
+        document_collection: str,
+        document_dim: int,
+        catalog_collection: str,
+        catalog_dim: int,
     ) -> None:
-        bootstrap_calls.append((qdrant, collection, dim))
+        bootstrap_calls.append(
+            {
+                "qdrant": qdrant,
+                "document_collection": document_collection,
+                "document_dim": document_dim,
+                "catalog_collection": catalog_collection,
+                "catalog_dim": catalog_dim,
+            },
+        )
         assert client.closed is False
 
     monkeypatch.setattr(main, "get_settings", _settings)
     monkeypatch.setattr(main, "make_qdrant_client", lambda url: client)
-    monkeypatch.setattr(main, "bootstrap_collection", fake_bootstrap_collection)
+    monkeypatch.setattr(
+        main,
+        "bootstrap_qdrant_collections",
+        fake_bootstrap_qdrant_collections,
+    )
 
     async with main.lifespan(FastAPI()):
         assert client.closed is True
 
-    assert bootstrap_calls == [(client, "document_chunks", 768)]
+    assert bootstrap_calls == [
+        {
+            "qdrant": client,
+            "document_collection": "document_chunks",
+            "document_dim": 768,
+            "catalog_collection": "price_items_search_v1",
+            "catalog_dim": 768,
+        },
+    ]

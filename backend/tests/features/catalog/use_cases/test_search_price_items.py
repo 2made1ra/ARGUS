@@ -1,0 +1,319 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+from uuid import UUID, uuid4
+
+import pytest
+from app.features.catalog.dto import SearchPriceItemsFilters
+from app.features.catalog.entities.price_item import PriceItem
+from app.features.catalog.ports import CatalogSearchFilters, CatalogSearchHit
+from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
+
+
+class FakeEmbeddings:
+    def __init__(self, vectors: list[list[float]] | None = None) -> None:
+        self.vectors = vectors if vectors is not None else [[0.1, 0.2, 0.3]]
+        self.inputs: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.inputs.append(texts)
+        return self.vectors
+
+
+class FakeCatalogSearch:
+    def __init__(self, hits: list[CatalogSearchHit] | None = None) -> None:
+        self.hits = hits if hits is not None else []
+        self.calls: list[dict[str, Any]] = []
+
+    async def search(
+        self,
+        *,
+        query_vector: list[float],
+        filters: CatalogSearchFilters | None,
+        limit: int,
+    ) -> list[CatalogSearchHit]:
+        self.calls.append(
+            {
+                "query_vector": query_vector,
+                "filters": filters,
+                "limit": limit,
+            },
+        )
+        return self.hits[:limit]
+
+
+class FakePriceItemSearchRepository:
+    def __init__(self, items: list[PriceItem]) -> None:
+        self.items = {item.id: item for item in items}
+        self.keyword_hits: list[tuple[UUID, float, str]] = []
+        self.keyword_calls: list[dict[str, Any]] = []
+        self.hydrate_calls: list[dict[str, Any]] = []
+
+    async def search_active_by_keywords(
+        self,
+        *,
+        query: str,
+        filters: SearchPriceItemsFilters,
+        limit: int,
+    ) -> list[tuple[UUID, float, str]]:
+        self.keyword_calls.append(
+            {
+                "query": query,
+                "filters": filters,
+                "limit": limit,
+            },
+        )
+        return self.keyword_hits[:limit]
+
+    async def list_active_by_ids(
+        self,
+        item_ids: list[UUID],
+        *,
+        filters: SearchPriceItemsFilters,
+    ) -> list[PriceItem]:
+        self.hydrate_calls.append(
+            {
+                "item_ids": item_ids,
+                "filters": filters,
+            },
+        )
+        return [self.items[item_id] for item_id in item_ids if item_id in self.items]
+
+
+def _item(
+    *,
+    name: str = "Аренда акустической системы",
+    source_text: str | None = (
+        "Аренда акустической системы 2 кВт для концертного зала, доставка отдельно"
+    ),
+    category: str | None = "Аренда",
+    unit: str = "день",
+    unit_price: Decimal = Decimal("15000.00"),
+    supplier: str | None = "ООО НИКА",
+    supplier_inn: str | None = "7701234567",
+    supplier_city: str | None = "г. Москва",
+    supplier_status: str | None = "Активен",
+    has_vat: str | None = "Без НДС",
+    external_id: str | None = "A-100",
+) -> PriceItem:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    return PriceItem(
+        id=uuid4(),
+        external_id=external_id,
+        name=name,
+        category=category,
+        category_normalized=category.lower() if category else None,
+        unit=unit,
+        unit_normalized=unit.lower(),
+        unit_price=unit_price,
+        source_text=source_text,
+        section="Оборудование",
+        section_normalized="оборудование",
+        supplier=supplier,
+        has_vat=has_vat,
+        vat_mode="without_vat",
+        supplier_inn=supplier_inn,
+        supplier_city=supplier_city,
+        supplier_city_normalized="москва" if supplier_city else None,
+        supplier_phone="+7",
+        supplier_email="info@example.com",
+        supplier_status=supplier_status,
+        supplier_status_normalized=supplier_status.lower() if supplier_status else None,
+        import_batch_id=uuid4(),
+        source_file_id=uuid4(),
+        source_import_row_id=uuid4(),
+        row_fingerprint="fingerprint",
+        is_active=True,
+        superseded_at=None,
+        embedding_text="Название: Аренда акустической системы",
+        embedding_model="nomic-embed-text-v1.5",
+        embedding_template_version="prices_v1",
+        catalog_index_status="indexed",
+        embedding_error=None,
+        indexing_error=None,
+        indexed_at=now,
+        legacy_embedding_present=False,
+        legacy_embedding_dim=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _use_case(
+    *,
+    items: list[PriceItem],
+    semantic_hits: list[CatalogSearchHit] | None = None,
+) -> tuple[
+    SearchPriceItemsUseCase,
+    FakePriceItemSearchRepository,
+    FakeEmbeddings,
+    FakeCatalogSearch,
+]:
+    repository = FakePriceItemSearchRepository(items)
+    embeddings = FakeEmbeddings()
+    vector_search = FakeCatalogSearch(semantic_hits)
+    return (
+        SearchPriceItemsUseCase(
+            items=repository,
+            embeddings=embeddings,
+            vector_search=vector_search,
+            catalog_query_prefix="search_query: ",
+            catalog_embedding_template_version="prices_v1",
+        ),
+        repository,
+        embeddings,
+        vector_search,
+    )
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_uses_query_prefix_hydrates_rows_and_preserves_ranking(
+) -> None:
+    first = _item(name="Аренда акустической системы")
+    second = _item(name="Прокат сценического света")
+    uc, repository, embeddings, vector_search = _use_case(
+        items=[first, second],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=first.id, score=0.91, payload={}),
+            CatalogSearchHit(price_item_id=second.id, score=0.73, payload={}),
+        ],
+    )
+
+    result = await uc.execute(query="акустическая система", limit=10)
+
+    assert embeddings.inputs == [["search_query: акустическая система"]]
+    assert vector_search.calls == [
+        {
+            "query_vector": [0.1, 0.2, 0.3],
+            "filters": CatalogSearchFilters(
+                embedding_template_version="prices_v1",
+            ),
+            "limit": 10,
+        },
+    ]
+    assert repository.hydrate_calls[0]["item_ids"] == [first.id, second.id]
+    assert [item.id for item in result.items] == [first.id, second.id]
+    assert result.items[0].score == 0.91
+    assert result.items[0].match_reason.code == "semantic"
+
+
+@pytest.mark.asyncio
+async def test_applies_simple_filters_to_semantic_keyword_and_hydration() -> None:
+    item = _item()
+    filters = SearchPriceItemsFilters(
+        supplier_city="г. Москва",
+        category="Аренда",
+        supplier_status="Активен",
+        has_vat="Без НДС",
+        unit_price=Decimal("15000.00"),
+    )
+    uc, repository, _embeddings, vector_search = _use_case(
+        items=[item],
+        semantic_hits=[CatalogSearchHit(price_item_id=item.id, score=0.8, payload={})],
+    )
+
+    await uc.execute(query="звук", filters=filters, limit=5)
+
+    assert vector_search.calls[0]["filters"] == CatalogSearchFilters(
+        category="Аренда",
+        unit_price=15000.0,
+        has_vat="Без НДС",
+        supplier_city="г. Москва",
+        supplier_status="Активен",
+        embedding_template_version="prices_v1",
+    )
+    assert repository.keyword_calls == [
+        {"query": "звук", "filters": filters, "limit": 5},
+    ]
+    assert repository.hydrate_calls == [
+        {"item_ids": [item.id], "filters": filters},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "reason_code"),
+    [
+        ("ООО НИКА", "keyword_supplier"),
+        ("7701234567", "keyword_inn"),
+        ("акустической системы", "keyword_name"),
+        ("концертного зала", "keyword_source_text"),
+        ("A-100", "keyword_external_id"),
+    ],
+)
+async def test_keyword_fallback_returns_backend_generated_reason_codes(
+    query: str,
+    reason_code: str,
+) -> None:
+    item = _item()
+    uc, repository, _embeddings, _vector_search = _use_case(items=[item])
+    repository.keyword_hits = [(item.id, 0.45, reason_code)]
+
+    result = await uc.execute(query=query, limit=10)
+
+    assert [found.id for found in result.items] == [item.id]
+    assert result.items[0].score == 0.45
+    assert result.items[0].match_reason.code == reason_code
+    assert result.items[0].match_reason.label != reason_code
+
+
+@pytest.mark.asyncio
+async def test_merges_semantic_and_keyword_results_without_duplicate_rows() -> None:
+    semantic_item = _item(name="Аренда звука")
+    keyword_item = _item(name="ООО НИКА доставка")
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[semantic_item, keyword_item],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=semantic_item.id, score=0.9, payload={}),
+        ],
+    )
+    repository.keyword_hits = [
+        (semantic_item.id, 0.5, "keyword_name"),
+        (keyword_item.id, 0.4, "keyword_supplier"),
+    ]
+
+    result = await uc.execute(query="ника звук", limit=10)
+
+    assert [item.id for item in result.items] == [semantic_item.id, keyword_item.id]
+    assert result.items[0].match_reason.code == "semantic"
+    assert result.items[1].match_reason.code == "keyword_supplier"
+    assert repository.hydrate_calls[0]["item_ids"] == [
+        semantic_item.id,
+        keyword_item.id,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_returns_source_text_snippet_and_full_available_flag() -> None:
+    item = _item(
+        source_text=(
+            "Длинное описание услуги по аренде акустической системы для площадки. "
+            "Включает стойки, коммутацию, базовую настройку и работу техника."
+        ),
+    )
+    uc, _repository, _embeddings, _vector_search = _use_case(
+        items=[item],
+        semantic_hits=[CatalogSearchHit(price_item_id=item.id, score=0.9, payload={})],
+    )
+
+    result = await uc.execute(query="акустика", limit=10)
+
+    found = result.items[0]
+    assert found.source_text_snippet is not None
+    assert found.source_text_snippet.startswith("Длинное описание услуги")
+    assert len(found.source_text_snippet) < len(item.source_text or "")
+    assert found.source_text_full_available is True
+    assert found.match_reason.label == "Семантическое совпадение с запросом"
+
+
+@pytest.mark.asyncio
+async def test_empty_semantic_and_keyword_results_return_empty_items() -> None:
+    uc, repository, _embeddings, _vector_search = _use_case(items=[])
+    repository.keyword_hits = []
+
+    result = await uc.execute(query="несуществующая позиция", limit=10)
+
+    assert result.items == []
+    assert repository.hydrate_calls == []

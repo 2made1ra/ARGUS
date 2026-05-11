@@ -29,27 +29,27 @@ This plan starts after the `catalog-first-refactor` docs have been updated. It d
 
 **Steps:**
 
-- [ ] Write failing tests for CSV parsing: multiline `source_text`, empty `category`, empty `source_text`, raw `embedding` preservation.
-- [ ] Write failing tests for normalization: unit, VAT, city, price, INN warnings and required fields.
-- [ ] Write failing tests for deterministic `embedding_text prices_v1`, including `source_text` inclusion/exclusion:
+- [x] Write failing tests for CSV parsing: multiline `source_text`, empty `category`, empty `source_text`, raw `embedding` preservation.
+- [x] Write failing tests for normalization: unit, VAT, city, price, INN warnings and required fields.
+- [x] Write failing tests for deterministic `embedding_text prices_v1`, including `source_text` inclusion/exclusion:
   - empty source -> omitted;
   - `Ручной ввод` -> omitted;
   - same normalized text as `name` -> omitted;
   - meaningful description -> included.
-- [ ] Write failing import use case tests for `price_imports`, `price_import_rows`, `price_items`, `source_file_id`, `import_batch_id` and legacy embedding metadata.
-- [ ] Write failing duplicate-protection tests for repeated `file_sha256`, active `row_fingerprint` reuse and changed price/fields creating a new row.
-- [ ] Write failing repository tests for add/list/get/source operations.
-- [ ] Add ORM models and Alembic migration.
-- [ ] Add catalog entities and ports.
-- [ ] Implement CSV parser with `csv.DictReader`.
-- [ ] Implement pure normalization functions.
-- [ ] Implement `row_fingerprint` builder from normalized row facts.
-- [ ] Implement `embedding_text` builder.
-- [ ] Implement SQLAlchemy repositories.
-- [ ] Implement `ImportPricesCsvUseCase`.
-- [ ] Add `POST /catalog/imports`, `GET /catalog/items`, `GET /catalog/items/{id}`.
-- [ ] Update OpenAPI and `docs/agent/data-model.md`.
-- [ ] Run focused backend checks.
+- [x] Write failing import use case tests for `price_imports`, `price_import_rows`, `price_items`, `source_file_id`, `import_batch_id` and legacy embedding metadata.
+- [x] Write failing duplicate-protection tests for repeated `file_sha256`, active `row_fingerprint` reuse and changed price/fields creating a new row.
+- [x] Write failing repository tests for add/list/get/source operations.
+- [x] Add ORM models and Alembic migration.
+- [x] Add catalog entities and ports.
+- [x] Implement CSV parser with `csv.DictReader`.
+- [x] Implement pure normalization functions.
+- [x] Implement `row_fingerprint` builder from normalized row facts.
+- [x] Implement `embedding_text` builder.
+- [x] Implement SQLAlchemy repositories.
+- [x] Implement `ImportPricesCsvUseCase`.
+- [x] Add `POST /catalog/imports`, `GET /catalog/items`, `GET /catalog/items/{id}`.
+- [x] Update OpenAPI and `docs/agent/data-model.md`.
+- [x] Run focused backend checks.
 
 **Verification:**
 
@@ -80,27 +80,27 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_catalog.py -
 
 **Steps:**
 
-- [ ] Write failing tests proving the CSV legacy `embedding` is not used as the catalog vector.
-- [ ] Write failing config/bootstrap tests for `price_items_search_v1`, catalog dimension and payload indexes.
-- [ ] Write failing catalog index adapter tests for point id, vector dimension and payload.
-- [ ] Write failing index use case tests for successful index, `embedding_failed`, `indexing_failed`, skipped inactive rows and no Postgres vector persistence.
-- [ ] Write failing tests proving index input uses `catalog_document_prefix + embedding_text`.
-- [ ] Split document and catalog embedding/vector config:
+- [x] Write failing tests proving the CSV legacy `embedding` is not used as the catalog vector.
+- [x] Write failing config/bootstrap tests for `price_items_search_v1`, catalog dimension and payload indexes.
+- [x] Write failing catalog index adapter tests for point id, vector dimension and payload.
+- [x] Write failing index use case tests for successful index, `embedding_failed`, `indexing_failed`, skipped inactive rows and no Postgres vector persistence.
+- [x] Write failing tests proving index input uses `catalog_document_prefix + embedding_text`.
+- [x] Split document and catalog embedding/vector config:
   - `catalog_qdrant_collection`;
   - `catalog_embedding_model`;
   - `catalog_embedding_dim`;
   - `catalog_embedding_template_version`;
   - `catalog_document_prefix`;
   - `catalog_query_prefix`.
-- [ ] Add catalog embedding client dependency using catalog config.
-- [ ] Extend Qdrant bootstrap for document and catalog collections.
-- [ ] Implement catalog Qdrant index adapter.
-- [ ] Implement catalog Qdrant search adapter result mapping.
-- [ ] Implement `IndexPriceItemsUseCase` as one flow: `embedding_text` -> embedding generation -> dimension validation -> Qdrant upsert -> `catalog_index_status`.
-- [ ] Set `catalog_index_status = indexed`, `embedding_failed` or `indexing_failed` with separate `embedding_error` and `indexing_error`.
-- [ ] Add payload indexes for MVP filters.
-- [ ] Update docs for Qdrant collection, prefix contract and payload contract.
-- [ ] Run focused Qdrant/indexing checks.
+- [x] Add catalog embedding client dependency using catalog config.
+- [x] Extend Qdrant bootstrap for document and catalog collections.
+- [x] Implement catalog Qdrant index adapter.
+- [x] Implement catalog Qdrant search adapter result mapping.
+- [x] Implement `IndexPriceItemsUseCase` as one flow: `embedding_text` -> embedding generation -> dimension validation -> Qdrant upsert -> `catalog_index_status`.
+- [x] Set `catalog_index_status = indexed`, `embedding_failed` or `indexing_failed` with separate `embedding_error` and `indexing_error`.
+- [x] Add payload indexes for MVP filters.
+- [x] Update docs for Qdrant collection, prefix contract and payload contract.
+- [x] Run focused Qdrant/indexing checks.
 
 **Verification:**
 
@@ -126,24 +126,24 @@ uv run --project backend pytest backend/tests/features/catalog/use_cases/test_in
 
 **Steps:**
 
-- [ ] Write failing use case tests for query embedding with `catalog_query_prefix`, Qdrant search, Postgres hydration and semantic ranking preservation.
-- [ ] Write failing tests for filters: `supplier_city`, `category`, `supplier_status`, `has_vat`, `unit_price`.
-- [ ] Write failing keyword fallback tests:
+- [x] Write failing use case tests for query embedding with `catalog_query_prefix`, Qdrant search, Postgres hydration and semantic ranking preservation.
+- [x] Write failing tests for filters: `supplier_city`, `category`, `supplier_status`, `has_vat`, `unit_price`.
+- [x] Write failing keyword fallback tests:
   - query by supplier name such as `ООО НИКА`;
   - query by `supplier_inn`;
   - query by exact service/model words in `name`;
   - query by exact text in `source_text`;
   - query by `external_id`.
-- [ ] Write failing tests for semantic + keyword merge without duplicate `price_item_id` results.
-- [ ] Write failing tests for backend-generated `match_reason` codes and `source_text_snippet`.
-- [ ] Write failing tests for empty Qdrant/keyword results returning an empty item list.
-- [ ] Write failing HTTP tests for `POST /catalog/search`.
-- [ ] Add catalog search DTOs.
-- [ ] Implement `SearchPriceItemsUseCase`.
-- [ ] Add tool-friendly `search_items` service contract.
-- [ ] Add `POST /catalog/search`.
-- [ ] Update OpenAPI and search docs.
-- [ ] Run focused catalog search checks.
+- [x] Write failing tests for semantic + keyword merge without duplicate `price_item_id` results.
+- [x] Write failing tests for backend-generated `match_reason` codes and `source_text_snippet`.
+- [x] Write failing tests for empty Qdrant/keyword results returning an empty item list.
+- [x] Write failing HTTP tests for `POST /catalog/search`.
+- [x] Add catalog search DTOs.
+- [x] Implement `SearchPriceItemsUseCase`.
+- [x] Add tool-friendly `search_items` service contract.
+- [x] Add `POST /catalog/search`.
+- [x] Update OpenAPI and search docs.
+- [x] Run focused catalog search checks.
 
 **Verification:**
 
@@ -172,29 +172,29 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_catalog.py -
 
 **Steps:**
 
-- [ ] Write failing brief merge tests for null values, arrays, overwritten scalar fields, `venue_status`, `duration_or_time_window` and `event_level`.
-- [ ] Write failing router tests:
+- [x] Write failing brief merge tests for null values, arrays, overwritten scalar fields, `venue_status`, `duration_or_time_window` and `event_level`.
+- [x] Write failing router tests:
   - `Хочу музыкальный вечер` -> `brief_discovery`;
   - `Нужно музыкальное оборудование в концертный зал` -> `supplier_search`;
   - `Организовать музыкальный вечер на 100 человек, помоги понять что нужно` -> `mixed`.
-- [ ] Write failing chat turn tests for `brief_discovery` without search.
-- [ ] Write failing chat turn tests for `supplier_search` with `search_items`.
-- [ ] Write failing chat turn tests for `mixed` with brief update plus search.
-- [ ] Write failing chat turn tests that `supplier_search` returns `found_items`, not only prose like "я нашел варианты".
-- [ ] Write failing chat turn tests that `mixed` updates `brief` and returns cards when `should_search_now=true`.
-- [ ] Write failing assistant response tests that `message` does not introduce prices, suppliers, phones, emails, INNs or date availability unless backed by `found_items`.
-- [ ] Write failing empty-result tests where the assistant says the catalog has no matching rows and suggests refinement.
-- [ ] Write failing HTTP tests for `POST /assistant/chat`.
-- [ ] Add assistant DTOs and ports.
-- [ ] Implement deterministic brief merge.
-- [ ] Implement structured router adapter/helper.
-- [ ] Implement `ChatTurnUseCase`.
-- [ ] Ensure `ChatTurnUseCase` returns four separate response layers: `message`, `router`, `brief`, `found_items`.
-- [ ] Ensure `found_items` are treated as candidates, not selected budget/proposal lines.
-- [ ] Add assistant HTTP endpoint.
-- [ ] Wire dependencies without cross-feature imports.
-- [ ] Update OpenAPI and search docs.
-- [ ] Run focused assistant checks.
+- [x] Write failing chat turn tests for `brief_discovery` without search.
+- [x] Write failing chat turn tests for `supplier_search` with `search_items`.
+- [x] Write failing chat turn tests for `mixed` with brief update plus search.
+- [x] Write failing chat turn tests that `supplier_search` returns `found_items`, not only prose like "я нашел варианты".
+- [x] Write failing chat turn tests that `mixed` updates `brief` and returns cards when `should_search_now=true`.
+- [x] Write failing assistant response tests that `message` does not introduce prices, suppliers, phones, emails, INNs or date availability unless backed by `found_items`.
+- [x] Write failing empty-result tests where the assistant says the catalog has no matching rows and suggests refinement.
+- [x] Write failing HTTP tests for `POST /assistant/chat`.
+- [x] Add assistant DTOs and ports.
+- [x] Implement deterministic brief merge.
+- [x] Implement structured router adapter/helper.
+- [x] Implement `ChatTurnUseCase`.
+- [x] Ensure `ChatTurnUseCase` returns four separate response layers: `message`, `router`, `brief`, `found_items`.
+- [x] Ensure `found_items` are treated as candidates, not selected budget/proposal lines.
+- [x] Add assistant HTTP endpoint.
+- [x] Wire dependencies without cross-feature imports.
+- [x] Update OpenAPI and search docs.
+- [x] Run focused assistant checks.
 
 **Verification:**
 
@@ -225,19 +225,19 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_assistant.py
 
 **Steps:**
 
-- [ ] Add TypeScript DTOs for `BriefState`, `RouterDecision`, `FoundItem`, catalog item list/detail and assistant chat response.
-- [ ] Add API functions for `/assistant/chat`, `/catalog/items`, `/catalog/items/{id}` and `/catalog/search`.
-- [ ] Build `AssistantChat` with message thread and composer.
-- [ ] Build `BriefDraftPanel` with compact current brief fields.
-- [ ] Build `FoundItemsPanel` with `name`, `unit_price`, `unit`, `supplier`, `supplier_city`, `category`, `source_text_snippet` and backend-generated `match_reason`.
-- [ ] Build `AssistantPage` as the primary user workspace.
-- [ ] Keep assistant prose visually separate from "Черновик брифа" and "Найденные позиции".
-- [ ] Ensure catalog facts are visible in cards/table and are not only embedded in assistant text.
-- [ ] Update catalog page into a data/admin table for imported rows.
-- [ ] Add catalog item detail route that shows full `source_text` and CSV provenance.
-- [ ] Remove primary search/brief tabs from the user flow.
-- [ ] Preserve existing document routes and drill-down navigation.
-- [ ] Run frontend build.
+- [x] Add TypeScript DTOs for `BriefState`, `RouterDecision`, `FoundItem`, catalog item list/detail and assistant chat response.
+- [x] Add API functions for `/assistant/chat`, `/catalog/items`, `/catalog/items/{id}` and `/catalog/search`.
+- [x] Build `AssistantChat` with message thread and composer.
+- [x] Build `BriefDraftPanel` with compact current brief fields.
+- [x] Build `FoundItemsPanel` with `name`, `unit_price`, `unit`, `supplier`, `supplier_city`, `category`, `source_text_snippet` and backend-generated `match_reason`.
+- [x] Build `AssistantPage` as the primary user workspace.
+- [x] Keep assistant prose visually separate from "Черновик брифа" and "Найденные позиции".
+- [x] Ensure catalog facts are visible in cards/table and are not only embedded in assistant text.
+- [x] Update catalog page into a data/admin table for imported rows.
+- [x] Add catalog item detail route that shows full `source_text` and CSV provenance.
+- [x] Remove primary search/brief tabs from the user flow.
+- [x] Preserve existing document routes and drill-down navigation.
+- [x] Run frontend build.
 
 **Verification:**
 
@@ -254,7 +254,12 @@ Manual checks:
 - [ ] Search result facts are visible in "Найденные позиции" rather than only inside the chat text.
 - [ ] Found item opens `/catalog/items/:id`.
 - [ ] Catalog item detail shows full source text/provenance for verification.
-- [ ] Existing document upload/status/search pages remain reachable.
+- [x] Existing document upload/status/search pages remain reachable.
+
+Review note 2026-05-12: frontend build passed, and Vite routes `/`, `/catalog`,
+`/catalog/items/:id`, `/search`, `/documents/upload` and `/documents/:id` return
+HTTP 200. Live assistant/catalog manual checks above remain open because the
+backend at `127.0.0.1:8000` was not running during review.
 
 ## Phase 6: Post-MVP PDF Ingestion Adaptation
 

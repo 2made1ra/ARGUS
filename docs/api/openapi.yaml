@@ -5,6 +5,152 @@ info:
     search.
   version: 0.1.0
 paths:
+  /assistant/chat:
+    post:
+      tags:
+      - assistant
+      summary: Run one unified assistant chat turn
+      description: Routes a user message, merges the active brief state and calls
+        catalog search when useful. The response keeps assistant prose, router state,
+        brief state and found catalog rows as separate layers.
+      operationId: assistantChat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantChatRequestIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantChatResponseOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/imports:
+    post:
+      tags:
+      - catalog
+      summary: Import catalog CSV
+      description: Imports a prices.csv-compatible file as raw import rows plus normalized
+        active price_items. Legacy CSV embeddings are preserved only as audit metadata.
+      operationId: importCatalogCsv
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_importCatalogCsv'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceImportSummaryOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/items:
+    get:
+      tags:
+      - catalog
+      summary: List active catalog items
+      description: Returns active price_items for catalog administration and hydration.
+      operationId: listCatalogItems
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceItemListOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/search:
+    post:
+      tags:
+      - catalog
+      summary: Search catalog items
+      description: Searches price_items semantically in price_items_search_v1, supplements
+        with minimal Postgres keyword fallback, hydrates rows from Postgres and returns
+        checkable catalog item cards.
+      operationId: searchCatalogItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogSearchRequestIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSearchResultOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/items/{id}:
+    get:
+      tags:
+      - catalog
+      summary: Get catalog item detail
+      description: Returns a full price_item row with CSV import provenance.
+      operationId: getCatalogItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceItemDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /documents/upload:
     post:
       tags:
@@ -612,6 +758,61 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    AssistantChatRequestIn:
+      properties:
+        session_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Session Id
+        message:
+          type: string
+          title: Message
+        brief:
+          anyOf:
+          - $ref: '#/components/schemas/BriefStateIn'
+          - type: 'null'
+      type: object
+      required:
+      - message
+      title: AssistantChatRequestIn
+    AssistantChatResponseOut:
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          title: Session Id
+        message:
+          type: string
+          title: Message
+        router:
+          $ref: '#/components/schemas/RouterDecisionOut'
+        brief:
+          $ref: '#/components/schemas/BriefStateOut'
+        found_items:
+          items:
+            $ref: '#/components/schemas/FoundCatalogItemOut'
+          type: array
+          title: Found Items
+      type: object
+      required:
+      - session_id
+      - message
+      - router
+      - brief
+      - found_items
+      title: AssistantChatResponseOut
+    Body_importCatalogCsv:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_importCatalogCsv
     Body_uploadDocument:
       properties:
         file:
@@ -625,6 +826,206 @@ components:
       required:
       - file
       title: Body_uploadDocument
+    BriefStateIn:
+      properties:
+        event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Type
+        city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: City
+        date_or_period:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date Or Period
+        audience_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audience Size
+        venue:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue
+        venue_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue Status
+        duration_or_time_window:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duration Or Time Window
+        budget:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget
+        event_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Level
+        required_services:
+          items:
+            type: string
+          type: array
+          title: Required Services
+        constraints:
+          items:
+            type: string
+          type: array
+          title: Constraints
+        preferences:
+          items:
+            type: string
+          type: array
+          title: Preferences
+      type: object
+      title: BriefStateIn
+    BriefStateOut:
+      properties:
+        event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Type
+        city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: City
+        date_or_period:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date Or Period
+        audience_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audience Size
+        venue:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue
+        venue_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue Status
+        duration_or_time_window:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duration Or Time Window
+        budget:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget
+        event_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Level
+        required_services:
+          items:
+            type: string
+          type: array
+          title: Required Services
+        constraints:
+          items:
+            type: string
+          type: array
+          title: Constraints
+        preferences:
+          items:
+            type: string
+          type: array
+          title: Preferences
+      type: object
+      required:
+      - event_type
+      - city
+      - date_or_period
+      - audience_size
+      - venue
+      - venue_status
+      - duration_or_time_window
+      - budget
+      - event_level
+      - required_services
+      - constraints
+      - preferences
+      title: BriefStateOut
+    CatalogSearchFiltersIn:
+      properties:
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        unit_price:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Unit Price
+      type: object
+      title: CatalogSearchFiltersIn
+    CatalogSearchRequestIn:
+      properties:
+        query:
+          type: string
+          title: Query
+        limit:
+          type: integer
+          title: Limit
+          default: 10
+        filters:
+          anyOf:
+          - $ref: '#/components/schemas/CatalogSearchFiltersIn'
+          - type: 'null'
+      type: object
+      required:
+      - query
+      title: CatalogSearchRequestIn
+    CatalogSearchResultOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/FoundPriceItemOut'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: CatalogSearchResultOut
     ChatMessageIn:
       properties:
         role:
@@ -913,6 +1314,120 @@ components:
       - INDEXED
       - FAILED
       title: DocumentStatus
+    FoundCatalogItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        score:
+          type: number
+          title: Score
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        source_text_snippet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text Snippet
+        source_text_full_available:
+          type: boolean
+          title: Source Text Full Available
+        match_reason:
+          $ref: '#/components/schemas/MatchReasonOut'
+      type: object
+      required:
+      - id
+      - score
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_city
+      - source_text_snippet
+      - source_text_full_available
+      - match_reason
+      title: FoundCatalogItemOut
+    FoundPriceItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        score:
+          type: number
+          title: Score
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        source_text_snippet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text Snippet
+        source_text_full_available:
+          type: boolean
+          title: Source Text Full Available
+        match_reason:
+          $ref: '#/components/schemas/MatchReasonOut'
+      type: object
+      required:
+      - id
+      - score
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_city
+      - source_text_snippet
+      - source_text_full_available
+      - match_reason
+      title: FoundPriceItemOut
     GlobalRagAnswerOut:
       properties:
         answer:
@@ -943,6 +1458,326 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    MatchReasonOut:
+      properties:
+        code:
+          type: string
+          enum:
+          - semantic
+          - keyword_name
+          - keyword_supplier
+          - keyword_inn
+          - keyword_source_text
+          - keyword_external_id
+          title: Code
+        label:
+          type: string
+          title: Label
+      type: object
+      required:
+      - code
+      - label
+      title: MatchReasonOut
+    PriceImportSummaryOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+        filename:
+          type: string
+          title: Filename
+        status:
+          type: string
+          title: Status
+        row_count:
+          type: integer
+          title: Row Count
+        valid_row_count:
+          type: integer
+          title: Valid Row Count
+        invalid_row_count:
+          type: integer
+          title: Invalid Row Count
+        embedding_template_version:
+          type: string
+          title: Embedding Template Version
+        embedding_model:
+          type: string
+          title: Embedding Model
+        duplicate_file:
+          type: boolean
+          title: Duplicate File
+      type: object
+      required:
+      - id
+      - source_file_id
+      - filename
+      - status
+      - row_count
+      - valid_row_count
+      - invalid_row_count
+      - embedding_template_version
+      - embedding_model
+      - duplicate_file
+      title: PriceImportSummaryOut
+    PriceItemDetailItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        external_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+        section:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Section
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        supplier_phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Phone
+        supplier_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Email
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        embedding_text:
+          type: string
+          title: Embedding Text
+        embedding_template_version:
+          type: string
+          title: Embedding Template Version
+        embedding_model:
+          type: string
+          title: Embedding Model
+        catalog_index_status:
+          type: string
+          title: Catalog Index Status
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+      type: object
+      required:
+      - id
+      - external_id
+      - name
+      - category
+      - unit
+      - unit_price
+      - source_text
+      - section
+      - supplier
+      - supplier_city
+      - has_vat
+      - supplier_inn
+      - supplier_phone
+      - supplier_email
+      - supplier_status
+      - embedding_text
+      - embedding_template_version
+      - embedding_model
+      - catalog_index_status
+      - import_batch_id
+      - source_file_id
+      title: PriceItemDetailItemOut
+    PriceItemDetailOut:
+      properties:
+        item:
+          $ref: '#/components/schemas/PriceItemDetailItemOut'
+        sources:
+          items:
+            $ref: '#/components/schemas/PriceItemSourceOut'
+          type: array
+          title: Sources
+      type: object
+      required:
+      - item
+      - sources
+      title: PriceItemDetailOut
+    PriceItemListOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PriceItemOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - total
+      title: PriceItemListOut
+    PriceItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        catalog_index_status:
+          type: string
+          title: Catalog Index Status
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_inn
+      - supplier_city
+      - has_vat
+      - supplier_status
+      - catalog_index_status
+      - import_batch_id
+      - source_file_id
+      title: PriceItemOut
+    PriceItemSourceOut:
+      properties:
+        source_kind:
+          type: string
+          title: Source Kind
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+        price_import_row_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Price Import Row Id
+        row_number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Row Number
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+      type: object
+      required:
+      - source_kind
+      - import_batch_id
+      - source_file_id
+      - price_import_row_id
+      - row_number
+      - source_text
+      title: PriceItemSourceOut
     RagAnswerOut:
       properties:
         answer:
@@ -1006,6 +1841,48 @@ components:
       - document_count
       - top_snippet
       title: RagContractorOut
+    RouterDecisionOut:
+      properties:
+        intent:
+          type: string
+          enum:
+          - brief_discovery
+          - supplier_search
+          - mixed
+          - clarification
+          title: Intent
+        confidence:
+          type: number
+          title: Confidence
+        known_facts:
+          additionalProperties: true
+          type: object
+          title: Known Facts
+        missing_fields:
+          items:
+            type: string
+          type: array
+          title: Missing Fields
+        should_search_now:
+          type: boolean
+          title: Should Search Now
+        search_query:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search Query
+        brief_update:
+          $ref: '#/components/schemas/BriefStateOut'
+      type: object
+      required:
+      - intent
+      - confidence
+      - known_facts
+      - missing_fields
+      - should_search_now
+      - search_query
+      - brief_update
+      title: RouterDecisionOut
     SourceRefOut:
       properties:
         document_id:

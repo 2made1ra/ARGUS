@@ -14,8 +14,14 @@ class Settings(BaseSettings):
     lm_studio_embedding_model: str = "nomic-embed-text-v1.5"
     lm_studio_llm_model: str
     upload_dir: Path = Path("/data/uploads")
-    qdrant_collection: str = "document_chunks"
-    embedding_dim: int = 768
+    document_qdrant_collection: str = "document_chunks"
+    document_embedding_dim: int = 768
+    catalog_qdrant_collection: str = "price_items_search_v1"
+    catalog_embedding_model: str = "nomic-embed-text-v1.5"
+    catalog_embedding_dim: int = 768
+    catalog_embedding_template_version: str = "prices_v1"
+    catalog_document_prefix: str = "search_document: "
+    catalog_query_prefix: str = "search_query: "
     rag_similarity_top_k: int = 15
     rag_context_top_k: int = 5
     rag_reranker_enabled: bool = False
