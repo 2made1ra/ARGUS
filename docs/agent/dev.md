@@ -23,6 +23,24 @@ LM_STUDIO_LLM_MODEL=<your model name>
 Settings are loaded by `backend/app/config.py` via `pydantic-settings`.
 `ALEMBIC_DATABASE_URL` is read separately by Alembic via `alembic.ini`.
 
+Catalog MVP settings should split document and catalog vector configuration when
+implemented:
+
+```text
+DOCUMENT_QDRANT_COLLECTION=document_chunks
+CATALOG_QDRANT_COLLECTION=price_items_search_v1
+CATALOG_EMBEDDING_MODEL=nomic-embed-text-v1.5
+CATALOG_EMBEDDING_DIM=768
+CATALOG_EMBEDDING_TEMPLATE_VERSION=prices_v1
+CATALOG_DOCUMENT_PREFIX="search_document: "
+CATALOG_QUERY_PREFIX="search_query: "
+```
+
+Do not copy catalog dimension from CSV legacy embeddings. For
+`nomic-embed-text-v1.5`, catalog rows are embedded with `search_document: ` and
+user queries with `search_query: `. A prefix/model/dimension/template change
+requires reindexing `price_items_search_v1`.
+
 ## uv workspace
 
 The repo root is a uv workspace with two members:
@@ -115,6 +133,22 @@ pytest backend/tests/features/test_search.py   # Specific file
 
 Config in root `pyproject.toml`: `asyncio_mode = "auto"`,
 `pythonpath = ["backend", "packages/sage"]`, `testpaths = ["backend/tests"]`.
+
+Catalog-first implementation should prefer focused checks for the changed slice:
+
+```bash
+uv run --project backend pytest backend/tests/features/catalog -v
+uv run --project backend pytest backend/tests/features/assistant -v
+uv run --project backend pytest backend/tests/adapters/qdrant -v
+```
+
+Document pipeline regressions should remain covered when touching SAGE,
+ingestion, document indexing or Qdrant bootstrap:
+
+```bash
+uv run --project packages/sage pytest -v
+uv run --project backend pytest backend/tests/features/ingest -v
+```
 
 ## Linting and formatting
 

@@ -1,5 +1,18 @@
 # Entity Resolution
 
+Entity resolution remains part of the document/PDF workflow. In the catalog MVP,
+CSV supplier fields on `price_items` are stored as catalog facts and are not
+automatically resolved into `contractors`.
+
+Guidance:
+
+- `supplier`, `supplier_inn`, `supplier_city`, phone and email from `prices.csv`
+  belong on `price_items` for cards, filters and provenance.
+- Do not call contractor resolution from the MVP CSV import path.
+- Do not block catalog search on contractor matching quality.
+- Post-MVP can add an explicit supplier-to-contractor linking workflow, but it
+  must preserve the original catalog row facts.
+
 `resolve_contractor(raw_name, inn) → ContractorEntityId`
 
 ## Matching cascade (stop at first match)
