@@ -20,6 +20,7 @@ env/
 # Local data
 data/
 test_files/
+docs/archive
 
 # IDE
 .idea/
