@@ -24,7 +24,9 @@ argus/
 │   │   │   ├── ingest/              # Upload → process → index pipeline
 │   │   │   ├── contractors/         # Entity resolution + contractor profiles
 │   │   │   ├── search/              # Drill-down semantic search
-│   │   │   └── documents/           # Document management + review
+│   │   │   ├── documents/           # Document management + review
+│   │   │   ├── catalog/             # CSV import, price_items, catalog search
+│   │   │   └── assistant/           # Unified chat, router, brief state
 │   │   │
 │   │   ├── adapters/
 │   │   │   ├── sqlalchemy/          # PostgreSQL repos
@@ -70,6 +72,39 @@ argus/
 | `contractors` | Entity resolution, contractor profiles, raw-to-entity mappings |
 | `search` | Drill-down semantic search + RAG answer use cases (global, per-contractor, per-document) |
 | `documents` | Document detail, list, extracted facts, PDF preview |
+| `catalog` | `prices.csv` import, normalization, `price_items`, `embedding_text`, catalog indexing and `search_items` |
+| `assistant` | Unified chat turn, structured router, `BriefState`, tool orchestration through explicit ports |
+
+## Catalog-first MVP Architecture
+
+The MVP product direction is catalog-first for event agency managers:
+
+```
+prices.csv
+  -> catalog import use case
+  -> Postgres price_items
+  -> deterministic embedding_text prices_v1
+  -> catalog embedding + Qdrant price_items_search_v1
+  -> assistant search_items tool
+  -> unified chat UI with message + brief + found_items
+```
+
+Boundaries:
+
+- `catalog` owns CSV-compatible catalog rows, normalization, duplicate guards,
+  `embedding_text`, indexing and search contracts.
+- `assistant` owns user-facing chat behavior, intent routing, brief state and
+  tool calls. It must call catalog through ports/services, not direct SQL.
+- `ingest`, `documents`, `contractors` and document `search` remain available
+  for PDF/document workflows. Their lifecycle and task chain stay unchanged.
+- Features must not import from each other. Share only explicit contracts or
+  core value objects.
+- Business decisions such as source-text inclusion, duplicate handling, match
+  reason generation and assistant evidence rules belong in use cases/domain
+  services, never FastAPI routes, Celery tasks or adapters.
+
+Do not mix `document_chunks` vectors and `price_items` vectors in one Qdrant
+collection. Document search/RAG and catalog search are different product flows.
 
 ## packages/sage
 

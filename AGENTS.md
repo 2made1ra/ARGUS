@@ -9,8 +9,13 @@ and link to it here instead of copying it.
 
 ## Project Snapshot
 
-ARGUS is a document intelligence platform for contractor management and contract
-search. Core flow:
+ARGUS is moving to a catalog-first MVP for event agency managers. Primary MVP
+flow:
+
+`prices.csv -> price_items -> price_items_search_v1 -> unified assistant chat`
+
+Existing document intelligence remains available as a secondary workflow. Core
+document flow:
 
 `topic search -> contractor profile -> contractor documents -> search inside a document`
 
@@ -64,6 +69,17 @@ owns FastAPI routers and Celery tasks.
 - HTTP handlers, Celery tasks, and CLI scripts stay thin: call use cases, map
   errors, and handle transport concerns.
 - Preparatory refactors must preserve behavior unless the user asks otherwise.
+
+Catalog MVP boundaries:
+
+- `price_items` in Postgres is the source of truth for catalog facts.
+- Qdrant `price_items_search_v1` is the controlled catalog vector index.
+- New embeddings come from deterministic `embedding_text` with template `prices_v1`.
+- CSV legacy `embedding` is audit-only and must not be used for user query search.
+- Unified assistant chat is the primary UI; its response separates `message`,
+  `router`, `brief`, and `found_items`.
+- Catalog search evidence is checkable item cards/table from Postgres, not RAG
+  prose. Document RAG/search remains secondary.
 
 ## SAGE And Pipeline
 
