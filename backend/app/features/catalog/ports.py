@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Protocol
 from uuid import UUID
 
 from app.features.catalog.entities.price_item import (
@@ -64,10 +66,83 @@ class PriceItemRepository(Protocol):
     async def get_with_sources(self, item_id: UUID) -> PriceItemDetail: ...
 
 
+class PriceItemIndexRepository(Protocol):
+    async def list_active_for_indexing(self, *, limit: int) -> list[PriceItem]: ...
+
+    async def mark_indexed(
+        self,
+        item_id: UUID,
+        *,
+        embedding_model: str,
+        embedding_template_version: str,
+        indexed_at: datetime,
+    ) -> None: ...
+
+    async def mark_embedding_failed(self, item_id: UUID, *, error: str) -> None: ...
+
+    async def mark_indexing_failed(self, item_id: UUID, *, error: str) -> None: ...
+
+
+@dataclass(slots=True)
+class CatalogVectorPoint:
+    id: UUID
+    vector: list[float]
+    payload: dict[str, Any]
+
+
+@dataclass(slots=True)
+class CatalogSearchFilters:
+    price_item_id: UUID | None = None
+    import_batch_id: UUID | None = None
+    source_file_id: UUID | None = None
+    category: str | None = None
+    section: str | None = None
+    unit: str | None = None
+    unit_price: float | None = None
+    unit_price_min: float | None = None
+    unit_price_max: float | None = None
+    has_vat: str | None = None
+    vat_mode: str | None = None
+    supplier_city: str | None = None
+    supplier_status: str | None = None
+    embedding_template_version: str | None = None
+
+
+@dataclass(slots=True)
+class CatalogSearchHit:
+    price_item_id: UUID
+    score: float
+    payload: dict[str, Any]
+
+
+class CatalogEmbeddingService(Protocol):
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+class CatalogVectorIndex(Protocol):
+    async def upsert_points(self, points: list[CatalogVectorPoint]) -> None: ...
+
+
+class CatalogVectorSearch(Protocol):
+    async def search(
+        self,
+        *,
+        query_vector: list[float],
+        filters: CatalogSearchFilters | None,
+        limit: int,
+    ) -> list[CatalogSearchHit]: ...
+
+
 __all__ = [
+    "CatalogEmbeddingService",
+    "CatalogSearchFilters",
+    "CatalogSearchHit",
+    "CatalogVectorIndex",
+    "CatalogVectorPoint",
+    "CatalogVectorSearch",
     "PriceImportRepository",
     "PriceItemNotFound",
+    "PriceItemIndexRepository",
     "PriceItemRepository",
     "UnitOfWork",
 ]
-

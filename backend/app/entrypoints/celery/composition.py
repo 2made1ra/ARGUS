@@ -86,9 +86,12 @@ async def build_index_uc() -> AsyncIterator[IndexDocumentUseCase]:
             embeddings=LMStudioEmbeddings(
                 base_url=settings.lm_studio_url,
                 model=settings.lm_studio_embedding_model,
-                embedding_dim=settings.embedding_dim,
+                embedding_dim=settings.document_embedding_dim,
             ),
-            index=QdrantVectorIndex(qdrant_client, settings.qdrant_collection),
+            index=QdrantVectorIndex(
+                qdrant_client,
+                settings.document_qdrant_collection,
+            ),
             uow=SessionUnitOfWork(session),
         )
     finally:

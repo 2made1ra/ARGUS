@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.sqlalchemy.models import PriceImportRow as PriceImportRowRow
@@ -69,6 +70,70 @@ class SqlAlchemyPriceItemRepository:
         total_value = await self._session.scalar(count_statement)
         total = total_value if isinstance(total_value, int) else len(items)
         return PriceItemList(items=items, total=total)
+
+    async def list_active_for_indexing(self, *, limit: int) -> list[PriceItem]:
+        statement = (
+            select(PriceItemRow)
+            .where(
+                PriceItemRow.is_active.is_(True),
+                PriceItemRow.catalog_index_status != "indexed",
+            )
+            .order_by(PriceItemRow.created_at.asc(), PriceItemRow.id.asc())
+            .limit(limit)
+        )
+        rows = await self._session.scalars(statement)
+        return [_item_to_entity(row) for row in rows]
+
+    async def mark_indexed(
+        self,
+        item_id: UUID,
+        *,
+        embedding_model: str,
+        embedding_template_version: str,
+        indexed_at: datetime,
+    ) -> None:
+        statement = (
+            update(PriceItemRow)
+            .where(PriceItemRow.id == item_id)
+            .values(
+                embedding_model=embedding_model,
+                embedding_template_version=embedding_template_version,
+                catalog_index_status="indexed",
+                embedding_error=None,
+                indexing_error=None,
+                indexed_at=indexed_at,
+                updated_at=indexed_at,
+            )
+        )
+        await self._session.execute(statement)
+
+    async def mark_embedding_failed(self, item_id: UUID, *, error: str) -> None:
+        statement = (
+            update(PriceItemRow)
+            .where(PriceItemRow.id == item_id)
+            .values(
+                catalog_index_status="embedding_failed",
+                embedding_error=error,
+                indexing_error=None,
+                indexed_at=None,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(statement)
+
+    async def mark_indexing_failed(self, item_id: UUID, *, error: str) -> None:
+        statement = (
+            update(PriceItemRow)
+            .where(PriceItemRow.id == item_id)
+            .values(
+                catalog_index_status="indexing_failed",
+                embedding_error=None,
+                indexing_error=error,
+                indexed_at=None,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(statement)
 
     async def get_with_sources(self, item_id: UUID) -> PriceItemDetail:
         item_statement = select(PriceItemRow).where(PriceItemRow.id == item_id)
@@ -187,4 +252,3 @@ def _item_to_entity(row: PriceItemRow) -> PriceItem:
 
 
 __all__ = ["SqlAlchemyPriceItemRepository"]
-

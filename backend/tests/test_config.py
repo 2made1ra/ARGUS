@@ -13,8 +13,14 @@ CONFIG_ENV_KEYS = (
     "LM_STUDIO_EMBEDDING_MODEL",
     "LM_STUDIO_LLM_MODEL",
     "UPLOAD_DIR",
-    "QDRANT_COLLECTION",
-    "EMBEDDING_DIM",
+    "DOCUMENT_QDRANT_COLLECTION",
+    "DOCUMENT_EMBEDDING_DIM",
+    "CATALOG_QDRANT_COLLECTION",
+    "CATALOG_EMBEDDING_MODEL",
+    "CATALOG_EMBEDDING_DIM",
+    "CATALOG_EMBEDDING_TEMPLATE_VERSION",
+    "CATALOG_DOCUMENT_PREFIX",
+    "CATALOG_QUERY_PREFIX",
 )
 ENV_KEYS = CONFIG_ENV_KEYS + tuple(key.lower() for key in CONFIG_ENV_KEYS)
 ENV_FILE_KEYS = ENV_KEYS + ("ALEMBIC_DATABASE_URL", "alembic_database_url")
@@ -62,8 +68,37 @@ def test_settings_parses_env_and_defaults(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.lm_studio_llm_model == "local-llm"
     assert settings.lm_studio_embedding_model == "nomic-embed-text-v1.5"
     assert settings.upload_dir == Path("/data/uploads")
-    assert settings.qdrant_collection == "document_chunks"
-    assert settings.embedding_dim == 768
+    assert settings.document_qdrant_collection == "document_chunks"
+    assert settings.document_embedding_dim == 768
+    assert settings.catalog_qdrant_collection == "price_items_search_v1"
+    assert settings.catalog_embedding_model == "nomic-embed-text-v1.5"
+    assert settings.catalog_embedding_dim == 768
+    assert settings.catalog_embedding_template_version == "prices_v1"
+    assert settings.catalog_document_prefix == "search_document: "
+    assert settings.catalog_query_prefix == "search_query: "
+
+
+def test_settings_parses_catalog_vector_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_required_env(monkeypatch)
+    monkeypatch.setenv("DOCUMENT_QDRANT_COLLECTION", "document_test")
+    monkeypatch.setenv("DOCUMENT_EMBEDDING_DIM", "384")
+    monkeypatch.setenv("CATALOG_QDRANT_COLLECTION", "catalog_test")
+    monkeypatch.setenv("CATALOG_EMBEDDING_MODEL", "catalog-model")
+    monkeypatch.setenv("CATALOG_EMBEDDING_DIM", "1024")
+    monkeypatch.setenv("CATALOG_EMBEDDING_TEMPLATE_VERSION", "prices_v2")
+    monkeypatch.setenv("CATALOG_DOCUMENT_PREFIX", "doc: ")
+    monkeypatch.setenv("CATALOG_QUERY_PREFIX", "query: ")
+
+    settings = _settings_without_env_file()
+
+    assert settings.document_qdrant_collection == "document_test"
+    assert settings.document_embedding_dim == 384
+    assert settings.catalog_qdrant_collection == "catalog_test"
+    assert settings.catalog_embedding_model == "catalog-model"
+    assert settings.catalog_embedding_dim == 1024
+    assert settings.catalog_embedding_template_version == "prices_v2"
+    assert settings.catalog_document_prefix == "doc: "
+    assert settings.catalog_query_prefix == "query: "
 
 
 def test_settings_requires_database_url(monkeypatch: pytest.MonkeyPatch) -> None:

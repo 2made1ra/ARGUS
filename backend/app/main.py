@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.adapters.qdrant.bootstrap import bootstrap_collection
+from app.adapters.qdrant.bootstrap import bootstrap_qdrant_collections
 from app.adapters.qdrant.client import make_qdrant_client
 from app.config import get_settings
 from app.entrypoints.http.router import router
@@ -15,10 +15,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     qdrant = make_qdrant_client(settings.qdrant_url)
     try:
-        await bootstrap_collection(
+        await bootstrap_qdrant_collections(
             qdrant,
-            settings.qdrant_collection,
-            settings.embedding_dim,
+            document_collection=settings.document_qdrant_collection,
+            document_dim=settings.document_embedding_dim,
+            catalog_collection=settings.catalog_qdrant_collection,
+            catalog_dim=settings.catalog_embedding_dim,
         )
     finally:
         await qdrant.close()

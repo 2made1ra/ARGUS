@@ -80,27 +80,27 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_catalog.py -
 
 **Steps:**
 
-- [ ] Write failing tests proving the CSV legacy `embedding` is not used as the catalog vector.
-- [ ] Write failing config/bootstrap tests for `price_items_search_v1`, catalog dimension and payload indexes.
-- [ ] Write failing catalog index adapter tests for point id, vector dimension and payload.
-- [ ] Write failing index use case tests for successful index, `embedding_failed`, `indexing_failed`, skipped inactive rows and no Postgres vector persistence.
-- [ ] Write failing tests proving index input uses `catalog_document_prefix + embedding_text`.
-- [ ] Split document and catalog embedding/vector config:
+- [x] Write failing tests proving the CSV legacy `embedding` is not used as the catalog vector.
+- [x] Write failing config/bootstrap tests for `price_items_search_v1`, catalog dimension and payload indexes.
+- [x] Write failing catalog index adapter tests for point id, vector dimension and payload.
+- [x] Write failing index use case tests for successful index, `embedding_failed`, `indexing_failed`, skipped inactive rows and no Postgres vector persistence.
+- [x] Write failing tests proving index input uses `catalog_document_prefix + embedding_text`.
+- [x] Split document and catalog embedding/vector config:
   - `catalog_qdrant_collection`;
   - `catalog_embedding_model`;
   - `catalog_embedding_dim`;
   - `catalog_embedding_template_version`;
   - `catalog_document_prefix`;
   - `catalog_query_prefix`.
-- [ ] Add catalog embedding client dependency using catalog config.
-- [ ] Extend Qdrant bootstrap for document and catalog collections.
-- [ ] Implement catalog Qdrant index adapter.
-- [ ] Implement catalog Qdrant search adapter result mapping.
-- [ ] Implement `IndexPriceItemsUseCase` as one flow: `embedding_text` -> embedding generation -> dimension validation -> Qdrant upsert -> `catalog_index_status`.
-- [ ] Set `catalog_index_status = indexed`, `embedding_failed` or `indexing_failed` with separate `embedding_error` and `indexing_error`.
-- [ ] Add payload indexes for MVP filters.
-- [ ] Update docs for Qdrant collection, prefix contract and payload contract.
-- [ ] Run focused Qdrant/indexing checks.
+- [x] Add catalog embedding client dependency using catalog config.
+- [x] Extend Qdrant bootstrap for document and catalog collections.
+- [x] Implement catalog Qdrant index adapter.
+- [x] Implement catalog Qdrant search adapter result mapping.
+- [x] Implement `IndexPriceItemsUseCase` as one flow: `embedding_text` -> embedding generation -> dimension validation -> Qdrant upsert -> `catalog_index_status`.
+- [x] Set `catalog_index_status = indexed`, `embedding_failed` or `indexing_failed` with separate `embedding_error` and `indexing_error`.
+- [x] Add payload indexes for MVP filters.
+- [x] Update docs for Qdrant collection, prefix contract and payload contract.
+- [x] Run focused Qdrant/indexing checks.
 
 **Verification:**
 
