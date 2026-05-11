@@ -29,27 +29,27 @@ This plan starts after the `catalog-first-refactor` docs have been updated. It d
 
 **Steps:**
 
-- [ ] Write failing tests for CSV parsing: multiline `source_text`, empty `category`, empty `source_text`, raw `embedding` preservation.
-- [ ] Write failing tests for normalization: unit, VAT, city, price, INN warnings and required fields.
-- [ ] Write failing tests for deterministic `embedding_text prices_v1`, including `source_text` inclusion/exclusion:
+- [x] Write failing tests for CSV parsing: multiline `source_text`, empty `category`, empty `source_text`, raw `embedding` preservation.
+- [x] Write failing tests for normalization: unit, VAT, city, price, INN warnings and required fields.
+- [x] Write failing tests for deterministic `embedding_text prices_v1`, including `source_text` inclusion/exclusion:
   - empty source -> omitted;
   - `Ручной ввод` -> omitted;
   - same normalized text as `name` -> omitted;
   - meaningful description -> included.
-- [ ] Write failing import use case tests for `price_imports`, `price_import_rows`, `price_items`, `source_file_id`, `import_batch_id` and legacy embedding metadata.
-- [ ] Write failing duplicate-protection tests for repeated `file_sha256`, active `row_fingerprint` reuse and changed price/fields creating a new row.
-- [ ] Write failing repository tests for add/list/get/source operations.
-- [ ] Add ORM models and Alembic migration.
-- [ ] Add catalog entities and ports.
-- [ ] Implement CSV parser with `csv.DictReader`.
-- [ ] Implement pure normalization functions.
-- [ ] Implement `row_fingerprint` builder from normalized row facts.
-- [ ] Implement `embedding_text` builder.
-- [ ] Implement SQLAlchemy repositories.
-- [ ] Implement `ImportPricesCsvUseCase`.
-- [ ] Add `POST /catalog/imports`, `GET /catalog/items`, `GET /catalog/items/{id}`.
-- [ ] Update OpenAPI and `docs/agent/data-model.md`.
-- [ ] Run focused backend checks.
+- [x] Write failing import use case tests for `price_imports`, `price_import_rows`, `price_items`, `source_file_id`, `import_batch_id` and legacy embedding metadata.
+- [x] Write failing duplicate-protection tests for repeated `file_sha256`, active `row_fingerprint` reuse and changed price/fields creating a new row.
+- [x] Write failing repository tests for add/list/get/source operations.
+- [x] Add ORM models and Alembic migration.
+- [x] Add catalog entities and ports.
+- [x] Implement CSV parser with `csv.DictReader`.
+- [x] Implement pure normalization functions.
+- [x] Implement `row_fingerprint` builder from normalized row facts.
+- [x] Implement `embedding_text` builder.
+- [x] Implement SQLAlchemy repositories.
+- [x] Implement `ImportPricesCsvUseCase`.
+- [x] Add `POST /catalog/imports`, `GET /catalog/items`, `GET /catalog/items/{id}`.
+- [x] Update OpenAPI and `docs/agent/data-model.md`.
+- [x] Run focused backend checks.
 
 **Verification:**
 

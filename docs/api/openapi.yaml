@@ -5,6 +5,96 @@ info:
     search.
   version: 0.1.0
 paths:
+  /catalog/imports:
+    post:
+      tags:
+      - catalog
+      summary: Import catalog CSV
+      description: Imports a prices.csv-compatible file as raw import rows plus normalized
+        active price_items. Legacy CSV embeddings are preserved only as audit metadata.
+      operationId: importCatalogCsv
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_importCatalogCsv'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceImportSummaryOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/items:
+    get:
+      tags:
+      - catalog
+      summary: List active catalog items
+      description: Returns active price_items for catalog administration and hydration.
+      operationId: listCatalogItems
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceItemListOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/items/{id}:
+    get:
+      tags:
+      - catalog
+      summary: Get catalog item detail
+      description: Returns a full price_item row with CSV import provenance.
+      operationId: getCatalogItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceItemDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /documents/upload:
     post:
       tags:
@@ -625,6 +715,16 @@ components:
       required:
       - file
       title: Body_uploadDocument
+    Body_importCatalogCsv:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_importCatalogCsv
     ChatMessageIn:
       properties:
         role:
@@ -943,6 +1043,306 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    PriceImportSummaryOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+        filename:
+          type: string
+          title: Filename
+        status:
+          type: string
+          title: Status
+        row_count:
+          type: integer
+          title: Row Count
+        valid_row_count:
+          type: integer
+          title: Valid Row Count
+        invalid_row_count:
+          type: integer
+          title: Invalid Row Count
+        embedding_template_version:
+          type: string
+          title: Embedding Template Version
+        embedding_model:
+          type: string
+          title: Embedding Model
+        duplicate_file:
+          type: boolean
+          title: Duplicate File
+      type: object
+      required:
+      - id
+      - source_file_id
+      - filename
+      - status
+      - row_count
+      - valid_row_count
+      - invalid_row_count
+      - embedding_template_version
+      - embedding_model
+      - duplicate_file
+      title: PriceImportSummaryOut
+    PriceItemDetailItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        external_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+        section:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Section
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        supplier_phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Phone
+        supplier_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Email
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        embedding_text:
+          type: string
+          title: Embedding Text
+        embedding_template_version:
+          type: string
+          title: Embedding Template Version
+        embedding_model:
+          type: string
+          title: Embedding Model
+        catalog_index_status:
+          type: string
+          title: Catalog Index Status
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+      type: object
+      required:
+      - id
+      - external_id
+      - name
+      - category
+      - unit
+      - unit_price
+      - source_text
+      - section
+      - supplier
+      - supplier_city
+      - has_vat
+      - supplier_inn
+      - supplier_phone
+      - supplier_email
+      - supplier_status
+      - embedding_text
+      - embedding_template_version
+      - embedding_model
+      - catalog_index_status
+      - import_batch_id
+      - source_file_id
+      title: PriceItemDetailItemOut
+    PriceItemDetailOut:
+      properties:
+        item:
+          $ref: '#/components/schemas/PriceItemDetailItemOut'
+        sources:
+          items:
+            $ref: '#/components/schemas/PriceItemSourceOut'
+          type: array
+          title: Sources
+      type: object
+      required:
+      - item
+      - sources
+      title: PriceItemDetailOut
+    PriceItemListOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PriceItemOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - total
+      title: PriceItemListOut
+    PriceItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        catalog_index_status:
+          type: string
+          title: Catalog Index Status
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_inn
+      - supplier_city
+      - has_vat
+      - supplier_status
+      - catalog_index_status
+      - import_batch_id
+      - source_file_id
+      title: PriceItemOut
+    PriceItemSourceOut:
+      properties:
+        source_kind:
+          type: string
+          title: Source Kind
+        import_batch_id:
+          type: string
+          format: uuid
+          title: Import Batch Id
+        source_file_id:
+          type: string
+          format: uuid
+          title: Source File Id
+        price_import_row_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Price Import Row Id
+        row_number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Row Number
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+      type: object
+      required:
+      - source_kind
+      - import_batch_id
+      - source_file_id
+      - price_import_row_id
+      - row_number
+      - source_text
+      title: PriceItemSourceOut
     RagAnswerOut:
       properties:
         answer:

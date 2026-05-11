@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Depends
 from qdrant_client import AsyncQdrantClient
@@ -16,17 +17,22 @@ from app.adapters.sqlalchemy.contractors import (
 )
 from app.adapters.sqlalchemy.documents import SqlAlchemyDocumentRepository
 from app.adapters.sqlalchemy.fields import SqlAlchemyFieldsRepository
+from app.adapters.sqlalchemy.price_imports import SqlAlchemyPriceImportRepository
+from app.adapters.sqlalchemy.price_items import SqlAlchemyPriceItemRepository
 from app.adapters.sqlalchemy.summaries import SqlAlchemySummaryRepository
 from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork
 from app.config import Settings, get_settings
 from app.entrypoints.http.session import _session, get_qdrant_client, get_sessionmaker
+from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
+from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
+from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
 from app.features.contractors.use_cases.get_contractor_profile import (
     GetContractorProfileUseCase,
 )
-from app.features.contractors.use_cases.list_contractors import ListContractorsUseCase
 from app.features.contractors.use_cases.list_contractor_documents import (
     ListContractorDocumentsUseCase,
 )
+from app.features.contractors.use_cases.list_contractors import ListContractorsUseCase
 from app.features.documents.use_cases.delete_document import DeleteDocumentUseCase
 from app.features.documents.use_cases.get_document import GetDocumentUseCase
 from app.features.documents.use_cases.get_document_facts import GetDocumentFactsUseCase
@@ -34,7 +40,9 @@ from app.features.documents.use_cases.get_document_preview import (
     GetDocumentPreviewUseCase,
 )
 from app.features.documents.use_cases.list_documents import ListDocumentsUseCase
-from app.features.documents.use_cases.update_document_facts import UpdateDocumentFactsUseCase
+from app.features.documents.use_cases.update_document_facts import (
+    UpdateDocumentFactsUseCase,
+)
 from app.features.ingest.use_cases.upload_document import UploadDocumentUseCase
 from app.features.search.use_cases.answer_contractor import AnswerContractorUseCase
 from app.features.search.use_cases.answer_document import AnswerDocumentUseCase
@@ -44,6 +52,35 @@ from app.features.search.use_cases.search_documents import SearchDocumentsUseCas
 from app.features.search.use_cases.search_within_document import (
     SearchWithinDocumentUseCase,
 )
+
+# ---------------------------------------------------------------------------
+# Catalog use cases
+# ---------------------------------------------------------------------------
+
+
+def get_import_prices_csv_uc(
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> ImportPricesCsvUseCase:
+    return ImportPricesCsvUseCase(
+        imports=SqlAlchemyPriceImportRepository(session),
+        items=SqlAlchemyPriceItemRepository(session),
+        uow=SessionUnitOfWork(session),
+        embedding_model=settings.lm_studio_embedding_model,
+    )
+
+
+def get_list_price_items_uc(
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> ListPriceItemsUseCase:
+    return ListPriceItemsUseCase(items=SqlAlchemyPriceItemRepository(session))
+
+
+def get_get_price_item_uc(
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> GetPriceItemUseCase:
+    return GetPriceItemUseCase(items=SqlAlchemyPriceItemRepository(session))
+
 
 # ---------------------------------------------------------------------------
 # Ingest use cases
@@ -275,11 +312,14 @@ __all__ = [
     "get_document_facts_uc",
     "get_document_preview_uc",
     "get_document_rag_answer_uc",
+    "get_get_price_item_uc",
     "get_get_document_uc",
     "get_global_rag_answer_uc",
+    "get_import_prices_csv_uc",
     "get_list_contractors_uc",
     "get_list_contractor_documents_uc",
     "get_list_documents_uc",
+    "get_list_price_items_uc",
     "get_qdrant_client",
     "get_search_contractors_uc",
     "get_search_documents_uc",
