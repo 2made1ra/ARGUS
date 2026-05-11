@@ -5,12 +5,12 @@ export default function Home() {
     <main className="workspace">
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">Upload</p>
+          <p className="eyebrow">Documents</p>
           <h1>Загрузка договоров</h1>
         </div>
         <p className="workspace-header__note">
-          После загрузки документ проходит SAGE, резолв подрядчика и индексацию
-          в Qdrant.
+          Вторичный документный workflow остается доступен отдельно от основного
+          каталожного ассистента.
         </p>
       </header>
 

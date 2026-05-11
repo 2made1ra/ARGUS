@@ -5,11 +5,12 @@ export default function SearchPage() {
     <main className="workspace search-workspace">
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">AI Search</p>
-          <h1>Поиск подрядчиков по базе договоров</h1>
+          <p className="eyebrow">Document RAG</p>
+          <h1>Поиск по документам</h1>
         </div>
         <p className="workspace-header__note">
-          Ответы формируются локальной LLM и привязаны к найденным фрагментам.
+          Вторичный drill-down поиск по договорам: подрядчики, документы и
+          проверяемые фрагменты.
         </p>
       </header>
 

@@ -110,6 +110,157 @@ export interface GlobalRagAnswer extends RagAnswer {
   contractors: RagContractorResult[];
 }
 
+export interface BriefState {
+  event_type: string | null;
+  city: string | null;
+  date_or_period: string | null;
+  audience_size: number | null;
+  venue: string | null;
+  venue_status: string | null;
+  duration_or_time_window: string | null;
+  budget: string | null;
+  event_level: string | null;
+  required_services: string[];
+  constraints: string[];
+  preferences: string[];
+}
+
+export const emptyBriefState: BriefState = {
+  event_type: null,
+  city: null,
+  date_or_period: null,
+  audience_size: null,
+  venue: null,
+  venue_status: null,
+  duration_or_time_window: null,
+  budget: null,
+  event_level: null,
+  required_services: [],
+  constraints: [],
+  preferences: [],
+};
+
+export type RouterIntent =
+  | "brief_discovery"
+  | "supplier_search"
+  | "mixed"
+  | "clarification";
+
+export interface RouterDecision {
+  intent: RouterIntent;
+  confidence: number;
+  known_facts: Record<string, unknown>;
+  missing_fields: string[];
+  should_search_now: boolean;
+  search_query: string | null;
+  brief_update: BriefState;
+}
+
+export type MatchReasonCode =
+  | "semantic"
+  | "keyword_name"
+  | "keyword_supplier"
+  | "keyword_inn"
+  | "keyword_source_text"
+  | "keyword_external_id";
+
+export interface MatchReason {
+  code: MatchReasonCode;
+  label: string;
+}
+
+export interface FoundItem {
+  id: string;
+  score: number;
+  name: string;
+  category: string | null;
+  unit: string;
+  unit_price: string;
+  supplier: string | null;
+  supplier_city: string | null;
+  source_text_snippet: string | null;
+  source_text_full_available: boolean;
+  match_reason: MatchReason;
+}
+
+export interface AssistantChatRequest {
+  session_id: string | null;
+  message: string;
+  brief?: BriefState | null;
+}
+
+export interface AssistantChatResponse {
+  session_id: string;
+  message: string;
+  router: RouterDecision;
+  brief: BriefState;
+  found_items: FoundItem[];
+}
+
+export interface CatalogSearchFilters {
+  supplier_city?: string | null;
+  category?: string | null;
+  supplier_status?: string | null;
+  has_vat?: string | null;
+  unit_price?: string | number | null;
+}
+
+export interface CatalogSearchRequest {
+  query: string;
+  limit?: number;
+  filters?: CatalogSearchFilters | null;
+}
+
+export interface CatalogSearchResult {
+  items: FoundItem[];
+}
+
+export interface PriceItemOut {
+  id: string;
+  name: string;
+  category: string | null;
+  unit: string;
+  unit_price: string;
+  supplier: string | null;
+  supplier_inn: string | null;
+  supplier_city: string | null;
+  has_vat: string | null;
+  supplier_status: string | null;
+  catalog_index_status: string;
+  import_batch_id: string;
+  source_file_id: string;
+}
+
+export interface PriceItemListOut {
+  items: PriceItemOut[];
+  total: number;
+}
+
+export interface PriceItemDetailItemOut extends PriceItemOut {
+  external_id: string | null;
+  source_text: string | null;
+  section: string | null;
+  supplier_phone: string | null;
+  supplier_email: string | null;
+  embedding_text: string;
+  embedding_template_version: string;
+  embedding_model: string;
+}
+
+export interface PriceItemSourceOut {
+  source_kind: string;
+  import_batch_id: string;
+  source_file_id: string;
+  price_import_row_id: string | null;
+  row_number: number | null;
+  source_text: string | null;
+}
+
+export interface PriceItemDetailOut {
+  item: PriceItemDetailItemOut;
+  sources: PriceItemSourceOut[];
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -189,6 +340,20 @@ export const answerDocument = (
     message,
     history,
   });
+
+export const assistantChat = (body: AssistantChatRequest) =>
+  postJson<AssistantChatResponse>("/assistant/chat", body);
+
+export const listCatalogItems = (limit = 50, offset = 0) =>
+  apiFetch<PriceItemListOut>(
+    `/catalog/items?limit=${limit}&offset=${offset}`,
+  );
+
+export const getCatalogItem = (id: string) =>
+  apiFetch<PriceItemDetailOut>(`/catalog/items/${id}`);
+
+export const searchCatalogItems = (body: CatalogSearchRequest) =>
+  postJson<CatalogSearchResult>("/catalog/search", body);
 
 export async function patchDocumentFacts(
   id: string,

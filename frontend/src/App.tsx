@@ -1,4 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import AssistantPage from "./pages/AssistantPage";
+import CatalogItemPage from "./pages/CatalogItemPage";
 import CatalogPage from "./pages/CatalogPage";
 import ContractorPage from "./pages/ContractorPage";
 import DocumentPage from "./pages/DocumentPage";
@@ -7,9 +9,10 @@ import Home from "./pages/Home";
 import SearchPage from "./pages/SearchPage";
 
 const navItems = [
-  { to: "/", label: "Загрузка", glyph: "01" },
-  { to: "/search", label: "AI-поиск", glyph: "02" },
-  { to: "/catalog", label: "Каталог", glyph: "03" },
+  { to: "/", label: "Ассистент", glyph: "01" },
+  { to: "/catalog", label: "Каталог", glyph: "02" },
+  { to: "/search", label: "Документы", glyph: "03" },
+  { to: "/documents/upload", label: "Загрузка", glyph: "04" },
 ];
 
 export default function App() {
@@ -41,9 +44,11 @@ export default function App() {
       </aside>
 
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<AssistantPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/catalog/items/:id" element={<CatalogItemPage />} />
+        <Route path="/documents/upload" element={<Home />} />
         <Route path="/contractors/:id" element={<ContractorPage />} />
         <Route path="/documents/:id/validate" element={<DocumentValidationPage />} />
         <Route path="/documents/:id" element={<DocumentPage />} />

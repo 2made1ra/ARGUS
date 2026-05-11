@@ -225,19 +225,19 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_assistant.py
 
 **Steps:**
 
-- [ ] Add TypeScript DTOs for `BriefState`, `RouterDecision`, `FoundItem`, catalog item list/detail and assistant chat response.
-- [ ] Add API functions for `/assistant/chat`, `/catalog/items`, `/catalog/items/{id}` and `/catalog/search`.
-- [ ] Build `AssistantChat` with message thread and composer.
-- [ ] Build `BriefDraftPanel` with compact current brief fields.
-- [ ] Build `FoundItemsPanel` with `name`, `unit_price`, `unit`, `supplier`, `supplier_city`, `category`, `source_text_snippet` and backend-generated `match_reason`.
-- [ ] Build `AssistantPage` as the primary user workspace.
-- [ ] Keep assistant prose visually separate from "Черновик брифа" and "Найденные позиции".
-- [ ] Ensure catalog facts are visible in cards/table and are not only embedded in assistant text.
-- [ ] Update catalog page into a data/admin table for imported rows.
-- [ ] Add catalog item detail route that shows full `source_text` and CSV provenance.
-- [ ] Remove primary search/brief tabs from the user flow.
-- [ ] Preserve existing document routes and drill-down navigation.
-- [ ] Run frontend build.
+- [x] Add TypeScript DTOs for `BriefState`, `RouterDecision`, `FoundItem`, catalog item list/detail and assistant chat response.
+- [x] Add API functions for `/assistant/chat`, `/catalog/items`, `/catalog/items/{id}` and `/catalog/search`.
+- [x] Build `AssistantChat` with message thread and composer.
+- [x] Build `BriefDraftPanel` with compact current brief fields.
+- [x] Build `FoundItemsPanel` with `name`, `unit_price`, `unit`, `supplier`, `supplier_city`, `category`, `source_text_snippet` and backend-generated `match_reason`.
+- [x] Build `AssistantPage` as the primary user workspace.
+- [x] Keep assistant prose visually separate from "Черновик брифа" and "Найденные позиции".
+- [x] Ensure catalog facts are visible in cards/table and are not only embedded in assistant text.
+- [x] Update catalog page into a data/admin table for imported rows.
+- [x] Add catalog item detail route that shows full `source_text` and CSV provenance.
+- [x] Remove primary search/brief tabs from the user flow.
+- [x] Preserve existing document routes and drill-down navigation.
+- [x] Run frontend build.
 
 **Verification:**
 
@@ -254,7 +254,12 @@ Manual checks:
 - [ ] Search result facts are visible in "Найденные позиции" rather than only inside the chat text.
 - [ ] Found item opens `/catalog/items/:id`.
 - [ ] Catalog item detail shows full source text/provenance for verification.
-- [ ] Existing document upload/status/search pages remain reachable.
+- [x] Existing document upload/status/search pages remain reachable.
+
+Review note 2026-05-12: frontend build passed, and Vite routes `/`, `/catalog`,
+`/catalog/items/:id`, `/search`, `/documents/upload` and `/documents/:id` return
+HTTP 200. Live assistant/catalog manual checks above remain open because the
+backend at `127.0.0.1:8000` was not running during review.
 
 ## Phase 6: Post-MVP PDF Ingestion Adaptation
 
