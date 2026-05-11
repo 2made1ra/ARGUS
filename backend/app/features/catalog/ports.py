@@ -5,6 +5,11 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+from app.features.catalog.dto import (
+    MatchReasonCode,
+    SearchPriceItemsFilters,
+    SearchPriceItemsResult,
+)
 from app.features.catalog.entities.price_item import (
     PriceImport,
     PriceImportRow,
@@ -83,6 +88,23 @@ class PriceItemIndexRepository(Protocol):
     async def mark_indexing_failed(self, item_id: UUID, *, error: str) -> None: ...
 
 
+class PriceItemSearchRepository(Protocol):
+    async def search_active_by_keywords(
+        self,
+        *,
+        query: str,
+        filters: SearchPriceItemsFilters,
+        limit: int,
+    ) -> list[tuple[UUID, float, MatchReasonCode]]: ...
+
+    async def list_active_by_ids(
+        self,
+        item_ids: list[UUID],
+        *,
+        filters: SearchPriceItemsFilters,
+    ) -> list[PriceItem]: ...
+
+
 @dataclass(slots=True)
 class CatalogVectorPoint:
     id: UUID
@@ -133,6 +155,16 @@ class CatalogVectorSearch(Protocol):
     ) -> list[CatalogSearchHit]: ...
 
 
+class SearchItemsService(Protocol):
+    async def search_items(
+        self,
+        *,
+        query: str,
+        filters: SearchPriceItemsFilters | None = None,
+        limit: int = 10,
+    ) -> SearchPriceItemsResult: ...
+
+
 __all__ = [
     "CatalogEmbeddingService",
     "CatalogSearchFilters",
@@ -144,5 +176,7 @@ __all__ = [
     "PriceItemNotFound",
     "PriceItemIndexRepository",
     "PriceItemRepository",
+    "PriceItemSearchRepository",
+    "SearchItemsService",
     "UnitOfWork",
 ]

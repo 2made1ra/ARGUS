@@ -58,17 +58,61 @@ codes/templates such as `semantic`, `keyword_name`, `keyword_supplier`,
 Catalog search tool behavior:
 
 ```text
-1. Embed user query as "search_query: " + query.
+1. Embed user query as catalog_query_prefix + query.
+   Default catalog_query_prefix is "search_query: ".
 2. Search Qdrant collection price_items_search_v1 with simple payload filters.
 3. Run minimal Postgres keyword fallback for exact supplier/name/INN/source text
    and external_id style searches.
-4. Merge and dedupe candidate price_item_id values.
-5. Hydrate rows from Postgres price_items.
+4. Merge and dedupe candidate price_item_id values, preserving semantic ranking
+   first and appending keyword-only matches.
+5. Hydrate rows from Postgres price_items, which remains the source of truth.
 6. Return item cards with source_text_snippet and backend match_reason.
 ```
 
 The catalog item embedding indexed in Qdrant is generated from
 `"search_document: " + price_items.embedding_text`.
+
+`POST /catalog/search` exposes the same tool-friendly contract for debugging,
+admin use and future assistant orchestration:
+
+```json
+{
+  "query": "аренда звукового оборудования",
+  "limit": 10,
+  "filters": {
+    "supplier_city": "г. Москва",
+    "category": "Аренда",
+    "supplier_status": "Активен",
+    "has_vat": "Без НДС",
+    "unit_price": "15000.00"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "score": 0.82,
+      "name": "Аренда акустической системы",
+      "category": "Аренда",
+      "unit": "день",
+      "unit_price": "15000.00",
+      "supplier": "ООО Пример",
+      "supplier_city": "г. Москва",
+      "source_text_snippet": "фрагмент исходной строки",
+      "source_text_full_available": true,
+      "match_reason": {
+        "code": "semantic",
+        "label": "Семантическое совпадение с запросом"
+      }
+    }
+  ]
+}
+```
 
 Keyword fallback is part of MVP because managers will search for exact supplier
 names, INNs, service names, equipment models and external CSV ids. This is not a
@@ -82,6 +126,8 @@ Search result evidence rules:
   checkable rows.
 - Empty results should say the catalog has no matching rows and suggest a
   refined query or missing filters.
+- Empty backend search returns `"items": []`; it must not fabricate catalog
+  cards or prose-only substitutes.
 - Do not use CSV legacy embeddings for user query search.
 - Do not search document chunks as catalog evidence for prices/suppliers.
 

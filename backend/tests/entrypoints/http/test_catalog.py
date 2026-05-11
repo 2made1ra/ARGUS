@@ -9,7 +9,9 @@ from app.entrypoints.http.dependencies import (
     get_get_price_item_uc,
     get_import_prices_csv_uc,
     get_list_price_items_uc,
+    get_search_price_items_uc,
 )
+from app.features.catalog.dto import FoundPriceItem, MatchReason, SearchPriceItemsResult
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
 from app.features.catalog.use_cases.list_price_items import PriceItemList
@@ -142,3 +144,75 @@ async def test_get_catalog_item_returns_detail_and_sources(app: FastAPI) -> None
     assert body["item"]["id"] == str(item.id)
     assert body["item"]["embedding_text"] == "Название: Аренда света"
     assert body["sources"][0]["row_number"] == 42
+
+
+async def test_search_catalog_items_returns_found_item_cards(app: FastAPI) -> None:
+    item = _item()
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = SearchPriceItemsResult(
+        items=[
+            FoundPriceItem(
+                id=item.id,
+                score=0.82,
+                name=item.name,
+                category=item.category,
+                unit=item.unit,
+                unit_price=item.unit_price,
+                supplier=item.supplier,
+                supplier_city=item.supplier_city,
+                source_text_snippet="Описание",
+                source_text_full_available=True,
+                match_reason=MatchReason(
+                    code="semantic",
+                    label="Семантическое совпадение с запросом",
+                ),
+            ),
+        ],
+    )
+    app.dependency_overrides[get_search_price_items_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.post(
+            "/catalog/search",
+            json={
+                "query": "аренда света",
+                "limit": 10,
+                "filters": {
+                    "supplier_city": "г. Москва",
+                    "category": "Аренда",
+                    "supplier_status": "Активен",
+                    "has_vat": "Без НДС",
+                    "unit_price": "1200.00",
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"] == [
+        {
+            "id": str(item.id),
+            "score": 0.82,
+            "name": "Аренда света",
+            "category": "Аренда",
+            "unit": "шт.",
+            "unit_price": "1200.00",
+            "supplier": "ООО Ромашка",
+            "supplier_city": "г. Москва",
+            "source_text_snippet": "Описание",
+            "source_text_full_available": True,
+            "match_reason": {
+                "code": "semantic",
+                "label": "Семантическое совпадение с запросом",
+            },
+        },
+    ]
+    call = fake_uc.execute.await_args.kwargs
+    assert call["query"] == "аренда света"
+    assert call["limit"] == 10
+    assert call["filters"].supplier_city == "г. Москва"
+    assert call["filters"].category == "Аренда"
+    assert call["filters"].unit_price == Decimal("1200.00")

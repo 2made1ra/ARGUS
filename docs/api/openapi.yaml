@@ -67,6 +67,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/search:
+    post:
+      tags:
+      - catalog
+      summary: Search catalog items
+      description: Searches price_items semantically in price_items_search_v1, supplements
+        with minimal Postgres keyword fallback, hydrates rows from Postgres and returns
+        checkable catalog item cards.
+      operationId: searchCatalogItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogSearchRequestIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSearchResultOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /catalog/items/{id}:
     get:
       tags:
@@ -725,6 +753,64 @@ components:
       required:
       - file
       title: Body_importCatalogCsv
+    CatalogSearchFiltersIn:
+      properties:
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        unit_price:
+          anyOf:
+          - type: number
+          - type: string
+          - type: 'null'
+          title: Unit Price
+      type: object
+      title: CatalogSearchFiltersIn
+    CatalogSearchRequestIn:
+      properties:
+        query:
+          type: string
+          title: Query
+        limit:
+          type: integer
+          title: Limit
+          default: 10
+        filters:
+          anyOf:
+          - $ref: '#/components/schemas/CatalogSearchFiltersIn'
+          - type: 'null'
+      type: object
+      required:
+      - query
+      title: CatalogSearchRequestIn
+    CatalogSearchResultOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/FoundPriceItemOut'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: CatalogSearchResultOut
     ChatMessageIn:
       properties:
         role:
@@ -1013,6 +1099,83 @@ components:
       - INDEXED
       - FAILED
       title: DocumentStatus
+    MatchReasonOut:
+      properties:
+        code:
+          type: string
+          enum:
+          - semantic
+          - keyword_name
+          - keyword_supplier
+          - keyword_inn
+          - keyword_source_text
+          - keyword_external_id
+          title: Code
+        label:
+          type: string
+          title: Label
+      type: object
+      required:
+      - code
+      - label
+      title: MatchReasonOut
+    FoundPriceItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        score:
+          type: number
+          title: Score
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        source_text_snippet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text Snippet
+        source_text_full_available:
+          type: boolean
+          title: Source Text Full Available
+        match_reason:
+          $ref: '#/components/schemas/MatchReasonOut'
+      type: object
+      required:
+      - id
+      - score
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_city
+      - source_text_snippet
+      - source_text_full_available
+      - match_reason
+      title: FoundPriceItemOut
     GlobalRagAnswerOut:
       properties:
         answer:

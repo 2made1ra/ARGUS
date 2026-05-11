@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.features.catalog.dto import (
+    FoundPriceItem,
+    MatchReason,
+    SearchPriceItemsFilters,
+    SearchPriceItemsResult,
+)
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
 
@@ -151,15 +158,102 @@ class PriceItemDetailOut(BaseModel):
     sources: list[PriceItemSourceOut]
 
 
+class CatalogSearchFiltersIn(BaseModel):
+    supplier_city: str | None = None
+    category: str | None = None
+    supplier_status: str | None = None
+    has_vat: str | None = None
+    unit_price: Decimal | None = None
+
+    def to_domain(self) -> SearchPriceItemsFilters:
+        return SearchPriceItemsFilters(
+            supplier_city=self.supplier_city,
+            category=self.category,
+            supplier_status=self.supplier_status,
+            has_vat=self.has_vat,
+            unit_price=self.unit_price,
+        )
+
+
+class CatalogSearchRequestIn(BaseModel):
+    query: str
+    limit: int = 10
+    filters: CatalogSearchFiltersIn | None = None
+
+    def filters_to_domain(self) -> SearchPriceItemsFilters:
+        if self.filters is None:
+            return SearchPriceItemsFilters()
+        return self.filters.to_domain()
+
+
+class MatchReasonOut(BaseModel):
+    code: Literal[
+        "semantic",
+        "keyword_name",
+        "keyword_supplier",
+        "keyword_inn",
+        "keyword_source_text",
+        "keyword_external_id",
+    ]
+    label: str
+
+    @classmethod
+    def from_domain(cls, reason: MatchReason) -> MatchReasonOut:
+        return cls(code=reason.code, label=reason.label)
+
+
+class FoundPriceItemOut(BaseModel):
+    id: UUID
+    score: float
+    name: str
+    category: str | None
+    unit: str
+    unit_price: str
+    supplier: str | None
+    supplier_city: str | None
+    source_text_snippet: str | None
+    source_text_full_available: bool
+    match_reason: MatchReasonOut
+
+    @classmethod
+    def from_domain(cls, item: FoundPriceItem) -> FoundPriceItemOut:
+        return cls(
+            id=item.id,
+            score=item.score,
+            name=item.name,
+            category=item.category,
+            unit=item.unit,
+            unit_price=_decimal_string(item.unit_price),
+            supplier=item.supplier,
+            supplier_city=item.supplier_city,
+            source_text_snippet=item.source_text_snippet,
+            source_text_full_available=item.source_text_full_available,
+            match_reason=MatchReasonOut.from_domain(item.match_reason),
+        )
+
+
+class CatalogSearchResultOut(BaseModel):
+    items: list[FoundPriceItemOut]
+
+    @classmethod
+    def from_domain(cls, result: SearchPriceItemsResult) -> CatalogSearchResultOut:
+        return cls(
+            items=[FoundPriceItemOut.from_domain(item) for item in result.items],
+        )
+
+
 def _decimal_string(value: Decimal) -> str:
     return f"{value:.2f}"
 
 
 __all__ = [
+    "CatalogSearchRequestIn",
+    "CatalogSearchResultOut",
+    "FoundPriceItemOut",
+    "MatchReasonOut",
     "PriceImportSummaryOut",
     "PriceItemDetailOut",
     "PriceItemListOut",
     "PriceItemOut",
     "PriceItemSourceOut",
 ]
-

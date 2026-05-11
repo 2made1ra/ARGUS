@@ -9,8 +9,11 @@ from app.entrypoints.http.dependencies import (
     get_get_price_item_uc,
     get_import_prices_csv_uc,
     get_list_price_items_uc,
+    get_search_price_items_uc,
 )
 from app.entrypoints.http.schemas.catalog import (
+    CatalogSearchRequestIn,
+    CatalogSearchResultOut,
     PriceImportSummaryOut,
     PriceItemDetailItemOut,
     PriceItemDetailOut,
@@ -22,6 +25,7 @@ from app.features.catalog.ports import PriceItemNotFound
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
+from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -67,6 +71,29 @@ async def list_catalog_items(
         items=[PriceItemOut.from_domain(item) for item in result.items],
         total=result.total,
     )
+
+
+@router.post(
+    "/search",
+    response_model=CatalogSearchResultOut,
+    operation_id="searchCatalogItems",
+    summary="Search catalog items",
+    description=(
+        "Searches price_items semantically in price_items_search_v1, supplements "
+        "with minimal Postgres keyword fallback, hydrates rows from Postgres and "
+        "returns checkable catalog item cards."
+    ),
+)
+async def search_catalog_items(
+    request: CatalogSearchRequestIn,
+    uc: Annotated[SearchPriceItemsUseCase, Depends(get_search_price_items_uc)],
+) -> CatalogSearchResultOut:
+    result = await uc.execute(
+        query=request.query,
+        filters=request.filters_to_domain(),
+        limit=request.limit,
+    )
+    return CatalogSearchResultOut.from_domain(result)
 
 
 @router.get(

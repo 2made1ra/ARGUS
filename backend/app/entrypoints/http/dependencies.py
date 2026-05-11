@@ -10,6 +10,7 @@ from app.adapters.llm.chat import LMStudioChatClient
 from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
 from app.adapters.qdrant.catalog_index import QdrantCatalogIndex
+from app.adapters.qdrant.catalog_search import QdrantCatalogSearch
 from app.adapters.qdrant.index import QdrantVectorIndex
 from app.adapters.qdrant.search import QdrantVectorSearch
 from app.adapters.sqlalchemy.contractors import (
@@ -28,6 +29,7 @@ from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
 from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
+from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
 from app.features.contractors.use_cases.get_contractor_profile import (
     GetContractorProfileUseCase,
 )
@@ -102,6 +104,24 @@ def get_index_price_items_uc(
         catalog_embedding_dim=settings.catalog_embedding_dim,
         catalog_embedding_template_version=settings.catalog_embedding_template_version,
         catalog_document_prefix=settings.catalog_document_prefix,
+    )
+
+
+def get_search_price_items_uc(
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
+) -> SearchPriceItemsUseCase:
+    return SearchPriceItemsUseCase(
+        items=SqlAlchemyPriceItemRepository(session),
+        embeddings=LMStudioEmbeddings(
+            base_url=settings.lm_studio_url,
+            model=settings.catalog_embedding_model,
+            embedding_dim=settings.catalog_embedding_dim,
+        ),
+        vector_search=QdrantCatalogSearch(qdrant, settings.catalog_qdrant_collection),
+        catalog_query_prefix=settings.catalog_query_prefix,
+        catalog_embedding_template_version=settings.catalog_embedding_template_version,
     )
 
 
@@ -345,6 +365,7 @@ __all__ = [
     "get_list_documents_uc",
     "get_list_price_items_uc",
     "get_qdrant_client",
+    "get_search_price_items_uc",
     "get_search_contractors_uc",
     "get_search_documents_uc",
     "get_search_within_uc",

@@ -126,24 +126,24 @@ uv run --project backend pytest backend/tests/features/catalog/use_cases/test_in
 
 **Steps:**
 
-- [ ] Write failing use case tests for query embedding with `catalog_query_prefix`, Qdrant search, Postgres hydration and semantic ranking preservation.
-- [ ] Write failing tests for filters: `supplier_city`, `category`, `supplier_status`, `has_vat`, `unit_price`.
-- [ ] Write failing keyword fallback tests:
+- [x] Write failing use case tests for query embedding with `catalog_query_prefix`, Qdrant search, Postgres hydration and semantic ranking preservation.
+- [x] Write failing tests for filters: `supplier_city`, `category`, `supplier_status`, `has_vat`, `unit_price`.
+- [x] Write failing keyword fallback tests:
   - query by supplier name such as `ООО НИКА`;
   - query by `supplier_inn`;
   - query by exact service/model words in `name`;
   - query by exact text in `source_text`;
   - query by `external_id`.
-- [ ] Write failing tests for semantic + keyword merge without duplicate `price_item_id` results.
-- [ ] Write failing tests for backend-generated `match_reason` codes and `source_text_snippet`.
-- [ ] Write failing tests for empty Qdrant/keyword results returning an empty item list.
-- [ ] Write failing HTTP tests for `POST /catalog/search`.
-- [ ] Add catalog search DTOs.
-- [ ] Implement `SearchPriceItemsUseCase`.
-- [ ] Add tool-friendly `search_items` service contract.
-- [ ] Add `POST /catalog/search`.
-- [ ] Update OpenAPI and search docs.
-- [ ] Run focused catalog search checks.
+- [x] Write failing tests for semantic + keyword merge without duplicate `price_item_id` results.
+- [x] Write failing tests for backend-generated `match_reason` codes and `source_text_snippet`.
+- [x] Write failing tests for empty Qdrant/keyword results returning an empty item list.
+- [x] Write failing HTTP tests for `POST /catalog/search`.
+- [x] Add catalog search DTOs.
+- [x] Implement `SearchPriceItemsUseCase`.
+- [x] Add tool-friendly `search_items` service contract.
+- [x] Add `POST /catalog/search`.
+- [x] Update OpenAPI and search docs.
+- [x] Run focused catalog search checks.
 
 **Verification:**
 
