@@ -172,29 +172,29 @@ uv run --project backend pytest backend/tests/entrypoints/http/test_catalog.py -
 
 **Steps:**
 
-- [ ] Write failing brief merge tests for null values, arrays, overwritten scalar fields, `venue_status`, `duration_or_time_window` and `event_level`.
-- [ ] Write failing router tests:
+- [x] Write failing brief merge tests for null values, arrays, overwritten scalar fields, `venue_status`, `duration_or_time_window` and `event_level`.
+- [x] Write failing router tests:
   - `Хочу музыкальный вечер` -> `brief_discovery`;
   - `Нужно музыкальное оборудование в концертный зал` -> `supplier_search`;
   - `Организовать музыкальный вечер на 100 человек, помоги понять что нужно` -> `mixed`.
-- [ ] Write failing chat turn tests for `brief_discovery` without search.
-- [ ] Write failing chat turn tests for `supplier_search` with `search_items`.
-- [ ] Write failing chat turn tests for `mixed` with brief update plus search.
-- [ ] Write failing chat turn tests that `supplier_search` returns `found_items`, not only prose like "я нашел варианты".
-- [ ] Write failing chat turn tests that `mixed` updates `brief` and returns cards when `should_search_now=true`.
-- [ ] Write failing assistant response tests that `message` does not introduce prices, suppliers, phones, emails, INNs or date availability unless backed by `found_items`.
-- [ ] Write failing empty-result tests where the assistant says the catalog has no matching rows and suggests refinement.
-- [ ] Write failing HTTP tests for `POST /assistant/chat`.
-- [ ] Add assistant DTOs and ports.
-- [ ] Implement deterministic brief merge.
-- [ ] Implement structured router adapter/helper.
-- [ ] Implement `ChatTurnUseCase`.
-- [ ] Ensure `ChatTurnUseCase` returns four separate response layers: `message`, `router`, `brief`, `found_items`.
-- [ ] Ensure `found_items` are treated as candidates, not selected budget/proposal lines.
-- [ ] Add assistant HTTP endpoint.
-- [ ] Wire dependencies without cross-feature imports.
-- [ ] Update OpenAPI and search docs.
-- [ ] Run focused assistant checks.
+- [x] Write failing chat turn tests for `brief_discovery` without search.
+- [x] Write failing chat turn tests for `supplier_search` with `search_items`.
+- [x] Write failing chat turn tests for `mixed` with brief update plus search.
+- [x] Write failing chat turn tests that `supplier_search` returns `found_items`, not only prose like "я нашел варианты".
+- [x] Write failing chat turn tests that `mixed` updates `brief` and returns cards when `should_search_now=true`.
+- [x] Write failing assistant response tests that `message` does not introduce prices, suppliers, phones, emails, INNs or date availability unless backed by `found_items`.
+- [x] Write failing empty-result tests where the assistant says the catalog has no matching rows and suggests refinement.
+- [x] Write failing HTTP tests for `POST /assistant/chat`.
+- [x] Add assistant DTOs and ports.
+- [x] Implement deterministic brief merge.
+- [x] Implement structured router adapter/helper.
+- [x] Implement `ChatTurnUseCase`.
+- [x] Ensure `ChatTurnUseCase` returns four separate response layers: `message`, `router`, `brief`, `found_items`.
+- [x] Ensure `found_items` are treated as candidates, not selected budget/proposal lines.
+- [x] Add assistant HTTP endpoint.
+- [x] Wire dependencies without cross-feature imports.
+- [x] Update OpenAPI and search docs.
+- [x] Run focused assistant checks.
 
 **Verification:**
 

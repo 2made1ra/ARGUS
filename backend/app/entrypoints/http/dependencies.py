@@ -25,6 +25,11 @@ from app.adapters.sqlalchemy.summaries import SqlAlchemySummaryRepository
 from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork
 from app.config import Settings, get_settings
 from app.entrypoints.http.session import _session, get_qdrant_client, get_sessionmaker
+from app.features.assistant.dto import FoundCatalogItem
+from app.features.assistant.dto import MatchReason as AssistantMatchReason
+from app.features.assistant.router import HeuristicAssistantRouter
+from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
+from app.features.catalog.dto import FoundPriceItem
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
@@ -122,6 +127,53 @@ def get_search_price_items_uc(
         vector_search=QdrantCatalogSearch(qdrant, settings.catalog_qdrant_collection),
         catalog_query_prefix=settings.catalog_query_prefix,
         catalog_embedding_template_version=settings.catalog_embedding_template_version,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Assistant use cases
+# ---------------------------------------------------------------------------
+
+
+class _CatalogSearchToolAdapter:
+    def __init__(self, search: SearchPriceItemsUseCase) -> None:
+        self._search = search
+
+    async def search_items(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> list[FoundCatalogItem]:
+        result = await self._search.search_items(query=query, limit=limit)
+        return [_found_catalog_item(item) for item in result.items]
+
+
+def _found_catalog_item(item: FoundPriceItem) -> FoundCatalogItem:
+    return FoundCatalogItem(
+        id=item.id,
+        score=item.score,
+        name=item.name,
+        category=item.category,
+        unit=item.unit,
+        unit_price=item.unit_price,
+        supplier=item.supplier,
+        supplier_city=item.supplier_city,
+        source_text_snippet=item.source_text_snippet,
+        source_text_full_available=item.source_text_full_available,
+        match_reason=AssistantMatchReason(
+            code=item.match_reason.code,
+            label=item.match_reason.label,
+        ),
+    )
+
+
+def get_chat_turn_uc(
+    search: Annotated[SearchPriceItemsUseCase, Depends(get_search_price_items_uc)],
+) -> ChatTurnUseCase:
+    return ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=_CatalogSearchToolAdapter(search),
     )
 
 

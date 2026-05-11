@@ -32,6 +32,9 @@ found_items  checkable Postgres price_items rows
 `message` is not the source of truth for catalog facts. Prices, units,
 suppliers, cities, INNs, emails, phones, categories, source text and date
 availability must be backed by `found_items` or an opened catalog item detail.
+For catalog search turns the assistant may explain what happened and suggest
+next refinements, but concrete catalog rows must stay in `found_items`.
+`found_items` are candidates for review, not selected budget/proposal lines.
 
 Minimum `found_items` card fields:
 
@@ -52,6 +55,86 @@ match_reason
 `match_reason` is backend-generated, not free-form LLM prose. Use safe reason
 codes/templates such as `semantic`, `keyword_name`, `keyword_supplier`,
 `keyword_inn`, `keyword_source_text` and `keyword_external_id`.
+
+`POST /assistant/chat` request:
+
+```json
+{
+  "session_id": null,
+  "message": "Организовать музыкальный вечер на 100 человек",
+  "brief": {
+    "event_type": null,
+    "city": null,
+    "date_or_period": null,
+    "audience_size": null,
+    "venue": null,
+    "venue_status": null,
+    "duration_or_time_window": null,
+    "budget": null,
+    "event_level": null,
+    "required_services": [],
+    "constraints": [],
+    "preferences": []
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "session_id": "uuid",
+  "message": "Обновил черновик брифа и запустил поиск по очевидной потребности. Проверяемые карточки находятся в found_items; это кандидаты, а не готовые строки коммерческого предложения.",
+  "router": {
+    "intent": "mixed",
+    "confidence": 0.88,
+    "known_facts": {
+      "event_type": "музыкальный вечер",
+      "audience_size": 100
+    },
+    "missing_fields": ["city", "venue_status"],
+    "should_search_now": true,
+    "search_query": "музыкальное оборудование для музыкального вечера на 100 человек",
+    "brief_update": {
+      "event_type": "музыкальный вечер",
+      "city": null,
+      "date_or_period": null,
+      "audience_size": 100,
+      "venue": null,
+      "venue_status": null,
+      "duration_or_time_window": null,
+      "budget": null,
+      "event_level": null,
+      "required_services": ["звук"],
+      "constraints": [],
+      "preferences": []
+    }
+  },
+  "brief": {
+    "event_type": "музыкальный вечер",
+    "city": null,
+    "date_or_period": null,
+    "audience_size": 100,
+    "venue": null,
+    "venue_status": null,
+    "duration_or_time_window": null,
+    "budget": null,
+    "event_level": null,
+    "required_services": ["звук"],
+    "constraints": [],
+    "preferences": []
+  },
+  "found_items": []
+}
+```
+
+Assistant implementation boundaries:
+
+- `assistant` owns `BriefState`, router decisions and chat turn orchestration.
+- `assistant` calls catalog search through an explicit search-items port.
+- HTTP composition may adapt the catalog use case into that port; assistant
+  feature code must not import catalog internals directly.
+- Document RAG is not a fallback for catalog prices, suppliers or item evidence.
 
 ## `search_items`
 

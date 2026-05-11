@@ -5,6 +5,34 @@ info:
     search.
   version: 0.1.0
 paths:
+  /assistant/chat:
+    post:
+      tags:
+      - assistant
+      summary: Run one unified assistant chat turn
+      description: Routes a user message, merges the active brief state and calls
+        catalog search when useful. The response keeps assistant prose, router state,
+        brief state and found catalog rows as separate layers.
+      operationId: assistantChat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantChatRequestIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantChatResponseOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /catalog/imports:
     post:
       tags:
@@ -730,6 +758,61 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    AssistantChatRequestIn:
+      properties:
+        session_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Session Id
+        message:
+          type: string
+          title: Message
+        brief:
+          anyOf:
+          - $ref: '#/components/schemas/BriefStateIn'
+          - type: 'null'
+      type: object
+      required:
+      - message
+      title: AssistantChatRequestIn
+    AssistantChatResponseOut:
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          title: Session Id
+        message:
+          type: string
+          title: Message
+        router:
+          $ref: '#/components/schemas/RouterDecisionOut'
+        brief:
+          $ref: '#/components/schemas/BriefStateOut'
+        found_items:
+          items:
+            $ref: '#/components/schemas/FoundCatalogItemOut'
+          type: array
+          title: Found Items
+      type: object
+      required:
+      - session_id
+      - message
+      - router
+      - brief
+      - found_items
+      title: AssistantChatResponseOut
+    Body_importCatalogCsv:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_importCatalogCsv
     Body_uploadDocument:
       properties:
         file:
@@ -743,16 +826,147 @@ components:
       required:
       - file
       title: Body_uploadDocument
-    Body_importCatalogCsv:
+    BriefStateIn:
       properties:
-        file:
-          type: string
-          contentMediaType: application/octet-stream
-          title: File
+        event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Type
+        city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: City
+        date_or_period:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date Or Period
+        audience_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audience Size
+        venue:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue
+        venue_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue Status
+        duration_or_time_window:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duration Or Time Window
+        budget:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget
+        event_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Level
+        required_services:
+          items:
+            type: string
+          type: array
+          title: Required Services
+        constraints:
+          items:
+            type: string
+          type: array
+          title: Constraints
+        preferences:
+          items:
+            type: string
+          type: array
+          title: Preferences
+      type: object
+      title: BriefStateIn
+    BriefStateOut:
+      properties:
+        event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Type
+        city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: City
+        date_or_period:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date Or Period
+        audience_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audience Size
+        venue:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue
+        venue_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue Status
+        duration_or_time_window:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duration Or Time Window
+        budget:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget
+        event_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Level
+        required_services:
+          items:
+            type: string
+          type: array
+          title: Required Services
+        constraints:
+          items:
+            type: string
+          type: array
+          title: Constraints
+        preferences:
+          items:
+            type: string
+          type: array
+          title: Preferences
       type: object
       required:
-      - file
-      title: Body_importCatalogCsv
+      - event_type
+      - city
+      - date_or_period
+      - audience_size
+      - venue
+      - venue_status
+      - duration_or_time_window
+      - budget
+      - event_level
+      - required_services
+      - constraints
+      - preferences
+      title: BriefStateOut
     CatalogSearchFiltersIn:
       properties:
         supplier_city:
@@ -779,6 +993,7 @@ components:
           anyOf:
           - type: number
           - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           - type: 'null'
           title: Unit Price
       type: object
@@ -1099,26 +1314,63 @@ components:
       - INDEXED
       - FAILED
       title: DocumentStatus
-    MatchReasonOut:
+    FoundCatalogItemOut:
       properties:
-        code:
+        id:
           type: string
-          enum:
-          - semantic
-          - keyword_name
-          - keyword_supplier
-          - keyword_inn
-          - keyword_source_text
-          - keyword_external_id
-          title: Code
-        label:
+          format: uuid
+          title: Id
+        score:
+          type: number
+          title: Score
+        name:
           type: string
-          title: Label
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        source_text_snippet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text Snippet
+        source_text_full_available:
+          type: boolean
+          title: Source Text Full Available
+        match_reason:
+          $ref: '#/components/schemas/MatchReasonOut'
       type: object
       required:
-      - code
-      - label
-      title: MatchReasonOut
+      - id
+      - score
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_city
+      - source_text_snippet
+      - source_text_full_available
+      - match_reason
+      title: FoundCatalogItemOut
     FoundPriceItemOut:
       properties:
         id:
@@ -1206,6 +1458,26 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    MatchReasonOut:
+      properties:
+        code:
+          type: string
+          enum:
+          - semantic
+          - keyword_name
+          - keyword_supplier
+          - keyword_inn
+          - keyword_source_text
+          - keyword_external_id
+          title: Code
+        label:
+          type: string
+          title: Label
+      type: object
+      required:
+      - code
+      - label
+      title: MatchReasonOut
     PriceImportSummaryOut:
       properties:
         id:
@@ -1569,6 +1841,48 @@ components:
       - document_count
       - top_snippet
       title: RagContractorOut
+    RouterDecisionOut:
+      properties:
+        intent:
+          type: string
+          enum:
+          - brief_discovery
+          - supplier_search
+          - mixed
+          - clarification
+          title: Intent
+        confidence:
+          type: number
+          title: Confidence
+        known_facts:
+          additionalProperties: true
+          type: object
+          title: Known Facts
+        missing_fields:
+          items:
+            type: string
+          type: array
+          title: Missing Fields
+        should_search_now:
+          type: boolean
+          title: Should Search Now
+        search_query:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search Query
+        brief_update:
+          $ref: '#/components/schemas/BriefStateOut'
+      type: object
+      required:
+      - intent
+      - confidence
+      - known_facts
+      - missing_fields
+      - should_search_now
+      - search_query
+      - brief_update
+      title: RouterDecisionOut
     SourceRefOut:
       properties:
         document_id:
