@@ -8,9 +8,11 @@ import pytest
 from app.features.assistant.dto import (
     AssistantChatRequest,
     BriefState,
+    ChatTurn,
     FoundCatalogItem,
     MatchReason,
     RouterDecision,
+    VisibleCandidate,
 )
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
 
@@ -20,8 +22,22 @@ class FakeRouter:
         self.decision = decision
         self.calls: list[dict[str, Any]] = []
 
-    async def route(self, *, message: str, brief: BriefState) -> RouterDecision:
-        self.calls.append({"message": message, "brief": brief})
+    async def route(
+        self,
+        *,
+        message: str,
+        brief: BriefState,
+        recent_turns: list[ChatTurn],
+        visible_candidates: list[VisibleCandidate],
+    ) -> RouterDecision:
+        self.calls.append(
+            {
+                "message": message,
+                "brief": brief,
+                "recent_turns": recent_turns,
+                "visible_candidates": visible_candidates,
+            },
+        )
         return self.decision
 
 
@@ -100,6 +116,39 @@ async def test_brief_discovery_updates_brief_without_search() -> None:
     assert response.found_items == []
     assert search.calls == []
     assert "уточ" in response.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_passes_explicit_context_to_router() -> None:
+    router = FakeRouter(
+        _decision(
+            intent="clarification",
+            should_search_now=False,
+        ),
+    )
+    visible_candidate = VisibleCandidate(
+        ordinal=1,
+        item_id=UUID("11111111-1111-1111-1111-111111111111"),
+        service_category="свет",
+    )
+    recent_turn = ChatTurn(role="user", content="Найди свет")
+    use_case = ChatTurnUseCase(
+        router=router,
+        catalog_search=FakeCatalogSearchTool(),
+    )
+
+    await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="добавь второй",
+            brief=BriefState(),
+            recent_turns=[recent_turn],
+            visible_candidates=[visible_candidate],
+        ),
+    )
+
+    assert router.calls[0]["recent_turns"] == [recent_turn]
+    assert router.calls[0]["visible_candidates"] == [visible_candidate]
 
 
 @pytest.mark.asyncio

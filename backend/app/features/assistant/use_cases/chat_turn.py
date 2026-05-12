@@ -32,6 +32,8 @@ class ChatTurnUseCase:
         decision = await self._router.route(
             message=request.message,
             brief=current_brief,
+            recent_turns=list(request.recent_turns),
+            visible_candidates=list(request.visible_candidates),
         )
         brief = (
             merge_brief(current_brief, decision.brief_update)

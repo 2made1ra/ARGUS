@@ -75,7 +75,16 @@ def _brief_workspace_plan(
     brief: BriefState,
 ) -> ActionPlan:
     merged = merge_brief(brief, interpretation.brief_update)
-    missing_fields = missing_event_intake_fields(merged)
+    missing_fields = _dedupe(
+        [
+            *missing_event_intake_fields(merged),
+            *[
+                field_name
+                for field_name in interpretation.missing_fields
+                if _field_is_missing(field_name, merged)
+            ],
+        ],
+    )
     tool_intents = (
         ["update_brief"]
         if "update_brief" in interpretation.requested_actions
@@ -97,7 +106,12 @@ def _brief_workspace_plan(
         tool_intents=tool_intents,
         search_requests=search_requests if "search_items" in tool_intents else [],
         missing_fields=missing_fields,
-        clarification_questions=_questions_for(missing_fields, _INTAKE_QUESTIONS),
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _INTAKE_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
     )
 
 
@@ -110,6 +124,7 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
     missing_fields: list[str] = []
     if not search_requests:
         missing_fields.append("service_category")
+        missing_fields = _dedupe([*missing_fields, *interpretation.missing_fields])
 
     should_search = not missing_fields and bool(search_requests)
     return ActionPlan(
@@ -122,7 +137,12 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
         tool_intents=["search_items"] if should_search else [],
         search_requests=search_requests if should_search else [],
         missing_fields=missing_fields,
-        clarification_questions=_questions_for(missing_fields, _SEARCH_QUESTIONS),
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _SEARCH_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
     )
 
 
@@ -135,6 +155,30 @@ def _questions_for(
         for field in missing_fields[:3]
         if field in question_map
     ]
+
+
+def _field_is_missing(field_name: str, brief: BriefState) -> bool:
+    if not hasattr(brief, field_name):
+        return True
+    if field_name == "budget_total":
+        return (
+            brief.budget_total is None
+            and brief.budget_per_guest is None
+            and brief.budget_notes is None
+        )
+    value = getattr(brief, field_name)
+    return value is None or value == []
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        result.append(value)
+        seen.add(value)
+    return result
 
 
 __all__ = ["BriefWorkflowPolicy", "missing_event_intake_fields"]

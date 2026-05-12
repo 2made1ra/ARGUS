@@ -137,6 +137,17 @@ class ChatTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class LLMRouterMessage:
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class LLMStructuredRouterRequest:
+    messages: list[LLMRouterMessage]
+
+
+@dataclass(frozen=True, slots=True)
 class RouterDecision:
     intent: RouterIntent
     confidence: float
@@ -241,6 +252,8 @@ __all__ = [
     "EventBriefWorkflowState",
     "FoundCatalogItem",
     "Interpretation",
+    "LLMRouterMessage",
+    "LLMStructuredRouterRequest",
     "MatchReason",
     "MatchReasonCode",
     "RouterDecision",

@@ -8,21 +8,44 @@ from app.features.assistant.domain.slot_extraction import extract_event_brief_sl
 from app.features.assistant.dto import (
     ActionPlan,
     BriefState,
+    ChatTurn,
     Interpretation,
     RouterDecision,
+    VisibleCandidate,
 )
+from app.features.assistant.ports import LLMStructuredRouterPort
 
 
 class HeuristicAssistantRouter:
-    async def route(self, *, message: str, brief: BriefState) -> RouterDecision:
+    def __init__(
+        self,
+        *,
+        llm_router: LLMStructuredRouterPort | None = None,
+    ) -> None:
+        self._llm_router = llm_router
+
+    async def route(
+        self,
+        *,
+        message: str,
+        brief: BriefState,
+        recent_turns: list[ChatTurn] | None = None,
+        visible_candidates: list[VisibleCandidate] | None = None,
+    ) -> RouterDecision:
         normalized = _normalize_spaces(message)
         lower = normalized.lower()
         if not normalized or _is_too_ambiguous(lower):
             return _clarification_decision(brief)
 
-        interpretation = EventBriefInterpreter().interpret(
+        interpretation = await EventBriefInterpreter(
+            llm_router=self._llm_router,
+        ).interpret_with_llm(
             message=normalized,
             brief=brief,
+            recent_turns=recent_turns if recent_turns is not None else [],
+            visible_candidates=(
+                visible_candidates if visible_candidates is not None else []
+            ),
         )
         action_plan = BriefWorkflowPolicy().plan(
             interpretation=interpretation,

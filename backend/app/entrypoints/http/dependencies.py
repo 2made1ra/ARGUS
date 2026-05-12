@@ -6,6 +6,7 @@ from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
+from app.adapters.llm.assistant_router import LMStudioAssistantRouterAdapter
 from app.adapters.llm.chat import LMStudioChatClient
 from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
@@ -169,10 +170,16 @@ def _found_catalog_item(item: FoundPriceItem) -> FoundCatalogItem:
 
 
 def get_chat_turn_uc(
+    settings: Annotated[Settings, Depends(get_settings)],
     search: Annotated[SearchPriceItemsUseCase, Depends(get_search_price_items_uc)],
 ) -> ChatTurnUseCase:
     return ChatTurnUseCase(
-        router=HeuristicAssistantRouter(),
+        router=HeuristicAssistantRouter(
+            llm_router=LMStudioAssistantRouterAdapter(
+                base_url=settings.lm_studio_url,
+                model=settings.lm_studio_llm_model,
+            ),
+        ),
         catalog_search=_CatalogSearchToolAdapter(search),
     )
 

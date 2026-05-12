@@ -5,16 +5,32 @@ from app.features.assistant.domain.action_detection import detect_action_signals
 from app.features.assistant.domain.brief_workflow_policy import (
     missing_event_intake_fields,
 )
+from app.features.assistant.domain.llm_router import (
+    build_llm_router_prompt,
+    interpretation_with_reason,
+    merge_llm_router_suggestion,
+    validate_llm_router_json,
+)
 from app.features.assistant.domain.slot_extraction import extract_event_brief_slots
 from app.features.assistant.dto import (
     AssistantInterfaceMode,
     BriefState,
+    ChatTurn,
     Interpretation,
     SearchRequest,
+    VisibleCandidate,
 )
+from app.features.assistant.ports import LLMStructuredRouterPort
 
 
 class EventBriefInterpreter:
+    def __init__(
+        self,
+        *,
+        llm_router: LLMStructuredRouterPort | None = None,
+    ) -> None:
+        self._llm_router = llm_router
+
     def interpret(self, *, message: str, brief: BriefState) -> Interpretation:
         slots = extract_event_brief_slots(message)
         signals = detect_action_signals(message, brief)
@@ -59,6 +75,44 @@ class EventBriefInterpreter:
             service_needs=list(slots.service_needs),
             requested_actions=requested_actions,
             search_requests=search_requests,
+        )
+
+    async def interpret_with_llm(
+        self,
+        *,
+        message: str,
+        brief: BriefState,
+        recent_turns: list[ChatTurn],
+        visible_candidates: list[VisibleCandidate],
+    ) -> Interpretation:
+        deterministic = self.interpret(message=message, brief=brief)
+        if self._llm_router is None:
+            return deterministic
+
+        prompt = build_llm_router_prompt(
+            message=message,
+            brief=brief,
+            recent_turns=recent_turns,
+            visible_candidates=visible_candidates,
+            deterministic=deterministic,
+        )
+        try:
+            raw_response = await self._llm_router.route_structured(prompt=prompt)
+        except Exception:
+            return interpretation_with_reason(
+                deterministic,
+                "llm_router_fallback_used",
+            )
+
+        suggestion = validate_llm_router_json(raw_response)
+        if suggestion is None:
+            return interpretation_with_reason(
+                deterministic,
+                "llm_router_fallback_used",
+            )
+        return merge_llm_router_suggestion(
+            deterministic=deterministic,
+            suggestion=suggestion,
         )
 
 
