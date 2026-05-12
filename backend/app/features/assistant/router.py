@@ -145,6 +145,7 @@ def _decision_from_interpretation(
         tool_intents=list(action_plan.tool_intents),
         clarification_questions=list(action_plan.clarification_questions),
         user_visible_summary=interpretation.user_visible_summary,
+        action_plan=action_plan,
     )
 
 

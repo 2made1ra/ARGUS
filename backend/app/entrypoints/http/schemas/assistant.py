@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
@@ -15,9 +16,12 @@ from app.features.assistant.dto import (
     ChatTurn,
     FoundCatalogItem,
     MatchReason,
+    RenderedBriefSection,
+    RenderedEventBrief,
     RouterDecision,
     SearchRequest,
     ServiceNeed,
+    SupplierVerificationResult,
     VisibleCandidate,
 )
 
@@ -336,6 +340,7 @@ class ActionPlanOut(BaseModel):
     tool_intents: list[str]
     search_requests: list[SearchRequestOut]
     verification_targets: list[UUID]
+    item_detail_ids: list[UUID]
     render_requested: bool
     missing_fields: list[str]
     clarification_questions: list[str]
@@ -352,6 +357,7 @@ class ActionPlanOut(BaseModel):
                 for request in action_plan.search_requests
             ],
             verification_targets=list(action_plan.verification_targets),
+            item_detail_ids=list(action_plan.item_detail_ids),
             render_requested=action_plan.render_requested,
             missing_fields=list(action_plan.missing_fields),
             clarification_questions=list(action_plan.clarification_questions),
@@ -405,6 +411,68 @@ class FoundCatalogItemOut(BaseModel):
         )
 
 
+class SupplierVerificationResultOut(BaseModel):
+    item_id: UUID | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    ogrn: str | None
+    legal_name: str | None
+    status: Literal["active", "inactive", "not_found", "not_verified", "error"]
+    source: str
+    checked_at: datetime | None
+    risk_flags: list[str]
+    message: str | None
+
+    @classmethod
+    def from_domain(
+        cls,
+        result: SupplierVerificationResult,
+    ) -> SupplierVerificationResultOut:
+        return cls(
+            item_id=result.item_id,
+            supplier_name=result.supplier_name,
+            supplier_inn=result.supplier_inn,
+            ogrn=result.ogrn,
+            legal_name=result.legal_name,
+            status=result.status,
+            source=result.source,
+            checked_at=result.checked_at,
+            risk_flags=list(result.risk_flags),
+            message=result.message,
+        )
+
+
+class RenderedBriefSectionOut(BaseModel):
+    title: str
+    items: list[str]
+
+    @classmethod
+    def from_domain(
+        cls,
+        section: RenderedBriefSection,
+    ) -> RenderedBriefSectionOut:
+        return cls(title=section.title, items=list(section.items))
+
+
+class RenderedEventBriefOut(BaseModel):
+    title: str
+    sections: list[RenderedBriefSectionOut]
+    open_questions: list[str]
+    evidence: dict[str, list[str]]
+
+    @classmethod
+    def from_domain(cls, brief: RenderedEventBrief) -> RenderedEventBriefOut:
+        return cls(
+            title=brief.title,
+            sections=[
+                RenderedBriefSectionOut.from_domain(section)
+                for section in brief.sections
+            ],
+            open_questions=list(brief.open_questions),
+            evidence={key: list(value) for key, value in brief.evidence.items()},
+        )
+
+
 class AssistantChatResponseOut(BaseModel):
     session_id: UUID
     message: str
@@ -413,8 +481,8 @@ class AssistantChatResponseOut(BaseModel):
     action_plan: ActionPlanOut | None
     brief: BriefStateOut
     found_items: list[FoundCatalogItemOut]
-    verification_results: list[Any]
-    rendered_brief: Any | None
+    verification_results: list[SupplierVerificationResultOut]
+    rendered_brief: RenderedEventBriefOut | None
 
     @classmethod
     def from_domain(cls, response: AssistantChatResponse) -> AssistantChatResponseOut:
@@ -433,8 +501,15 @@ class AssistantChatResponseOut(BaseModel):
                 FoundCatalogItemOut.from_domain(item)
                 for item in response.found_items
             ],
-            verification_results=list(response.verification_results),
-            rendered_brief=response.rendered_brief,
+            verification_results=[
+                SupplierVerificationResultOut.from_domain(result)
+                for result in response.verification_results
+            ],
+            rendered_brief=(
+                RenderedEventBriefOut.from_domain(response.rendered_brief)
+                if response.rendered_brief is not None
+                else None
+            ),
         )
 
 

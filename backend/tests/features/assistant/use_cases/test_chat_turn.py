@@ -6,12 +6,16 @@ from uuid import UUID, uuid4
 
 import pytest
 from app.features.assistant.dto import (
+    ActionPlan,
     AssistantChatRequest,
+    AssistantInterfaceMode,
     BriefState,
     ChatTurn,
+    EventBriefWorkflowState,
     FoundCatalogItem,
     MatchReason,
     RouterDecision,
+    ToolResults,
     VisibleCandidate,
 )
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
@@ -49,6 +53,25 @@ class FakeCatalogSearchTool:
     async def search_items(self, *, query: str, limit: int) -> list[FoundCatalogItem]:
         self.calls.append({"query": query, "limit": limit})
         return self.items
+
+
+class FakeToolExecutor:
+    def __init__(self) -> None:
+        self.action_plans: list[ActionPlan] = []
+
+    async def execute(
+        self,
+        *,
+        action_plan: ActionPlan,
+        brief: BriefState,
+        brief_update: BriefState,
+        message: str = "",
+        recent_turns: list[ChatTurn] | None = None,
+        visible_candidates: list[VisibleCandidate] | None = None,
+        candidate_item_ids: list[UUID] | None = None,
+    ) -> ToolResults:
+        self.action_plans.append(action_plan)
+        return ToolResults(brief=brief)
 
 
 def _decision(
@@ -329,3 +352,44 @@ async def test_clarification_asks_follow_up_without_search() -> None:
     assert response.found_items == []
     assert search.calls == []
     assert "уточ" in response.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_executes_policy_action_plan_without_reconstructing() -> None:
+    item_id = UUID("22222222-2222-2222-2222-222222222222")
+    policy_plan = ActionPlan(
+        interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+        workflow_stage=EventBriefWorkflowState.SUPPLIER_VERIFICATION,
+        tool_intents=["get_item_details", "verify_supplier_status"],
+        item_detail_ids=[item_id],
+        verification_targets=[item_id],
+        render_requested=True,
+    )
+    router = FakeRouter(
+        RouterDecision(
+            intent="verification",
+            confidence=0.9,
+            known_facts={},
+            missing_fields=[],
+            should_search_now=False,
+            search_query=None,
+            brief_update=BriefState(),
+            interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+            workflow_stage=EventBriefWorkflowState.SUPPLIER_VERIFICATION,
+            tool_intents=["get_item_details", "verify_supplier_status"],
+            action_plan=policy_plan,
+        ),
+    )
+    executor = FakeToolExecutor()
+    use_case = ChatTurnUseCase(router=router, tool_executor=executor)
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="проверь 22222222-2222-2222-2222-222222222222",
+            brief=BriefState(),
+        ),
+    )
+
+    assert executor.action_plans == [policy_plan]
+    assert response.action_plan == policy_plan

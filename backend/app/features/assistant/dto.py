@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
@@ -25,6 +26,14 @@ ToolIntent = Literal[
     "compare_items",
     "verify_supplier_status",
     "render_event_brief",
+]
+
+SupplierVerificationStatus = Literal[
+    "active",
+    "inactive",
+    "not_found",
+    "not_verified",
+    "error",
 ]
 
 ServiceNeedPriority = Literal["required", "must_have", "nice_to_have"]
@@ -163,6 +172,7 @@ class RouterDecision:
     tool_intents: list[ToolIntent] = field(default_factory=list)
     clarification_questions: list[str] = field(default_factory=list)
     user_visible_summary: str | None = None
+    action_plan: ActionPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +197,7 @@ class ActionPlan:
     tool_intents: list[ToolIntent] = field(default_factory=list)
     search_requests: list[SearchRequest] = field(default_factory=list)
     verification_targets: list[UUID] = field(default_factory=list)
+    item_detail_ids: list[UUID] = field(default_factory=list)
     render_requested: bool = False
     missing_fields: list[str] = field(default_factory=list)
     clarification_questions: list[str] = field(default_factory=list)
@@ -219,6 +230,62 @@ class FoundCatalogItem:
 
 
 @dataclass(frozen=True, slots=True)
+class CatalogItemDetail:
+    id: UUID
+    name: str
+    category: str | None
+    unit: str
+    unit_price: Decimal
+    supplier: str | None
+    supplier_inn: str | None
+    supplier_city: str | None
+    supplier_phone: str | None
+    supplier_email: str | None
+    supplier_status: str | None
+    source_text: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SupplierVerificationResult:
+    item_id: UUID | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    ogrn: str | None
+    legal_name: str | None
+    status: SupplierVerificationStatus
+    source: str
+    checked_at: datetime | None
+    risk_flags: list[str] = field(default_factory=list)
+    message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedBriefSection:
+    title: str
+    items: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedEventBrief:
+    title: str
+    sections: list[RenderedBriefSection]
+    open_questions: list[str]
+    evidence: dict[str, list[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolResults:
+    brief: BriefState
+    found_items: list[FoundCatalogItem] = field(default_factory=list)
+    item_details: list[CatalogItemDetail] = field(default_factory=list)
+    verification_results: list[SupplierVerificationResult] = field(
+        default_factory=list,
+    )
+    rendered_brief: RenderedEventBrief | None = None
+    skipped_actions: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
 class AssistantChatRequest:
     session_id: UUID | None
     message: str
@@ -237,8 +304,10 @@ class AssistantChatResponse:
     found_items: list[FoundCatalogItem]
     ui_mode: AssistantInterfaceMode = AssistantInterfaceMode.CHAT_SEARCH
     action_plan: ActionPlan | None = None
-    verification_results: list[object] = field(default_factory=list)
-    rendered_brief: object | None = None
+    verification_results: list[SupplierVerificationResult] = field(
+        default_factory=list,
+    )
+    rendered_brief: RenderedEventBrief | None = None
 
 
 __all__ = [
@@ -247,6 +316,7 @@ __all__ = [
     "AssistantChatResponse",
     "AssistantInterfaceMode",
     "BriefState",
+    "CatalogItemDetail",
     "CatalogSearchFilters",
     "ChatTurn",
     "EventBriefWorkflowState",
@@ -256,10 +326,15 @@ __all__ = [
     "LLMStructuredRouterRequest",
     "MatchReason",
     "MatchReasonCode",
+    "RenderedBriefSection",
+    "RenderedEventBrief",
     "RouterDecision",
     "RouterIntent",
     "SearchRequest",
     "ServiceNeed",
+    "SupplierVerificationResult",
+    "SupplierVerificationStatus",
     "ToolIntent",
+    "ToolResults",
     "VisibleCandidate",
 ]

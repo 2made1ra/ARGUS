@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from typing import Protocol
+from uuid import UUID
 
 from app.features.assistant.dto import (
     BriefState,
+    CatalogItemDetail,
     ChatTurn,
     FoundCatalogItem,
     LLMStructuredRouterRequest,
+    RenderedEventBrief,
     RouterDecision,
+    SupplierVerificationResult,
     VisibleCandidate,
 )
 
@@ -40,4 +44,39 @@ class CatalogSearchTool(Protocol):
     ) -> list[FoundCatalogItem]: ...
 
 
-__all__ = ["AssistantRouter", "CatalogSearchTool", "LLMStructuredRouterPort"]
+class CatalogItemDetailsTool(Protocol):
+    async def get_item_details(
+        self,
+        *,
+        item_id: UUID,
+    ) -> CatalogItemDetail | None: ...
+
+
+class SupplierVerificationPort(Protocol):
+    async def verify_by_inn_or_ogrn(
+        self,
+        *,
+        inn: str | None,
+        ogrn: str | None,
+        supplier_name: str | None,
+    ) -> SupplierVerificationResult: ...
+
+
+class BriefRendererTool(Protocol):
+    def render(
+        self,
+        *,
+        brief: BriefState,
+        selected_items: list[CatalogItemDetail],
+        verification_results: list[SupplierVerificationResult],
+    ) -> RenderedEventBrief: ...
+
+
+__all__ = [
+    "AssistantRouter",
+    "BriefRendererTool",
+    "CatalogItemDetailsTool",
+    "CatalogSearchTool",
+    "LLMStructuredRouterPort",
+    "SupplierVerificationPort",
+]
