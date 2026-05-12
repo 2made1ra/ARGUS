@@ -8,33 +8,73 @@ ARGUS now has two search flows:
 Catalog search is the primary MVP user flow. Document search remains available
 but must not replace catalog item cards/table.
 
-## Catalog Assistant Search
+## Assistant Catalog Search
 
-Primary user path:
+The assistant has two primary UX modes. The backend returns the mode explicitly
+as `ui_mode`; the frontend must not infer it only from text.
+
+```text
+brief_workspace
+  user explicitly creates, prepares, plans, organizes or renders an event
+  -> chat + draft brief + service groups + catalog candidates
+     + supplier verification + final brief
+
+chat_search
+  user only asks for a contractor, supplier, item, service or price row
+  -> simple chat with search clarifications and inline catalog cards
+```
+
+The brief workspace opens for event-creation messages such as:
+
+```text
+Нужно организовать корпоратив на 120 человек в Екатеринбурге
+Собери бриф на конференцию
+Готовим презентацию продукта, нужна площадка и подрядчики
+```
+
+The chat-only search flow stays active for direct catalog search messages such
+as:
+
+```text
+Найди подрядчика по свету в Екатеринбурге
+Есть кейтеринг до 2500 на гостя?
+Покажи радиомикрофоны у поставщиков с НДС
+```
+
+Primary backend path:
 
 ```text
 POST /assistant/chat
-  -> router: brief_discovery | supplier_search | mixed | clarification
-  -> brief merge
-  -> search_items when useful
-  -> response: message + router + brief + found_items
+  -> ChatTurnUseCase
+      -> EventBriefInterpreter
+      -> BriefWorkflowPolicy
+      -> ToolExecutor
+      -> ResponseComposer
+  -> response:
+      message + ui_mode + router + action_plan + brief
+      + found_items + verification_results + rendered_brief
 ```
 
 Response layers:
 
 ```text
-message      live explanation, grouping, clarifying questions, next step
-router       structured routing decision for observability/debugging
-brief        structured event BriefState
-found_items  checkable Postgres price_items rows
+message               live explanation, grouping, clarifying questions, next step
+ui_mode               brief_workspace | chat_search
+router                structured interpretation/debug payload
+action_plan           approved tool intents and skipped action reasons
+brief                 structured event BriefState
+found_items           checkable Postgres price_items rows
+verification_results  explicit supplier verification tool output
+rendered_brief        deterministic final event brief when requested
 ```
 
 `message` is not the source of truth for catalog facts. Prices, units,
-suppliers, cities, INNs, emails, phones, categories, source text and date
-availability must be backed by `found_items` or an opened catalog item detail.
-For catalog search turns the assistant may explain what happened and suggest
-next refinements, but concrete catalog rows must stay in `found_items`.
+suppliers, cities, INNs, emails, phones, categories, source text, legal statuses
+and date availability must be backed by `found_items`, opened catalog item
+details or `verification_results`.
+
 `found_items` are candidates for review, not selected budget/proposal lines.
+They become selected only through explicit `selected_item_ids`.
 
 Minimum `found_items` card fields:
 
@@ -61,21 +101,35 @@ codes/templates such as `semantic`, `keyword_name`, `keyword_supplier`,
 ```json
 {
   "session_id": null,
-  "message": "Организовать музыкальный вечер на 100 человек",
+  "message": "Нужно организовать корпоратив на 120 человек в Екатеринбурге",
   "brief": {
     "event_type": null,
+    "event_goal": null,
+    "concept": null,
+    "format": null,
     "city": null,
     "date_or_period": null,
     "audience_size": null,
     "venue": null,
     "venue_status": null,
+    "venue_constraints": [],
     "duration_or_time_window": null,
-    "budget": null,
+    "budget_total": null,
+    "budget_per_guest": null,
+    "budget_notes": null,
     "event_level": null,
+    "service_needs": [],
     "required_services": [],
+    "must_have_services": [],
+    "nice_to_have_services": [],
+    "selected_item_ids": [],
     "constraints": [],
-    "preferences": []
-  }
+    "preferences": [],
+    "open_questions": []
+  },
+  "recent_turns": [],
+  "visible_candidates": [],
+  "candidate_item_ids": []
 }
 ```
 
@@ -84,57 +138,102 @@ Response:
 ```json
 {
   "session_id": "uuid",
-  "message": "Обновил черновик брифа и запустил поиск по очевидной потребности. Проверяемые карточки находятся в found_items; это кандидаты, а не готовые строки коммерческого предложения.",
+  "message": "Понял, начинаю собирать бриф мероприятия. Уже зафиксировал: корпоратив, Екатеринбург, 120 гостей. Уточните дату или период, есть ли уже площадка, и какой ориентир по бюджету или уровню мероприятия.",
+  "ui_mode": "brief_workspace",
   "router": {
-    "intent": "mixed",
+    "interface_mode": "brief_workspace",
+    "intent": "brief_discovery",
+    "workflow_stage": "clarifying",
     "confidence": 0.88,
-    "known_facts": {
-      "event_type": "музыкальный вечер",
-      "audience_size": 100
-    },
-    "missing_fields": ["city", "venue_status"],
-    "should_search_now": true,
-    "search_query": "музыкальное оборудование для музыкального вечера на 100 человек",
+    "reason_codes": ["event_creation_intent_detected", "brief_update_detected"],
     "brief_update": {
-      "event_type": "музыкальный вечер",
-      "city": null,
-      "date_or_period": null,
-      "audience_size": 100,
-      "venue": null,
-      "venue_status": null,
-      "duration_or_time_window": null,
-      "budget": null,
-      "event_level": null,
-      "required_services": ["звук"],
-      "constraints": [],
-      "preferences": []
-    }
+      "event_type": "корпоратив",
+      "city": "Екатеринбург",
+      "audience_size": 120
+    },
+    "search_requests": [],
+    "tool_intents": ["update_brief"],
+    "should_search_now": false,
+    "missing_fields": ["date_or_period", "venue_status", "budget_total"],
+    "clarification_questions": [
+      "На какую дату или период планируется мероприятие?",
+      "Площадка уже есть или ее нужно подобрать?",
+      "Какой ориентир по бюджету или уровню мероприятия?"
+    ]
+  },
+  "action_plan": {
+    "interface_mode": "brief_workspace",
+    "workflow_stage": "clarifying",
+    "tool_intents": ["update_brief"],
+    "search_requests": [],
+    "verification_targets": [],
+    "render_requested": false
   },
   "brief": {
-    "event_type": "музыкальный вечер",
-    "city": null,
+    "event_type": "корпоратив",
+    "city": "Екатеринбург",
     "date_or_period": null,
-    "audience_size": 100,
-    "venue": null,
-    "venue_status": null,
-    "duration_or_time_window": null,
-    "budget": null,
-    "event_level": null,
-    "required_services": ["звук"],
-    "constraints": [],
-    "preferences": []
+    "audience_size": 120,
+    "open_questions": [
+      "date_or_period",
+      "venue_status",
+      "budget_total",
+      "concept"
+    ]
   },
-  "found_items": []
+  "found_items": [],
+  "verification_results": [],
+  "rendered_brief": null
+}
+```
+
+Direct chat-search response example:
+
+```json
+{
+  "session_id": "uuid",
+  "message": "Нашел варианты в каталоге. Карточки ниже - предварительная выдача по вашему запросу.",
+  "ui_mode": "chat_search",
+  "router": {
+    "interface_mode": "chat_search",
+    "intent": "supplier_search",
+    "workflow_stage": "searching",
+    "reason_codes": ["direct_catalog_search_detected", "service_need_detected"],
+    "search_requests": [
+      {
+        "query": "световое оборудование Екатеринбург",
+        "service_category": "свет",
+        "filters": {
+          "supplier_city_normalized": "екатеринбург"
+        },
+        "priority": 1,
+        "limit": 8
+      }
+    ],
+    "should_search_now": true
+  },
+  "brief": {},
+  "found_items": [],
+  "verification_results": [],
+  "rendered_brief": null
 }
 ```
 
 Assistant implementation boundaries:
 
-- `assistant` owns `BriefState`, router decisions and chat turn orchestration.
+- `assistant` owns `BriefState`, structured interpretation, workflow policy,
+  response composition and chat turn orchestration.
 - `assistant` calls catalog search through an explicit search-items port.
 - HTTP composition may adapt the catalog use case into that port; assistant
   feature code must not import catalog internals directly.
 - Document RAG is not a fallback for catalog prices, suppliers or item evidence.
+- LLM output can help produce structured interpretation, but backend policy
+  validates and authorizes every tool call.
+- One chat turn is bounded. Do not add a recursive agent loop.
+- Phrases such as `второй вариант`, `первые два` and
+  `проверь найденных подрядчиков` require explicit request context through
+  `visible_candidates`, `candidate_item_ids` or `selected_item_ids`; do not
+  resolve them from hidden server memory.
 
 ## `search_items`
 
@@ -216,28 +315,59 @@ Search result evidence rules:
 
 ## Brief State
 
-MVP stores one active brief per chat/session:
+The event-brief workspace stores one active `BriefState` per request/session
+context. The first implementation can remain stateless on the backend side and
+receive the current brief from the frontend.
 
 ```json
 {
   "event_type": null,
+  "event_goal": null,
+  "concept": null,
+  "format": null,
   "city": null,
   "date_or_period": null,
   "audience_size": null,
   "venue": null,
   "venue_status": null,
+  "venue_constraints": [],
   "duration_or_time_window": null,
-  "budget": null,
-  "event_level": null,
+  "budget_total": null,
+  "budget_per_guest": null,
+  "budget_notes": null,
+  "catering_format": null,
+  "technical_requirements": [],
+  "service_needs": [],
   "required_services": [],
+  "must_have_services": [],
+  "nice_to_have_services": [],
+  "selected_item_ids": [],
+  "event_level": null,
   "constraints": [],
-  "preferences": []
+  "preferences": [],
+  "open_questions": []
 }
 ```
 
 Brief is state, not a prose-only summary. A final prose brief can be rendered
-from `BriefState` and selected/found catalog rows, but final commercial proposal
-generation is post-MVP.
+from `BriefState`, selected catalog rows and supplier verification results.
+
+Service field semantics:
+
+- `service_needs` is the normalized model used by policy and search planning.
+- `required_services` is a compatibility/UI projection of explicitly requested
+  service blocks.
+- `must_have_services` contains explicitly mandatory service blocks only.
+- `nice_to_have_services` contains policy suggestions and must never be treated
+  as selected or mandatory.
+- `technical_requirements` contains execution requirements, not service
+  categories.
+- `venue_constraints` contains constraints caused by the venue only.
+- `selected_item_ids` contains explicit user choices. `found_items` must not be
+  copied into it automatically.
+
+Budget fields stay separate: total budget, per-guest budget and uncertain
+budget notes are different facts.
 
 ## Three-level drill-down
 

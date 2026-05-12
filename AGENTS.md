@@ -9,10 +9,20 @@ and link to it here instead of copying it.
 
 ## Project Snapshot
 
-ARGUS is moving to a catalog-first MVP for event agency managers. Primary MVP
-flow:
+ARGUS is moving to a catalog-first MVP for event agency managers. Primary
+catalog data flow:
 
 `prices.csv -> price_items -> price_items_search_v1 -> unified assistant chat`
+
+The assistant product is an event-brief copilot with catalog-backed supplier
+search, not a free-running general agent. It supports two main UX modes:
+
+- `brief_workspace`: user explicitly creates, prepares or manages an event;
+  the UI shows chat plus draft brief, service groups, catalog candidates,
+  supplier verification and final brief.
+- `chat_search`: user only asks to find a contractor, supplier, item, price or
+  service; the UI stays a simple chat with clarifying questions and inline
+  catalog cards.
 
 Existing document intelligence remains available as a secondary workflow. Core
 document flow:
@@ -34,7 +44,10 @@ For broad architecture, pipeline, data model, API, or workflow changes, read
 - Dev setup, commands, env vars, Docker services: `docs/agent/dev.md`.
 - Upload, SAGE processing, Celery chain, statuses: `docs/agent/pipeline.md`.
 - Postgres tables, Qdrant payloads, extracted fields: `docs/agent/data-model.md`.
-- Search UX, RAG endpoints, Qdrant filters: `docs/agent/search.md`.
+- Event-brief assistant workflow, UX modes, tools and evidence rules:
+  `docs/agent/assistant.md`.
+- Catalog search, document search/RAG endpoints, Qdrant filters:
+  `docs/agent/search.md`.
 - Contractor matching and normalization: `docs/agent/entity-resolution.md`.
 - HTTP request/response contracts: `docs/api/openapi.yaml`.
 
@@ -70,16 +83,28 @@ owns FastAPI routers and Celery tasks.
   errors, and handle transport concerns.
 - Preparatory refactors must preserve behavior unless the user asks otherwise.
 
-Catalog MVP boundaries:
+Catalog and assistant MVP boundaries:
 
 - `price_items` in Postgres is the source of truth for catalog facts.
 - Qdrant `price_items_search_v1` is the controlled catalog vector index.
 - New embeddings come from deterministic `embedding_text` with template `prices_v1`.
 - CSV legacy `embedding` is audit-only and must not be used for user query search.
 - Unified assistant chat is the primary UI; its response separates `message`,
-  `router`, `brief`, and `found_items`.
+  `ui_mode`, `router`, `action_plan`, `brief`, `found_items`,
+  `verification_results` and `rendered_brief` as the feature rolls out.
 - Catalog search evidence is checkable item cards/table from Postgres, not RAG
   prose. Document RAG/search remains secondary.
+- Assistant routing is a bounded chat orchestrator: structured interpretation,
+  workflow policy, approved backend tools, response composer. No autonomous
+  loop, no arbitrary tools, no hidden server memory for visible candidates.
+- LLM assistance is allowed only for structured interpretation behind validated
+  DTOs. It must not generate supplier facts, call tools directly, write SQL or
+  replace catalog evidence.
+- `found_items` are candidates. They become selected only through explicit
+  `selected_item_ids`; final briefs must not treat all found rows as chosen.
+- Supplier verification is explicit and separate from contractor entity
+  resolution. Registry `active` means legal status in the verification source,
+  not event-date availability, recommendation or contract validity.
 
 ## SAGE And Pipeline
 

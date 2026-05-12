@@ -13,6 +13,51 @@ Guidance:
 - Post-MVP can add an explicit supplier-to-contractor linking workflow, but it
   must preserve the original catalog row facts.
 
+## Supplier Verification Boundary
+
+Supplier verification for the event-brief assistant is a separate backend tool,
+not contractor entity resolution.
+
+Use cases:
+
+```text
+document/PDF workflow
+  -> resolve_contractor(raw_name, inn)
+  -> contractors + contractor_raw_mappings
+
+assistant workflow
+  -> verify_supplier_status(item ids / supplier INN / supplier name)
+  -> SupplierVerificationResult
+```
+
+Rules:
+
+- CSV import must not call `resolve_contractor`.
+- Catalog search must not depend on contractor matching quality.
+- `verify_supplier_status` must work through an explicit
+  `SupplierVerificationPort`.
+- The default MVP adapter may return `not_verified` with a risk flag such as
+  `verification_adapter_not_configured`.
+- Future FNS EGRUL/EGRIP or DaData adapters must live in `adapters/`, behind
+  the same port, and must not be called from domain code directly.
+- Verification targets can come only from `selected_item_ids`,
+  `candidate_item_ids`, `visible_candidates` or explicit item ids in the
+  request. Do not infer targets from hidden chat history.
+- If multiple catalog rows share one `supplier_inn`, verify that INN once and
+  map the result back to all related item ids.
+- Suppliers without INN are returned as `not_verified` with a risk flag such as
+  `supplier_inn_missing`.
+
+Verification semantics:
+
+- `status=active` means the legal entity was found as active in the verification
+  source.
+- `status=active` does not mean the supplier is available on the event date.
+- `status=active` does not mean ARGUS recommends the supplier.
+- `status=active` does not mean an agency contract is currently valid.
+- Assistant prose should say `юрлицо найдено как действующее в проверочном
+  источнике`, not `подрядчик готов к мероприятию`.
+
 `resolve_contractor(raw_name, inn) → ContractorEntityId`
 
 ## Matching cascade (stop at first match)

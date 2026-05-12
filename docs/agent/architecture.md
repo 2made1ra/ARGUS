@@ -26,7 +26,7 @@ argus/
 │   │   │   ├── search/              # Drill-down semantic search
 │   │   │   ├── documents/           # Document management + review
 │   │   │   ├── catalog/             # CSV import, price_items, catalog search
-│   │   │   └── assistant/           # Unified chat, router, brief state
+│   │   │   └── assistant/           # Event-brief copilot, chat orchestrator, tools
 │   │   │
 │   │   ├── adapters/
 │   │   │   ├── sqlalchemy/          # PostgreSQL repos
@@ -73,7 +73,7 @@ argus/
 | `search` | Drill-down semantic search + RAG answer use cases (global, per-contractor, per-document) |
 | `documents` | Document detail, list, extracted facts, PDF preview |
 | `catalog` | `prices.csv` import, normalization, `price_items`, `embedding_text`, catalog indexing and `search_items` |
-| `assistant` | Unified chat turn, structured router, `BriefState`, tool orchestration through explicit ports |
+| `assistant` | Event-brief copilot, `brief_workspace` and `chat_search` UX modes, structured interpretation, workflow policy, bounded backend tool orchestration |
 
 ## Catalog-first MVP Architecture
 
@@ -86,25 +86,69 @@ prices.csv
   -> deterministic embedding_text prices_v1
   -> catalog embedding + Qdrant price_items_search_v1
   -> assistant search_items tool
-  -> unified chat UI with message + brief + found_items
+  -> event-brief assistant UI with message + ui_mode + brief + found_items
 ```
 
 Boundaries:
 
 - `catalog` owns CSV-compatible catalog rows, normalization, duplicate guards,
   `embedding_text`, indexing and search contracts.
-- `assistant` owns user-facing chat behavior, intent routing, brief state and
-  tool calls. It must call catalog through ports/services, not direct SQL.
+- `assistant` owns user-facing chat behavior, event-brief state, structured
+  interpretation, workflow policy, response composition and bounded tool calls.
+  It must call catalog through ports/services, not direct SQL.
 - `ingest`, `documents`, `contractors` and document `search` remain available
   for PDF/document workflows. Their lifecycle and task chain stay unchanged.
 - Features must not import from each other. Share only explicit contracts or
   core value objects.
 - Business decisions such as source-text inclusion, duplicate handling, match
-  reason generation and assistant evidence rules belong in use cases/domain
-  services, never FastAPI routes, Celery tasks or adapters.
+  reason generation, assistant UX mode selection, workflow transitions and
+  evidence rules belong in use cases/domain services, never FastAPI routes,
+  Celery tasks or adapters.
 
 Do not mix `document_chunks` vectors and `price_items` vectors in one Qdrant
 collection. Document search/RAG and catalog search are different product flows.
+
+## Event-Brief Assistant Architecture
+
+The assistant is a controlled chat orchestrator, not a free-running agent.
+
+```text
+POST /assistant/chat
+  -> ChatTurnUseCase
+      -> EventBriefInterpreter
+      -> BriefWorkflowPolicy
+      -> ToolExecutor
+      -> ResponseComposer
+      -> ChatTurnResponse
+```
+
+Assistant layer rules:
+
+- `EventBriefInterpreter` extracts facts, service needs, action signals and
+  contextual references from `message`, `BriefState`, recent turns and explicit
+  UI context. It may use LLM structured output, but deterministic extraction and
+  schema validation remain mandatory.
+- `BriefWorkflowPolicy` chooses `ui_mode`, workflow stage, missing fields and
+  allowed tools. LLM output cannot authorize tool calls directly.
+- `ToolExecutor` calls only explicit backend tools such as `update_brief`,
+  `search_items`, `get_item_details`, `select_item`, `verify_supplier_status`
+  and `render_event_brief`.
+- `ResponseComposer` builds safe user-facing prose from structured state and
+  tool results. It does not invent catalog or supplier facts.
+
+Target `ui_mode` values:
+
+```text
+brief_workspace  explicit event creation, planning, preparation or final brief
+chat_search      direct contractor, supplier, item, service or price search
+```
+
+The first implementation is stateless on the backend side except for
+`BriefState` and explicit request context such as `visible_candidates` and
+`candidate_item_ids`. Do not resolve phrases like `второй вариант` or
+`проверь найденных` from hidden server memory.
+
+See `docs/agent/assistant.md` for detailed DTO, workflow, tool and UX rules.
 
 ## packages/sage
 

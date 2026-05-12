@@ -4,6 +4,12 @@ ARGUS MVP is catalog-first for event agency managers. Postgres `price_items` is
 the source of truth for catalog facts. Document tables remain the source of
 truth for uploaded PDFs/contracts and are not replaced by the catalog.
 
+Assistant state is an application/API contract, not a catalog source of truth.
+`BriefState`, `ActionPlan`, `found_items`, `verification_results` and
+`rendered_brief` may be returned by `POST /assistant/chat`, but catalog facts
+still come from hydrated `price_items`, opened item details or explicit
+verification results.
+
 ## PostgreSQL tables
 
 ### Catalog MVP tables
@@ -89,6 +95,10 @@ legacy_embedding_dim        integer
 created_at                  timestamptz
 updated_at                  timestamptz
 ```
+
+`supplier_status` on `price_items` is a catalog field from the source row. It is
+not the same as supplier verification output and must not be presented as
+registry proof unless a verification tool result confirms it.
 
 Generated catalog vectors are not stored in Postgres for MVP. Prefer one
 generate+index flow: `embedding_text -> embedding generation -> dimension
@@ -284,6 +294,80 @@ Payload example:
 Full cards are hydrated from Postgres `price_items`. Do not mix
 `document_chunks` vectors and `price_items` vectors in the same Qdrant
 collection.
+
+## Assistant State Contracts
+
+Assistant state is carried through request/response DTOs for the event-brief
+copilot. It should not be conflated with Postgres catalog persistence unless a
+future task explicitly introduces event/session storage.
+
+Target `BriefState` v2:
+
+```json
+{
+  "event_type": null,
+  "event_goal": null,
+  "concept": null,
+  "format": null,
+  "city": null,
+  "date_or_period": null,
+  "audience_size": null,
+  "venue": null,
+  "venue_status": null,
+  "venue_constraints": [],
+  "duration_or_time_window": null,
+  "event_level": null,
+  "budget_total": null,
+  "budget_per_guest": null,
+  "budget_notes": null,
+  "catering_format": null,
+  "technical_requirements": [],
+  "service_needs": [],
+  "required_services": [],
+  "must_have_services": [],
+  "nice_to_have_services": [],
+  "selected_item_ids": [],
+  "constraints": [],
+  "preferences": [],
+  "open_questions": []
+}
+```
+
+Selection and candidate context:
+
+- `found_items` are hydrated catalog candidates.
+- `selected_item_ids` are explicit user choices.
+- `visible_candidates` and `candidate_item_ids` come from the frontend request
+  when the user refers to visible results.
+- The backend must not resolve `второй вариант`, `первые два` or
+  `найденных подрядчиков` from hidden server memory in the stateless first
+  implementation.
+
+Supplier verification output is separate from catalog rows:
+
+```json
+{
+  "item_id": "uuid",
+  "supplier_name": "ООО Пример",
+  "supplier_inn": "7700000000",
+  "ogrn": null,
+  "legal_name": null,
+  "status": "not_verified",
+  "source": "manual_not_verified",
+  "checked_at": null,
+  "risk_flags": ["verification_adapter_not_configured"]
+}
+```
+
+Allowed verification statuses:
+
+```text
+active | inactive | not_found | not_verified | error
+```
+
+`active` means the legal entity was active in the verification source. It does
+not mean event-date availability, recommendation, booking confirmation or valid
+agency contract.
 
 ## ContractFields (LLM extraction target)
 

@@ -8,6 +8,10 @@ ARGUS has two ingestion paths:
 The document path remains available and unchanged during catalog MVP work.
 PDF-to-catalog extraction is post-MVP and must not block CSV import/search/chat.
 
+The event-brief assistant is an application workflow over catalog search and
+supplier verification tools. It is not part of the document Celery chain and
+must not change document statuses.
+
 ## Catalog import/index path
 
 Catalog import is not part of the document Celery chain:
@@ -130,6 +134,28 @@ Document chunks and summaries can support document RAG, but they must not become
 the main proof for catalog facts such as price, supplier, unit or city. If a PDF
 contains catalog-worthy rows, first normalize them into `price_items` with
 document/page/chunk provenance.
+
+## Assistant Tool Boundary
+
+`POST /assistant/chat` may call catalog and verification tools during one
+bounded chat turn:
+
+```text
+ChatTurnUseCase
+  -> EventBriefInterpreter
+  -> BriefWorkflowPolicy
+  -> ToolExecutor
+       -> update_brief
+       -> search_items
+       -> get_item_details
+       -> verify_supplier_status
+       -> render_event_brief
+```
+
+These calls are synchronous application/use-case orchestration unless a future
+task explicitly introduces background work. They must not enqueue document
+pipeline tasks, change `documents.status`, or use document chunks as catalog
+evidence.
 
 ## SSE status stream
 

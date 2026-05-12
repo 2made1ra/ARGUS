@@ -142,6 +142,32 @@ uv run --project backend pytest backend/tests/features/assistant -v
 uv run --project backend pytest backend/tests/adapters/qdrant -v
 ```
 
+Event-brief assistant work should start with deterministic/fake LLM tests and
+only use real LM Studio calls for optional integration checks:
+
+```bash
+uv run --project backend pytest backend/tests/features/assistant/test_workflow_golden_cases.py -v
+uv run --project backend pytest backend/tests/features/assistant/test_event_brief_interpreter.py -v
+uv run --project backend pytest backend/tests/features/assistant/test_brief_workflow_policy.py -v
+uv run --project backend pytest backend/tests/features/assistant/test_response_composer.py -v
+```
+
+Frontend work on the two assistant UX modes should end with:
+
+```bash
+cd frontend
+npm run build
+```
+
+Manual UX checks:
+
+- Explicit event creation opens `brief_workspace`.
+- Direct contractor/service search stays in `chat_search`.
+- Catalog facts are rendered in item cards, not only in assistant prose.
+- `проверь найденных подрядчиков` without `visible_candidates`,
+  `candidate_item_ids` or `selected_item_ids` asks clarification.
+- Final brief does not treat all `found_items` as selected items.
+
 Document pipeline regressions should remain covered when touching SAGE,
 ingestion, document indexing or Qdrant bootstrap:
 
