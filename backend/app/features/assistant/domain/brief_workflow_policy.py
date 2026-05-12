@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+from app.features.assistant.brief import merge_brief
+from app.features.assistant.dto import (
+    ActionPlan,
+    AssistantInterfaceMode,
+    BriefState,
+    EventBriefWorkflowState,
+    Interpretation,
+)
+
+_INTAKE_FIELD_ORDER = (
+    "date_or_period",
+    "city",
+    "audience_size",
+    "venue_status",
+    "budget_total",
+    "concept",
+    "required_services",
+)
+
+_INTAKE_QUESTIONS = {
+    "date_or_period": "На какую дату или период планируется мероприятие?",
+    "city": "В каком городе пройдет мероприятие?",
+    "audience_size": "На сколько гостей рассчитываем мероприятие?",
+    "venue_status": "Площадка уже есть или ее нужно подобрать?",
+    "budget_total": "Какой ориентир по общему бюджету или уровню мероприятия?",
+    "concept": "Есть ли концепция или желаемый уровень мероприятия?",
+    "required_services": "Какие блоки услуг нужно закрыть в первую очередь?",
+}
+
+_SEARCH_QUESTIONS = {
+    "service_category": "Какую услугу или категорию нужно найти?",
+    "city": "В каком городе искать подрядчика или позицию каталога?",
+}
+
+
+class BriefWorkflowPolicy:
+    def plan(self, *, interpretation: Interpretation, brief: BriefState) -> ActionPlan:
+        if interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE:
+            return _brief_workspace_plan(interpretation=interpretation, brief=brief)
+        return _chat_search_plan(interpretation=interpretation)
+
+
+def missing_event_intake_fields(brief: BriefState) -> list[str]:
+    missing: list[str] = []
+    for field_name in _INTAKE_FIELD_ORDER:
+        if field_name == "budget_total":
+            if (
+                brief.budget_total is None
+                and brief.budget_per_guest is None
+                and brief.budget_notes is None
+            ):
+                missing.append(field_name)
+            continue
+        value = getattr(brief, field_name)
+        if value is None or value == []:
+            missing.append(field_name)
+    return missing
+
+
+def _brief_workspace_plan(
+    *,
+    interpretation: Interpretation,
+    brief: BriefState,
+) -> ActionPlan:
+    merged = merge_brief(brief, interpretation.brief_update)
+    missing_fields = missing_event_intake_fields(merged)
+    tool_intents = (
+        ["update_brief"]
+        if "update_brief" in interpretation.requested_actions
+        else []
+    )
+    search_requests = list(interpretation.search_requests)
+    if search_requests and "search_items" in interpretation.requested_actions:
+        tool_intents.append("search_items")
+
+    workflow_stage = (
+        EventBriefWorkflowState.SUPPLIER_SEARCHING
+        if "search_items" in tool_intents
+        else EventBriefWorkflowState.CLARIFYING
+    )
+
+    return ActionPlan(
+        interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+        workflow_stage=workflow_stage,
+        tool_intents=tool_intents,
+        search_requests=search_requests if "search_items" in tool_intents else [],
+        missing_fields=missing_fields,
+        clarification_questions=_questions_for(missing_fields, _INTAKE_QUESTIONS),
+    )
+
+
+def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
+    search_requests = [
+        request
+        for request in interpretation.search_requests
+        if request.service_category is not None
+    ]
+    missing_fields: list[str] = []
+    if not search_requests:
+        missing_fields.append("service_category")
+
+    should_search = not missing_fields and bool(search_requests)
+    return ActionPlan(
+        interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+        workflow_stage=(
+            EventBriefWorkflowState.SEARCHING
+            if should_search
+            else EventBriefWorkflowState.SEARCH_CLARIFYING
+        ),
+        tool_intents=["search_items"] if should_search else [],
+        search_requests=search_requests if should_search else [],
+        missing_fields=missing_fields,
+        clarification_questions=_questions_for(missing_fields, _SEARCH_QUESTIONS),
+    )
+
+
+def _questions_for(
+    missing_fields: list[str],
+    question_map: dict[str, str],
+) -> list[str]:
+    return [
+        question_map[field]
+        for field in missing_fields[:3]
+        if field in question_map
+    ]
+
+
+__all__ = ["BriefWorkflowPolicy", "missing_event_intake_fields"]

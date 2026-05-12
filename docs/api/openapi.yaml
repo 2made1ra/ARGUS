@@ -758,6 +758,74 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    ActionPlanOut:
+      properties:
+        interface_mode:
+          type: string
+          enum:
+          - brief_workspace
+          - chat_search
+          title: Interface Mode
+        workflow_stage:
+          type: string
+          enum:
+          - intake
+          - clarifying
+          - service_planning
+          - supplier_searching
+          - supplier_verification
+          - brief_ready
+          - brief_rendered
+          - search_clarifying
+          - searching
+          - search_results_shown
+          title: Workflow Stage
+        tool_intents:
+          items:
+            type: string
+          type: array
+          title: Tool Intents
+        search_requests:
+          items:
+            $ref: '#/components/schemas/SearchRequestOut'
+          type: array
+          title: Search Requests
+        verification_targets:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Verification Targets
+        render_requested:
+          type: boolean
+          title: Render Requested
+        missing_fields:
+          items:
+            type: string
+          type: array
+          title: Missing Fields
+        clarification_questions:
+          items:
+            type: string
+          type: array
+          title: Clarification Questions
+        skipped_actions:
+          items:
+            type: string
+          type: array
+          title: Skipped Actions
+      type: object
+      required:
+      - interface_mode
+      - workflow_stage
+      - tool_intents
+      - search_requests
+      - verification_targets
+      - render_requested
+      - missing_fields
+      - clarification_questions
+      - skipped_actions
+      title: ActionPlanOut
     AssistantChatRequestIn:
       properties:
         session_id:
@@ -773,6 +841,22 @@ components:
           anyOf:
           - $ref: '#/components/schemas/BriefStateIn'
           - type: 'null'
+        recent_turns:
+          items:
+            $ref: '#/components/schemas/ChatTurnIn'
+          type: array
+          title: Recent Turns
+        visible_candidates:
+          items:
+            $ref: '#/components/schemas/VisibleCandidateIn'
+          type: array
+          title: Visible Candidates
+        candidate_item_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Candidate Item Ids
       type: object
       required:
       - message
@@ -786,8 +870,18 @@ components:
         message:
           type: string
           title: Message
+        ui_mode:
+          type: string
+          enum:
+          - brief_workspace
+          - chat_search
+          title: Ui Mode
         router:
           $ref: '#/components/schemas/RouterDecisionOut'
+        action_plan:
+          anyOf:
+          - $ref: '#/components/schemas/ActionPlanOut'
+          - type: 'null'
         brief:
           $ref: '#/components/schemas/BriefStateOut'
         found_items:
@@ -795,13 +889,26 @@ components:
             $ref: '#/components/schemas/FoundCatalogItemOut'
           type: array
           title: Found Items
+        verification_results:
+          items: {}
+          type: array
+          title: Verification Results
+        rendered_brief:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Rendered Brief
       type: object
       required:
       - session_id
       - message
+      - ui_mode
       - router
+      - action_plan
       - brief
       - found_items
+      - verification_results
+      - rendered_brief
       title: AssistantChatResponseOut
     Body_importCatalogCsv:
       properties:
@@ -833,6 +940,21 @@ components:
           - type: string
           - type: 'null'
           title: Event Type
+        event_goal:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Goal
+        concept:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Concept
+        format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Format
         city:
           anyOf:
           - type: string
@@ -858,26 +980,78 @@ components:
           - type: string
           - type: 'null'
           title: Venue Status
+        venue_constraints:
+          items:
+            type: string
+          type: array
+          title: Venue Constraints
         duration_or_time_window:
           anyOf:
           - type: string
           - type: 'null'
           title: Duration Or Time Window
-        budget:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Budget
         event_level:
           anyOf:
           - type: string
           - type: 'null'
           title: Event Level
+        budget:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Budget
+        budget_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget Total
+        budget_per_guest:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget Per Guest
+        budget_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget Notes
+        catering_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Catering Format
+        technical_requirements:
+          items:
+            type: string
+          type: array
+          title: Technical Requirements
+        service_needs:
+          items:
+            $ref: '#/components/schemas/ServiceNeedIn'
+          type: array
+          title: Service Needs
         required_services:
           items:
             type: string
           type: array
           title: Required Services
+        must_have_services:
+          items:
+            type: string
+          type: array
+          title: Must Have Services
+        nice_to_have_services:
+          items:
+            type: string
+          type: array
+          title: Nice To Have Services
+        selected_item_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Selected Item Ids
         constraints:
           items:
             type: string
@@ -888,6 +1062,11 @@ components:
             type: string
           type: array
           title: Preferences
+        open_questions:
+          items:
+            type: string
+          type: array
+          title: Open Questions
       type: object
       title: BriefStateIn
     BriefStateOut:
@@ -897,6 +1076,21 @@ components:
           - type: string
           - type: 'null'
           title: Event Type
+        event_goal:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Goal
+        concept:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Concept
+        format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Format
         city:
           anyOf:
           - type: string
@@ -922,26 +1116,78 @@ components:
           - type: string
           - type: 'null'
           title: Venue Status
+        venue_constraints:
+          items:
+            type: string
+          type: array
+          title: Venue Constraints
         duration_or_time_window:
           anyOf:
           - type: string
           - type: 'null'
           title: Duration Or Time Window
-        budget:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Budget
         event_level:
           anyOf:
           - type: string
           - type: 'null'
           title: Event Level
+        budget:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Budget
+        budget_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget Total
+        budget_per_guest:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget Per Guest
+        budget_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Budget Notes
+        catering_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Catering Format
+        technical_requirements:
+          items:
+            type: string
+          type: array
+          title: Technical Requirements
+        service_needs:
+          items:
+            $ref: '#/components/schemas/ServiceNeedOut'
+          type: array
+          title: Service Needs
         required_services:
           items:
             type: string
           type: array
           title: Required Services
+        must_have_services:
+          items:
+            type: string
+          type: array
+          title: Must Have Services
+        nice_to_have_services:
+          items:
+            type: string
+          type: array
+          title: Nice To Have Services
+        selected_item_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Selected Item Ids
         constraints:
           items:
             type: string
@@ -952,20 +1198,39 @@ components:
             type: string
           type: array
           title: Preferences
+        open_questions:
+          items:
+            type: string
+          type: array
+          title: Open Questions
       type: object
       required:
       - event_type
+      - event_goal
+      - concept
+      - format
       - city
       - date_or_period
       - audience_size
       - venue
       - venue_status
+      - venue_constraints
       - duration_or_time_window
-      - budget
       - event_level
+      - budget
+      - budget_total
+      - budget_per_guest
+      - budget_notes
+      - catering_format
+      - technical_requirements
+      - service_needs
       - required_services
+      - must_have_services
+      - nice_to_have_services
+      - selected_item_ids
       - constraints
       - preferences
+      - open_questions
       title: BriefStateOut
     CatalogSearchFiltersIn:
       properties:
@@ -998,6 +1263,53 @@ components:
           title: Unit Price
       type: object
       title: CatalogSearchFiltersIn
+    CatalogSearchFiltersOut:
+      properties:
+        supplier_city_normalized:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City Normalized
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        supplier_status_normalized:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status Normalized
+        has_vat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Has Vat
+        vat_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vat Mode
+        unit_price_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Unit Price Min
+        unit_price_max:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Unit Price Max
+      type: object
+      required:
+      - supplier_city_normalized
+      - category
+      - supplier_status_normalized
+      - has_vat
+      - vat_mode
+      - unit_price_min
+      - unit_price_max
+      title: CatalogSearchFiltersOut
     CatalogSearchRequestIn:
       properties:
         query:
@@ -1042,6 +1354,22 @@ components:
       - role
       - content
       title: ChatMessageIn
+    ChatTurnIn:
+      properties:
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: ChatTurnIn
     ChunkSnippetOut:
       properties:
         page:
@@ -1850,6 +2178,10 @@ components:
           - supplier_search
           - mixed
           - clarification
+          - selection
+          - comparison
+          - verification
+          - render_brief
           title: Intent
         confidence:
           type: number
@@ -1873,6 +2205,51 @@ components:
           title: Search Query
         brief_update:
           $ref: '#/components/schemas/BriefStateOut'
+        interface_mode:
+          type: string
+          enum:
+          - brief_workspace
+          - chat_search
+          title: Interface Mode
+        workflow_stage:
+          type: string
+          enum:
+          - intake
+          - clarifying
+          - service_planning
+          - supplier_searching
+          - supplier_verification
+          - brief_ready
+          - brief_rendered
+          - search_clarifying
+          - searching
+          - search_results_shown
+          title: Workflow Stage
+        reason_codes:
+          items:
+            type: string
+          type: array
+          title: Reason Codes
+        search_requests:
+          items:
+            $ref: '#/components/schemas/SearchRequestOut'
+          type: array
+          title: Search Requests
+        tool_intents:
+          items:
+            type: string
+          type: array
+          title: Tool Intents
+        clarification_questions:
+          items:
+            type: string
+          type: array
+          title: Clarification Questions
+        user_visible_summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Visible Summary
       type: object
       required:
       - intent
@@ -1882,7 +2259,110 @@ components:
       - should_search_now
       - search_query
       - brief_update
+      - interface_mode
+      - workflow_stage
+      - reason_codes
+      - search_requests
+      - tool_intents
+      - clarification_questions
+      - user_visible_summary
       title: RouterDecisionOut
+    SearchRequestOut:
+      properties:
+        query:
+          type: string
+          title: Query
+        service_category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Service Category
+        filters:
+          $ref: '#/components/schemas/CatalogSearchFiltersOut'
+        priority:
+          type: integer
+          title: Priority
+        limit:
+          type: integer
+          title: Limit
+      type: object
+      required:
+      - query
+      - service_category
+      - filters
+      - priority
+      - limit
+      title: SearchRequestOut
+    ServiceNeedIn:
+      properties:
+        category:
+          type: string
+          title: Category
+        priority:
+          type: string
+          enum:
+          - required
+          - must_have
+          - nice_to_have
+          title: Priority
+          default: required
+        source:
+          type: string
+          enum:
+          - explicit
+          - policy_inferred
+          title: Source
+          default: explicit
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - category
+      title: ServiceNeedIn
+    ServiceNeedOut:
+      properties:
+        category:
+          type: string
+          title: Category
+        priority:
+          type: string
+          enum:
+          - required
+          - must_have
+          - nice_to_have
+          title: Priority
+        source:
+          type: string
+          enum:
+          - explicit
+          - policy_inferred
+          title: Source
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - category
+      - priority
+      - source
+      - reason
+      - notes
+      title: ServiceNeedOut
     SourceRefOut:
       properties:
         document_id:
@@ -1972,6 +2452,25 @@ components:
       - msg
       - type
       title: ValidationError
+    VisibleCandidateIn:
+      properties:
+        ordinal:
+          type: integer
+          title: Ordinal
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        service_category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Service Category
+      type: object
+      required:
+      - ordinal
+      - item_id
+      title: VisibleCandidateIn
     WithinDocumentResultOut:
       properties:
         chunk_index:

@@ -34,7 +34,7 @@ async def test_routes_concrete_equipment_request_to_supplier_search() -> None:
 
 
 @pytest.mark.asyncio
-async def test_routes_event_request_with_planning_help_to_mixed() -> None:
+async def test_routes_event_request_with_planning_help_to_brief_workspace() -> None:
     decision = await HeuristicAssistantRouter().route(
         message=(
             "Организовать музыкальный вечер на 100 человек, "
@@ -43,14 +43,14 @@ async def test_routes_event_request_with_planning_help_to_mixed() -> None:
         brief=BriefState(),
     )
 
-    assert decision.intent == "mixed"
-    assert decision.should_search_now is True
-    assert decision.search_query == (
-        "музыкальное оборудование для музыкального вечера на 100 человек"
-    )
+    assert decision.intent == "brief_discovery"
+    assert decision.should_search_now is False
+    assert decision.search_query is None
+    assert decision.interface_mode.value == "brief_workspace"
+    assert decision.tool_intents == ["update_brief"]
     assert decision.brief_update.event_type == "музыкальный вечер"
     assert decision.brief_update.audience_size == 100
-    assert decision.brief_update.required_services == ["звук"]
+    assert decision.brief_update.required_services == []
 
 
 @pytest.mark.asyncio

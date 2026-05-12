@@ -94,8 +94,20 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
     assert resp.status_code == 200
     body = resp.json()
     assert body["session_id"] == str(session_id)
-    assert set(body) == {"session_id", "message", "router", "brief", "found_items"}
+    assert set(body) == {
+        "session_id",
+        "message",
+        "ui_mode",
+        "router",
+        "action_plan",
+        "brief",
+        "found_items",
+        "verification_results",
+        "rendered_brief",
+    }
+    assert body["ui_mode"] == "chat_search"
     assert body["router"]["intent"] == "mixed"
+    assert body["router"]["interface_mode"] == "chat_search"
     assert body["brief"]["event_type"] == "музыкальный вечер"
     assert body["found_items"] == [
         {

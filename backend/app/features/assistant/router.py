@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from app.features.assistant.brief import merge_brief
-from app.features.assistant.dto import BriefState, RouterDecision
-
-_AUDIENCE_RE = re.compile(r"(?P<size>\d{1,5})\s*(?:человек|гостей|гостя|гость)", re.I)
+from app.features.assistant.domain.brief_workflow_policy import BriefWorkflowPolicy
+from app.features.assistant.domain.event_brief_interpreter import EventBriefInterpreter
+from app.features.assistant.domain.slot_extraction import extract_event_brief_slots
+from app.features.assistant.dto import (
+    ActionPlan,
+    BriefState,
+    Interpretation,
+    RouterDecision,
+)
 
 
 class HeuristicAssistantRouter:
@@ -16,46 +20,19 @@ class HeuristicAssistantRouter:
         if not normalized or _is_too_ambiguous(lower):
             return _clarification_decision(brief)
 
-        update = _brief_update_from_message(lower)
-        missing_fields = _missing_fields(merge_brief(brief, update))
-
-        if _looks_mixed(lower):
-            event_type = update.event_type or brief.event_type or "мероприятия"
-            audience_size = update.audience_size or brief.audience_size
-            return RouterDecision(
-                intent="mixed",
-                confidence=0.88,
-                known_facts=_known_facts(update),
-                missing_fields=missing_fields,
-                should_search_now=True,
-                search_query=_mixed_search_query(event_type, audience_size),
-                brief_update=_mixed_update(update),
-            )
-
-        if _looks_like_supplier_search(lower):
-            search_query = _supplier_search_query(normalized)
-            return RouterDecision(
-                intent="supplier_search",
-                confidence=0.84,
-                known_facts=_known_facts(update),
-                missing_fields=missing_fields,
-                should_search_now=True,
-                search_query=search_query,
-                brief_update=_supplier_update(update, lower),
-            )
-
-        if _looks_like_brief_discovery(lower):
-            return RouterDecision(
-                intent="brief_discovery",
-                confidence=0.82,
-                known_facts=_known_facts(update),
-                missing_fields=missing_fields,
-                should_search_now=False,
-                search_query=None,
-                brief_update=update,
-            )
-
-        return _clarification_decision(brief)
+        interpretation = EventBriefInterpreter().interpret(
+            message=normalized,
+            brief=brief,
+        )
+        action_plan = BriefWorkflowPolicy().plan(
+            interpretation=interpretation,
+            brief=brief,
+        )
+        return _decision_from_interpretation(
+            interpretation=interpretation,
+            action_plan=action_plan,
+            lower=lower,
+        )
 
 
 def _normalize_spaces(value: str) -> str:
@@ -64,83 +41,6 @@ def _normalize_spaces(value: str) -> str:
 
 def _is_too_ambiguous(lower: str) -> bool:
     return len(lower) < 12 or lower in {"подскажи", "помоги", "нужно", "хочу"}
-
-
-def _looks_mixed(lower: str) -> bool:
-    return ("помоги понять" in lower or "что нужно" in lower) and (
-        "организ" in lower or "вечер" in lower or "мероприят" in lower
-    )
-
-
-def _looks_like_supplier_search(lower: str) -> bool:
-    service_words = (
-        "оборудован",
-        "звук",
-        "свет",
-        "акустик",
-        "сцен",
-        "аренд",
-        "поставщик",
-        "цена",
-        "стоимость",
-    )
-    request_words = ("нужно", "нужен", "нужна", "нужны", "найди", "подбери")
-    return any(word in lower for word in service_words) and any(
-        word in lower for word in request_words
-    )
-
-
-def _looks_like_brief_discovery(lower: str) -> bool:
-    return ("хочу" in lower or "планир" in lower or "организ" in lower) and (
-        "вечер" in lower or "корпоратив" in lower or "мероприят" in lower
-    )
-
-
-def _brief_update_from_message(lower: str) -> BriefState:
-    return BriefState(
-        event_type=_event_type(lower),
-        audience_size=_audience_size(lower),
-        required_services=_required_services(lower),
-    )
-
-
-def _event_type(lower: str) -> str | None:
-    if "музыкаль" in lower and "вечер" in lower:
-        return "музыкальный вечер"
-    if "корпоратив" in lower:
-        return "корпоратив"
-    if "мероприят" in lower:
-        return "мероприятие"
-    return None
-
-
-def _audience_size(lower: str) -> int | None:
-    match = _AUDIENCE_RE.search(lower)
-    if match is None:
-        return None
-    return int(match.group("size"))
-
-
-def _required_services(lower: str) -> list[str]:
-    if "музыкаль" in lower and "оборудован" in lower:
-        return ["музыкальное оборудование"]
-    services: list[str] = []
-    if "звук" in lower or "акустик" in lower:
-        services.append("звук")
-    if "свет" in lower:
-        services.append("свет")
-    return services
-
-
-def _mixed_update(update: BriefState) -> BriefState:
-    services = update.required_services
-    if not services and update.event_type == "музыкальный вечер":
-        services = ["звук"]
-    return BriefState(
-        event_type=update.event_type,
-        audience_size=update.audience_size,
-        required_services=services,
-    )
 
 
 def _supplier_update(update: BriefState, lower: str) -> BriefState:
@@ -154,26 +54,6 @@ def _supplier_update(update: BriefState, lower: str) -> BriefState:
     )
 
 
-def _supplier_search_query(message: str) -> str:
-    query = re.sub(
-        r"^(?:мне\s+)?(?:нужно|нужен|нужна|нужны)\s+",
-        "",
-        message,
-        flags=re.I,
-    )
-    return query.strip()
-
-
-def _mixed_search_query(event_type: str, audience_size: int | None) -> str:
-    if event_type == "музыкальный вечер":
-        base = "музыкальное оборудование для музыкального вечера"
-    else:
-        base = f"оборудование для {event_type}"
-    if audience_size is None:
-        return base
-    return f"{base} на {audience_size} человек"
-
-
 def _missing_fields(brief: BriefState) -> list[str]:
     required = ["city", "audience_size", "venue_status"]
     return [field_name for field_name in required if getattr(brief, field_name) is None]
@@ -183,11 +63,17 @@ def _known_facts(brief: BriefState) -> dict[str, Any]:
     facts: dict[str, Any] = {}
     for field_name in (
         "event_type",
+        "event_goal",
+        "concept",
+        "format",
         "city",
         "date_or_period",
         "audience_size",
         "venue",
         "venue_status",
+        "budget_total",
+        "budget_per_guest",
+        "budget_notes",
         "duration_or_time_window",
         "budget",
         "event_level",
@@ -195,11 +81,48 @@ def _known_facts(brief: BriefState) -> dict[str, Any]:
         value = getattr(brief, field_name)
         if value is not None:
             facts[field_name] = value
-    for field_name in ("required_services", "constraints", "preferences"):
+    for field_name in (
+        "venue_constraints",
+        "technical_requirements",
+        "required_services",
+        "constraints",
+        "preferences",
+    ):
         value = getattr(brief, field_name)
         if value:
             facts[field_name] = value
     return facts
+
+
+def _decision_from_interpretation(
+    *,
+    interpretation: Interpretation,
+    action_plan: ActionPlan,
+    lower: str,
+) -> RouterDecision:
+    brief_update = interpretation.brief_update
+    if interpretation.intent == "supplier_search":
+        slots = extract_event_brief_slots(lower)
+        brief_update = _supplier_update(slots, lower)
+    search_query = (
+        action_plan.search_requests[0].query if action_plan.search_requests else None
+    )
+    return RouterDecision(
+        intent=interpretation.intent,
+        confidence=interpretation.confidence,
+        known_facts=_known_facts(brief_update),
+        missing_fields=list(action_plan.missing_fields),
+        should_search_now=action_plan.should_search_now,
+        search_query=search_query,
+        brief_update=brief_update,
+        interface_mode=action_plan.interface_mode,
+        workflow_stage=action_plan.workflow_stage,
+        reason_codes=list(interpretation.reason_codes),
+        search_requests=list(action_plan.search_requests),
+        tool_intents=list(action_plan.tool_intents),
+        clarification_questions=list(action_plan.clarification_questions),
+        user_visible_summary=interpretation.user_visible_summary,
+    )
 
 
 def _clarification_decision(brief: BriefState) -> RouterDecision:

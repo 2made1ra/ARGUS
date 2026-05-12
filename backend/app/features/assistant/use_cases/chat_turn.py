@@ -3,7 +3,9 @@ from __future__ import annotations
 from uuid import uuid4
 
 from app.features.assistant.brief import merge_brief
+from app.features.assistant.domain.response_composer import ResponseComposer
 from app.features.assistant.dto import (
+    ActionPlan,
     AssistantChatRequest,
     AssistantChatResponse,
     BriefState,
@@ -31,21 +33,44 @@ class ChatTurnUseCase:
             message=request.message,
             brief=current_brief,
         )
-        brief = merge_brief(current_brief, decision.brief_update)
+        brief = (
+            merge_brief(current_brief, decision.brief_update)
+            if _should_update_brief(decision)
+            else current_brief
+        )
         found_items = await self._search_if_needed(decision)
+        action_plan = _action_plan_from_decision(decision)
         return AssistantChatResponse(
             session_id=request.session_id or uuid4(),
-            message=_message_for(decision, found_items),
+            message=ResponseComposer().compose_from_decision(
+                decision=decision,
+                brief=brief,
+                found_items=found_items,
+            ),
             router=decision,
             brief=brief,
             found_items=found_items,
+            ui_mode=decision.interface_mode,
+            action_plan=action_plan,
         )
 
     async def _search_if_needed(
         self,
         decision: RouterDecision,
     ) -> list[FoundCatalogItem]:
-        if not decision.should_search_now or decision.search_query is None:
+        if not decision.should_search_now:
+            return []
+        if decision.search_requests:
+            found_items: list[FoundCatalogItem] = []
+            for search_request in decision.search_requests[:3]:
+                found_items.extend(
+                    await self._catalog_search.search_items(
+                        query=search_request.query,
+                        limit=search_request.limit,
+                    )
+                )
+            return found_items
+        if decision.search_query is None:
             return []
         return await self._catalog_search.search_items(
             query=decision.search_query,
@@ -53,55 +78,31 @@ class ChatTurnUseCase:
         )
 
 
-def _message_for(
-    decision: RouterDecision,
-    found_items: list[FoundCatalogItem],
-) -> str:
-    if decision.should_search_now and not found_items:
-        return (
-            "В каталоге нет строк по этому запросу. Уточните услугу, категорию, "
-            "город, поставщика или ИНН, и я попробую сузить поиск."
-        )
+def _should_update_brief(decision: RouterDecision) -> bool:
+    if "update_brief" in decision.tool_intents:
+        return True
+    return decision.intent in {"brief_discovery", "mixed"}
 
-    if decision.intent == "brief_discovery":
-        return (
-            "Собрал черновик брифа по вашему сообщению. Чтобы двигаться точнее, "
-            f"уточните: {_questions_for(decision.missing_fields)}."
-        )
 
-    if decision.intent == "supplier_search":
-        return (
-            "Нашел кандидатов в каталоге. Конкретные строки, цены и поставщики "
-            "остаются в found_items; это кандидаты для проверки, а не выбранные "
-            "позиции сметы. Можно уточнить город, дату, формат площадки или бюджет."
-        )
-
-    if decision.intent == "mixed":
-        return (
-            "Обновил черновик брифа и запустил поиск по очевидной потребности. "
-            "Проверяемые карточки находятся в found_items; это кандидаты, а не "
-            "готовые строки коммерческого предложения. Следом можно уточнить "
-            "город, площадку и бюджет."
-        )
-
-    return (
-        "Уточните, пожалуйста, что нужно сделать: собрать бриф, найти позиции "
-        "в каталоге или совместить оба шага."
+def _action_plan_from_decision(decision: RouterDecision) -> ActionPlan:
+    return ActionPlan(
+        interface_mode=decision.interface_mode,
+        workflow_stage=decision.workflow_stage,
+        tool_intents=list(decision.tool_intents)
+        if decision.tool_intents
+        else _legacy_tool_intents(decision),
+        search_requests=list(decision.search_requests),
+        missing_fields=list(decision.missing_fields),
+        clarification_questions=list(decision.clarification_questions),
     )
 
 
-def _questions_for(missing_fields: list[str]) -> str:
-    labels = {
-        "city": "город",
-        "audience_size": "количество гостей",
-        "venue_status": "есть ли площадка",
-        "date_or_period": "дату или период",
-        "budget": "ориентир по бюджету",
-    }
-    fields = [labels.get(field, field) for field in missing_fields[:5]]
-    if not fields:
-        return "какая следующая задача приоритетна"
-    return ", ".join(fields)
+def _legacy_tool_intents(decision: RouterDecision) -> list[str]:
+    if decision.should_search_now:
+        return ["search_items"]
+    if decision.intent in {"brief_discovery", "mixed"}:
+        return ["update_brief"]
+    return []
 
 
 __all__ = ["ChatTurnUseCase"]
