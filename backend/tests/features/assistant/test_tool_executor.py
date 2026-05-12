@@ -55,7 +55,9 @@ class FakeBriefRenderer:
         brief: BriefState,
         selected_items: list[CatalogItemDetail],
         verification_results: list[object],
+        found_items: list[FoundCatalogItem] | None = None,
     ) -> RenderedEventBrief:
+        del found_items
         self.calls += 1
         return RenderedEventBrief(
             title="Бриф мероприятия",

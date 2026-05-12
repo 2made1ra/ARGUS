@@ -39,6 +39,25 @@ def test_event_creation_opens_workspace_and_does_not_search_prematurely() -> Non
     assert 1 <= len(plan.clarification_questions) <= 3
 
 
+def test_plain_brief_creation_phrase_is_not_final_render_request() -> None:
+    current_brief = BriefState()
+    interpretation = EventBriefInterpreter().interpret(
+        message="сформируй бриф на конференцию",
+        brief=current_brief,
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.intent == "brief_discovery"
+    assert interpretation.brief_update.event_type == "конференция"
+    assert plan.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert plan.workflow_stage == EventBriefWorkflowState.CLARIFYING
+    assert plan.tool_intents == ["update_brief"]
+    assert plan.render_requested is False
+
+
 def test_direct_contractor_search_stays_chat_search() -> None:
     plan = _plan_for("найди подрядчика по свету в Екатеринбурге")
 

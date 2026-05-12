@@ -103,13 +103,16 @@ class ToolExecutor:
             if intent == "render_event_brief":
                 if not calls.consume("render_event_brief", skipped_actions):
                     continue
+                selected_items = await self._selected_item_details_for_render(
+                    brief=working_brief,
+                    item_details=item_details,
+                    calls=calls,
+                    skipped_actions=skipped_actions,
+                )
                 rendered_brief = self._brief_renderer.render(
                     brief=working_brief,
-                    selected_items=[
-                        detail
-                        for detail in item_details
-                        if detail.id in set(working_brief.selected_item_ids)
-                    ],
+                    selected_items=selected_items,
+                    found_items=found_items,
                     verification_results=verification_results,
                 )
                 continue
@@ -267,6 +270,37 @@ class ToolExecutor:
             ogrn=None,
             supplier_name=supplier_name,
         )
+
+    async def _selected_item_details_for_render(
+        self,
+        *,
+        brief: BriefState,
+        item_details: list[CatalogItemDetail],
+        calls: _CallBudget,
+        skipped_actions: list[str],
+    ) -> list[CatalogItemDetail]:
+        if not brief.selected_item_ids:
+            return []
+
+        details_by_id = {detail.id: detail for detail in item_details}
+        selected_details: list[CatalogItemDetail] = []
+        for item_id in _dedupe_uuid(brief.selected_item_ids):
+            detail = details_by_id.get(item_id)
+            if detail is not None:
+                selected_details.append(detail)
+                continue
+            if self._item_details is None:
+                skipped_actions.append("item_details_unavailable_for_render")
+                continue
+            if not calls.consume("get_item_details", skipped_actions):
+                continue
+            fetched = await self._item_details.get_item_details(item_id=item_id)
+            if fetched is None:
+                skipped_actions.append(f"render_item_detail_not_found:{item_id}")
+                continue
+            selected_details.append(fetched)
+            item_details.append(fetched)
+        return selected_details
 
 
 class _CallBudget:

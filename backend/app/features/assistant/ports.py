@@ -72,6 +72,7 @@ class BriefRendererTool(Protocol):
         brief: BriefState,
         selected_items: list[CatalogItemDetail],
         verification_results: list[SupplierVerificationResult],
+        found_items: list[FoundCatalogItem] | None = None,
     ) -> RenderedEventBrief: ...
 
 

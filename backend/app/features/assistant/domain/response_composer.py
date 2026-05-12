@@ -6,6 +6,7 @@ from app.features.assistant.dto import (
     BriefState,
     FoundCatalogItem,
     Interpretation,
+    RenderedEventBrief,
     RouterDecision,
     SupplierVerificationResult,
 )
@@ -39,7 +40,13 @@ class ResponseComposer:
         brief: BriefState,
         found_items: list[FoundCatalogItem],
         verification_results: list[SupplierVerificationResult] | None = None,
+        rendered_brief: RenderedEventBrief | None = None,
     ) -> str:
+        if decision.intent == "render_brief":
+            return _render_message_from_decision(
+                decision=decision,
+                rendered_brief=rendered_brief,
+            )
         if decision.intent == "verification":
             return _verification_message_from_decision(
                 decision=decision,
@@ -136,6 +143,24 @@ def _verification_message_from_decision(
         "Не получил проверяемых результатов по переданным позициям. "
         "Проверьте, что item id есть в каталоге и содержит данные поставщика."
     )
+
+
+def _render_message_from_decision(
+    *,
+    decision: RouterDecision,
+    rendered_brief: RenderedEventBrief | None,
+) -> str:
+    if rendered_brief is not None:
+        if rendered_brief.open_questions:
+            return (
+                "Подготовил структурированный бриф. "
+                "Открытые вопросы оставил отдельным разделом."
+            )
+        return "Подготовил структурированный бриф."
+    questions = _question_sentence(decision.clarification_questions)
+    if questions:
+        return f"Пока не из чего сформировать итоговый бриф. {questions}".strip()
+    return "Пока не из чего сформировать итоговый бриф."
 
 
 def _brief_fact_sentence(brief: BriefState) -> str:

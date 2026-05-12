@@ -20,6 +20,7 @@ class ActionSignals:
     direct_catalog_search: bool
     contextual_brief_update: bool
     verification_requested: bool
+    render_requested: bool
 
 
 def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
@@ -35,12 +36,14 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
         phrase in lower for phrase in CONTEXTUAL_BRIEF_PHRASES
     )
     verification_requested = _has_verification_signal(lower)
+    render_requested = _has_render_signal(lower)
 
     return ActionSignals(
         event_creation=event_creation,
         direct_catalog_search=direct_catalog_search,
         contextual_brief_update=contextual_brief_update,
         verification_requested=verification_requested,
+        render_requested=render_requested,
     )
 
 
@@ -125,6 +128,21 @@ def _has_verification_signal(lower: str) -> bool:
             "юрлиц",
         )
     ) or bool(verification_item_ids_for(lower))
+
+
+def _has_render_signal(lower: str) -> bool:
+    has_brief = "бриф" in lower
+    if not has_brief:
+        return False
+    return any(
+        phrase in lower
+        for phrase in (
+            "собери итоговый",
+            "собрать итоговый",
+            "финальный",
+            "итоговый",
+        )
+    )
 
 
 def _has_active_brief(brief: BriefState) -> bool:

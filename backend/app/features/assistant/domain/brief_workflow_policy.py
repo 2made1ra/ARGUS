@@ -43,6 +43,12 @@ _VERIFICATION_QUESTIONS = {
     ),
 }
 
+_RENDER_QUESTIONS = {
+    "brief_context": (
+        "Сначала зафиксируйте хотя бы тип мероприятия, город или количество гостей."
+    ),
+}
+
 
 class BriefWorkflowPolicy:
     def plan(self, *, interpretation: Interpretation, brief: BriefState) -> ActionPlan:
@@ -83,6 +89,9 @@ def _brief_workspace_plan(
     interpretation: Interpretation,
     brief: BriefState,
 ) -> ActionPlan:
+    if interpretation.intent == "render_brief":
+        return _render_plan(interpretation=interpretation, brief=brief)
+
     if interpretation.intent == "verification":
         return _verification_plan(
             interpretation=interpretation,
@@ -131,7 +140,50 @@ def _brief_workspace_plan(
     )
 
 
+def _render_plan(
+    *,
+    interpretation: Interpretation,
+    brief: BriefState,
+) -> ActionPlan:
+    merged = merge_brief(brief, interpretation.brief_update)
+    if _has_renderable_brief(merged) and (
+        "render_event_brief" in interpretation.requested_actions
+    ):
+        return ActionPlan(
+            interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+            workflow_stage=EventBriefWorkflowState.BRIEF_RENDERED,
+            tool_intents=["render_event_brief"],
+            render_requested=True,
+            missing_fields=missing_event_intake_fields(merged),
+        )
+
+    missing_fields = _dedupe(["brief_context", *interpretation.missing_fields])
+    return ActionPlan(
+        interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+        workflow_stage=EventBriefWorkflowState.CLARIFYING,
+        tool_intents=[],
+        render_requested=False,
+        missing_fields=missing_fields,
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _RENDER_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
+    )
+
+
 def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
+    if interpretation.intent == "render_brief":
+        return ActionPlan(
+            interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+            workflow_stage=EventBriefWorkflowState.CLARIFYING,
+            tool_intents=[],
+            render_requested=False,
+            missing_fields=["brief_context"],
+            clarification_questions=[_RENDER_QUESTIONS["brief_context"]],
+        )
+
     if interpretation.intent == "verification":
         return _verification_plan(
             interpretation=interpretation,
@@ -228,6 +280,35 @@ def _field_is_missing(field_name: str, brief: BriefState) -> bool:
         )
     value = getattr(brief, field_name)
     return value is None or value == []
+
+
+def _has_renderable_brief(brief: BriefState) -> bool:
+    return any(
+        (
+            brief.event_type,
+            brief.event_goal,
+            brief.concept,
+            brief.format,
+            brief.city,
+            brief.date_or_period,
+            brief.audience_size,
+            brief.venue,
+            brief.venue_status,
+            brief.venue_constraints,
+            brief.duration_or_time_window,
+            brief.event_level,
+            brief.budget_total,
+            brief.budget_per_guest,
+            brief.budget_notes,
+            brief.service_needs,
+            brief.required_services,
+            brief.must_have_services,
+            brief.nice_to_have_services,
+            brief.selected_item_ids,
+            brief.constraints,
+            brief.preferences,
+        )
+    )
 
 
 def _dedupe(values: list[str]) -> list[str]:

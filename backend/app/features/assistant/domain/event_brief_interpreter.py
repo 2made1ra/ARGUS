@@ -55,7 +55,15 @@ class EventBriefInterpreter:
         brief_update = BriefState()
         verification_targets: list[UUID] = []
 
-        if signals.verification_requested:
+        if signals.render_requested:
+            interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
+            intent = "render_brief"
+            reason_codes.append("render_brief_requested")
+            if _has_active_brief(brief):
+                requested_actions.append("render_event_brief")
+            else:
+                reason_codes.append("brief_context_missing")
+        elif signals.verification_requested:
             interface_mode = (
                 AssistantInterfaceMode.BRIEF_WORKSPACE
                 if _has_active_brief(brief)

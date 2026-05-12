@@ -74,6 +74,7 @@ class ChatTurnUseCase:
                 brief=tool_results.brief,
                 found_items=tool_results.found_items,
                 verification_results=tool_results.verification_results,
+                rendered_brief=tool_results.rendered_brief,
             ),
             router=decision,
             brief=tool_results.brief,
