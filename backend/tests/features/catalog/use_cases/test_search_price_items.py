@@ -1,15 +1,99 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from app.features.catalog.dto import SearchPriceItemsFilters
+from app.features.catalog.dto import MatchReasonCode, SearchPriceItemsFilters
 from app.features.catalog.entities.price_item import PriceItem
 from app.features.catalog.ports import CatalogSearchFilters, CatalogSearchHit
+from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
+from app.features.catalog.use_cases.keyword_search import (
+    build_keyword_query,
+    keyword_reason_for_fields,
+    keyword_score,
+    price_item_keyword_fields,
+    price_item_matches_filters,
+)
 from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
+
+
+class _FakeImportRepository:
+    def __init__(self) -> None:
+        self.imports: list[Any] = []
+        self.rows: list[Any] = []
+
+    async def add(self, price_import: Any) -> None:
+        self.imports.append(price_import)
+
+    async def update(self, price_import: Any) -> None:
+        self.imports = [
+            price_import if item.id == price_import.id else item
+            for item in self.imports
+        ]
+
+    async def add_row(self, row: Any) -> None:
+        self.rows.append(row)
+
+    async def update_row_item(self, row_id: UUID, item_id: UUID) -> None:
+        for row in self.rows:
+            if row.id == row_id:
+                row.price_item_id = item_id
+
+    async def find_imported_by_file_sha256(self, file_sha256: str) -> Any | None:
+        for price_import in self.imports:
+            if (
+                price_import.file_sha256 == file_sha256
+                and price_import.status == "IMPORTED"
+            ):
+                return price_import
+        return None
+
+
+class _FakeImportItemRepository:
+    def __init__(self) -> None:
+        self.items: list[PriceItem] = []
+        self.sources: list[Any] = []
+
+    async def add(self, item: PriceItem) -> None:
+        self.items.append(item)
+
+    async def add_source(self, source: Any) -> None:
+        self.sources.append(source)
+
+    async def find_active_by_row_fingerprint(
+        self,
+        row_fingerprint: str,
+    ) -> PriceItem | None:
+        for item in self.items:
+            if item.row_fingerprint == row_fingerprint and item.is_active:
+                return item
+        return None
+
+
+class _FakeUoW:
+    async def __aenter__(self) -> _FakeUoW:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None:
+        if exc_type is not None:
+            await self.rollback()
+
+    async def commit(self) -> None:
+        return None
+
+    async def rollback(self) -> None:
+        return None
 
 
 class FakeEmbeddings:
@@ -80,6 +164,62 @@ class FakePriceItemSearchRepository:
             },
         )
         return [self.items[item_id] for item_id in item_ids if item_id in self.items]
+
+
+class ImportedPriceItemSearchRepository:
+    def __init__(self, items: list[PriceItem]) -> None:
+        self.items = {item.id: item for item in items}
+        self.keyword_calls: list[dict[str, Any]] = []
+        self.hydrate_calls: list[dict[str, Any]] = []
+
+    async def search_active_by_keywords(
+        self,
+        *,
+        query: str,
+        filters: SearchPriceItemsFilters,
+        limit: int,
+    ) -> list[tuple[UUID, float, MatchReasonCode]]:
+        self.keyword_calls.append(
+            {
+                "query": query,
+                "filters": filters,
+                "limit": limit,
+            },
+        )
+        keyword_query = build_keyword_query(query)
+        hits: list[tuple[UUID, float, MatchReasonCode]] = []
+        for item in self.items.values():
+            if not price_item_matches_filters(item, filters):
+                continue
+            reason = keyword_reason_for_fields(
+                price_item_keyword_fields(item),
+                keyword_query,
+            )
+            if reason is None:
+                continue
+            hits.append((item.id, keyword_score(reason), reason))
+            if len(hits) >= limit:
+                break
+        return hits
+
+    async def list_active_by_ids(
+        self,
+        item_ids: list[UUID],
+        *,
+        filters: SearchPriceItemsFilters,
+    ) -> list[PriceItem]:
+        self.hydrate_calls.append(
+            {
+                "item_ids": item_ids,
+                "filters": filters,
+            },
+        )
+        return [
+            self.items[item_id]
+            for item_id in item_ids
+            if item_id in self.items
+            and price_item_matches_filters(self.items[item_id], filters)
+        ]
 
 
 def _item(
@@ -164,6 +304,59 @@ def _use_case(
         ),
         repository,
         embeddings,
+        vector_search,
+    )
+
+
+def _prices_csv_fixture_rows(external_ids: set[str]) -> bytes:
+    with Path("test_files/prices.csv").open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames
+        assert fieldnames is not None
+        selected = [row for row in reader if row["id"] in external_ids]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(selected)
+    return output.getvalue().encode()
+
+
+async def _imported_prices_fixture_items() -> list[PriceItem]:
+    imports = _FakeImportRepository()
+    items = _FakeImportItemRepository()
+    uow = _FakeUoW()
+    uc = ImportPricesCsvUseCase(imports=imports, items=items, uow=uow)
+
+    await uc.execute(
+        filename="prices.csv",
+        content=_prices_csv_fixture_rows(
+            {"244", "325", "447", "467", "661", "897", "899"},
+        ),
+        source_path="test_files/prices.csv",
+    )
+
+    return items.items
+
+
+def _imported_use_case(
+    items: list[PriceItem],
+) -> tuple[
+    SearchPriceItemsUseCase,
+    ImportedPriceItemSearchRepository,
+    FakeCatalogSearch,
+]:
+    repository = ImportedPriceItemSearchRepository(items)
+    vector_search = FakeCatalogSearch([])
+    return (
+        SearchPriceItemsUseCase(
+            items=repository,
+            embeddings=FakeEmbeddings(),
+            vector_search=vector_search,
+            catalog_query_prefix="search_query: ",
+            catalog_embedding_template_version="prices_v1",
+        ),
+        repository,
         vector_search,
     )
 
@@ -286,6 +479,28 @@ async def test_merges_semantic_and_keyword_results_without_duplicate_rows() -> N
 
 
 @pytest.mark.asyncio
+async def test_keyword_fallback_is_not_starved_by_full_semantic_limit() -> None:
+    first_semantic = _item(name="Нерелевантная позиция 1", external_id="S-1")
+    second_semantic = _item(name="Нерелевантная позиция 2", external_id="S-2")
+    keyword_item = _item(name="Радиомикрофон", external_id="897")
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[first_semantic, second_semantic, keyword_item],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=first_semantic.id, score=0.99, payload={}),
+            CatalogSearchHit(price_item_id=second_semantic.id, score=0.98, payload={}),
+        ],
+    )
+    repository.keyword_hits = [
+        (keyword_item.id, 0.72, "keyword_external_id"),
+    ]
+
+    result = await uc.execute(query="897", limit=2)
+
+    assert keyword_item.id in [found.id for found in result.items]
+    assert len(result.items) == 2
+
+
+@pytest.mark.asyncio
 async def test_returns_source_text_snippet_and_full_available_flag() -> None:
     item = _item(
         source_text=(
@@ -317,3 +532,63 @@ async def test_empty_semantic_and_keyword_results_return_empty_items() -> None:
 
     assert result.items == []
     assert repository.hydrate_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "expected_external_id"),
+    [
+        ("ООО НИКА", "897"),
+        ("7726476100", "897"),
+        ("радиомикрофон", "244"),
+        ("фермы", "325"),
+        ("Екат", "244"),
+        ("Без НДС", "897"),
+        ("897", "897"),
+        ("1.1.2. Оператор ПТС", "899"),
+        ("ПТС", "447"),
+        ("Активен", "897"),
+        ("Оборудование", "244"),
+    ],
+)
+async def test_keyword_fallback_finds_imported_prices_csv_fields_with_weak_vectors(
+    query: str,
+    expected_external_id: str,
+) -> None:
+    imported_items = await _imported_prices_fixture_items()
+    item_by_id = {item.id: item for item in imported_items}
+    uc, repository, vector_search = _imported_use_case(imported_items)
+
+    result = await uc.execute(query=query, limit=20)
+
+    assert vector_search.calls[0]["query_vector"] == [0.1, 0.2, 0.3]
+    assert repository.keyword_calls[0]["query"] == query
+    assert any(
+        item_by_id[found.id].external_id == expected_external_id
+        for found in result.items
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "expected_filters"),
+    [
+        ("Екат", {"supplier_city_normalized": "екатеринбург"}),
+        ("Без НДС", {"has_vat": "Без НДС", "vat_mode": "without_vat"}),
+        ("Активен", {"supplier_status_normalized": "активен"}),
+    ],
+)
+async def test_search_infers_simple_filters_from_catalog_keyword_phrases(
+    query: str,
+    expected_filters: dict[str, str],
+) -> None:
+    imported_items = await _imported_prices_fixture_items()
+    uc, repository, vector_search = _imported_use_case(imported_items)
+
+    await uc.execute(query=query, limit=20)
+
+    semantic_filters = vector_search.calls[0]["filters"]
+    keyword_filters = repository.keyword_calls[0]["filters"]
+    for key, value in expected_filters.items():
+        assert getattr(semantic_filters, key) == value
+        assert getattr(keyword_filters, key) == value

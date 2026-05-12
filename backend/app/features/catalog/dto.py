@@ -20,6 +20,7 @@ class SearchPriceItemsFilters:
     supplier_city: str | None = None
     supplier_city_normalized: str | None = None
     category: str | None = None
+    section: str | None = None
     supplier_status: str | None = None
     supplier_status_normalized: str | None = None
     has_vat: str | None = None

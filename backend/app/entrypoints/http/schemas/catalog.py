@@ -162,6 +162,7 @@ class CatalogSearchFiltersIn(BaseModel):
     supplier_city: str | None = None
     supplier_city_normalized: str | None = None
     category: str | None = None
+    section: str | None = None
     supplier_status: str | None = None
     supplier_status_normalized: str | None = None
     has_vat: str | None = None
@@ -175,6 +176,7 @@ class CatalogSearchFiltersIn(BaseModel):
             supplier_city=self.supplier_city,
             supplier_city_normalized=self.supplier_city_normalized,
             category=self.category,
+            section=self.section,
             supplier_status=self.supplier_status,
             supplier_status_normalized=self.supplier_status_normalized,
             has_vat=self.has_vat,

@@ -1244,6 +1244,11 @@ components:
           - type: string
           - type: 'null'
           title: Category
+        section:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Section
         supplier_status:
           anyOf:
           - type: string
