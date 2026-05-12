@@ -1,8 +1,23 @@
-import type { ChatMessage, RouterDecision } from "../api";
+import type {
+  ChatMessage,
+  FoundItem,
+  RenderedEventBrief,
+  RouterDecision,
+  SupplierVerificationResult,
+} from "../api";
 import AssistantContent from "./AssistantContent";
+import FoundItemsPanel from "./FoundItemsPanel";
+import RenderedBriefPanel from "./RenderedBriefPanel";
+import VerificationResultsPanel from "./VerificationResultsPanel";
+
+export interface AssistantTimelineMessage extends ChatMessage {
+  foundItems?: FoundItem[];
+  verificationResults?: SupplierVerificationResult[];
+  renderedBrief?: RenderedEventBrief | null;
+}
 
 interface Props {
-  messages: ChatMessage[];
+  messages: AssistantTimelineMessage[];
   input: string;
   loading: boolean;
   error: string | null;
@@ -16,6 +31,10 @@ const intentLabels: Record<RouterDecision["intent"], string> = {
   supplier_search: "Поиск",
   mixed: "Бриф + поиск",
   clarification: "Уточнение",
+  selection: "Выбор",
+  comparison: "Сравнение",
+  verification: "Проверка",
+  render_brief: "Финал",
 };
 
 export default function AssistantChat({
@@ -59,21 +78,43 @@ export default function AssistantChat({
           </div>
         ) : (
           messages.map((message, index) => (
-            <article
-              className={`assistant-message assistant-message--${message.role}`}
-              key={`${message.role}-${index}`}
-            >
-              <div className="assistant-message__role">
-                {message.role === "user" ? "Вы" : "ARGUS"}
-              </div>
-              <div className="assistant-message__body">
-                {message.role === "assistant" ? (
-                  <AssistantContent content={message.content} />
-                ) : (
-                  <p>{message.content}</p>
+            <div className="assistant-timeline-item" key={`${message.role}-${index}`}>
+              <article
+                className={`assistant-message assistant-message--${message.role}`}
+              >
+                <div className="assistant-message__role">
+                  {message.role === "user" ? "Вы" : "ARGUS"}
+                </div>
+                <div className="assistant-message__body">
+                  {message.role === "assistant" ? (
+                    <AssistantContent content={message.content} />
+                  ) : (
+                    <p>{message.content}</p>
+                  )}
+                </div>
+              </article>
+
+              {message.role === "assistant" &&
+                message.foundItems !== undefined &&
+                message.foundItems.length > 0 && (
+                  <FoundItemsPanel
+                    items={message.foundItems}
+                    title="Каталог в чате"
+                    variant="inline"
+                  />
                 )}
-              </div>
-            </article>
+              {message.role === "assistant" &&
+                message.verificationResults !== undefined &&
+                message.verificationResults.length > 0 && (
+                  <VerificationResultsPanel
+                    results={message.verificationResults}
+                    variant="inline"
+                  />
+                )}
+              {message.role === "assistant" && message.renderedBrief && (
+                <RenderedBriefPanel brief={message.renderedBrief} variant="inline" />
+              )}
+            </div>
           ))
         )}
       </div>

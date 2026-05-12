@@ -1,18 +1,33 @@
 import { Link } from "react-router-dom";
 import type { FoundItem } from "../api";
+import { groupFoundItemsForDisplay } from "../utils/assistantCandidates";
 
 interface Props {
   items: FoundItem[];
   loading?: boolean;
+  title?: string;
+  variant?: "panel" | "inline";
 }
 
-export default function FoundItemsPanel({ items, loading = false }: Props) {
+export default function FoundItemsPanel({
+  items,
+  loading = false,
+  title = "Найденные позиции",
+  variant = "panel",
+}: Props) {
+  const groups = groupFoundItemsForDisplay(items);
+
   return (
-    <section className="found-items-panel panel" aria-label="Найденные позиции">
+    <section
+      className={`found-items-panel ${
+        variant === "panel" ? "panel" : "found-items-panel--inline"
+      }`}
+      aria-label={title}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Catalog</p>
-          <h2>Найденные позиции</h2>
+          <h2>{title}</h2>
         </div>
         <span className="meta">{loading ? "поиск..." : `${items.length} шт.`}</span>
       </div>
@@ -26,46 +41,54 @@ export default function FoundItemsPanel({ items, loading = false }: Props) {
           </span>
         </div>
       ) : (
-        <div className="found-item-list">
-          {items.map((item) => (
-            <Link
-              className="found-item-card"
-              key={item.id}
-              to={`/catalog/items/${item.id}`}
-            >
-              <div className="found-item-card__top">
-                <div>
-                  <h3>{item.name}</h3>
-                  <p className="meta">
-                    {item.category ?? "Без категории"} · {formatScore(item.score)}
-                  </p>
-                </div>
-                <span className="found-item-price">
-                  {item.unit_price} / {item.unit}
-                </span>
-              </div>
+        <div className="found-item-groups">
+          {groups.map((group) => (
+            <section className="found-item-group" key={group.title}>
+              {groups.length > 1 && <h3>{group.title}</h3>}
+              <div className="found-item-list">
+                {group.items.map((item) => (
+                  <Link
+                    className="found-item-card"
+                    key={item.id}
+                    to={`/catalog/items/${item.id}`}
+                  >
+                    <div className="found-item-card__top">
+                      <div>
+                        <h4>{item.name}</h4>
+                        <p className="meta">
+                          {item.category ?? "Без категории"} ·{" "}
+                          {formatScore(item.score)}
+                        </p>
+                      </div>
+                      <span className="found-item-price">
+                        {item.unit_price} / {item.unit}
+                      </span>
+                    </div>
 
-              <dl className="found-item-facts">
-                <div>
-                  <dt>Поставщик</dt>
-                  <dd>{item.supplier ?? "Не указан"}</dd>
-                </div>
-                <div>
-                  <dt>Город</dt>
-                  <dd>{item.supplier_city ?? "Не указан"}</dd>
-                </div>
-              </dl>
+                    <dl className="found-item-facts">
+                      <div>
+                        <dt>Поставщик</dt>
+                        <dd>{item.supplier ?? "Не указан"}</dd>
+                      </div>
+                      <div>
+                        <dt>Город</dt>
+                        <dd>{item.supplier_city ?? "Не указан"}</dd>
+                      </div>
+                    </dl>
 
-              <div className="found-item-source">
-                <span>Исходный фрагмент</span>
-                <p>{item.source_text_snippet ?? "Фрагмент не передан API"}</p>
-              </div>
+                    <div className="found-item-source">
+                      <span>Исходный фрагмент</span>
+                      <p>{item.source_text_snippet ?? "Фрагмент не передан API"}</p>
+                    </div>
 
-              <div className="found-item-reason">
-                <span>{item.match_reason.label}</span>
-                <small>{item.match_reason.code}</small>
+                    <div className="found-item-reason">
+                      <span>{item.match_reason.label}</span>
+                      <small>{item.match_reason.code}</small>
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </Link>
+            </section>
           ))}
         </div>
       )}

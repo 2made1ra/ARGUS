@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import yaml
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from app.entrypoints.http.dependencies import get_chat_turn_uc
 from app.features.assistant.dto import (
@@ -12,8 +17,7 @@ from app.features.assistant.dto import (
     MatchReason,
     RouterDecision,
 )
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from app.main import app as fastapi_app
 
 
 async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> None:
@@ -134,3 +138,26 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
     assert call_request.session_id is None
     assert call_request.message == "Организовать музыкальный вечер на 100 человек"
     assert call_request.brief == BriefState()
+
+
+def test_documented_assistant_openapi_matches_live_schema() -> None:
+    documented = yaml.safe_load(
+        Path("docs/api/openapi.yaml").read_text(encoding="utf-8"),
+    )
+    live = fastapi_app.openapi()
+
+    documented_schemas = documented["components"]["schemas"]
+    live_schemas = live["components"]["schemas"]
+    for schema_name in (
+        "AssistantChatRequestIn",
+        "AssistantChatResponseOut",
+        "ActionPlanOut",
+        "BriefStateIn",
+        "BriefStateOut",
+        "FoundCatalogItemOut",
+        "RouterDecisionOut",
+        "SupplierVerificationResultOut",
+        "RenderedEventBriefOut",
+        "VisibleCandidateIn",
+    ):
+        assert documented_schemas.get(schema_name) == live_schemas[schema_name]

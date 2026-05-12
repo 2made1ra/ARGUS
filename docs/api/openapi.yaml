@@ -796,6 +796,12 @@ components:
             format: uuid
           type: array
           title: Verification Targets
+        item_detail_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Item Detail Ids
         render_requested:
           type: boolean
           title: Render Requested
@@ -821,6 +827,7 @@ components:
       - tool_intents
       - search_requests
       - verification_targets
+      - item_detail_ids
       - render_requested
       - missing_fields
       - clarification_questions
@@ -890,14 +897,14 @@ components:
           type: array
           title: Found Items
         verification_results:
-          items: {}
+          items:
+            $ref: '#/components/schemas/SupplierVerificationResultOut'
           type: array
           title: Verification Results
         rendered_brief:
           anyOf:
-          - {}
+          - $ref: '#/components/schemas/RenderedEventBriefOut'
           - type: 'null'
-          title: Rendered Brief
       type: object
       required:
       - session_id
@@ -1239,6 +1246,11 @@ components:
           - type: string
           - type: 'null'
           title: Supplier City
+        supplier_city_normalized:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City Normalized
         category:
           anyOf:
           - type: string
@@ -1254,11 +1266,21 @@ components:
           - type: string
           - type: 'null'
           title: Supplier Status
+        supplier_status_normalized:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status Normalized
         has_vat:
           anyOf:
           - type: string
           - type: 'null'
           title: Has Vat
+        vat_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vat Mode
         unit_price:
           anyOf:
           - type: number
@@ -1266,6 +1288,20 @@ components:
             pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           - type: 'null'
           title: Unit Price
+        unit_price_min:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Unit Price Min
+        unit_price_max:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Unit Price Max
       type: object
       title: CatalogSearchFiltersIn
     CatalogSearchFiltersOut:
@@ -1690,6 +1726,21 @@ components:
           title: Source Text Full Available
         match_reason:
           $ref: '#/components/schemas/MatchReasonOut'
+        result_group:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Result Group
+        matched_service_category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Matched Service Category
+        matched_service_categories:
+          items:
+            type: string
+          type: array
+          title: Matched Service Categories
       type: object
       required:
       - id
@@ -1703,6 +1754,9 @@ components:
       - source_text_snippet
       - source_text_full_available
       - match_reason
+      - result_group
+      - matched_service_category
+      - matched_service_categories
       title: FoundCatalogItemOut
     FoundPriceItemOut:
       properties:
@@ -2174,6 +2228,50 @@ components:
       - document_count
       - top_snippet
       title: RagContractorOut
+    RenderedBriefSectionOut:
+      properties:
+        title:
+          type: string
+          title: Title
+        items:
+          items:
+            type: string
+          type: array
+          title: Items
+      type: object
+      required:
+      - title
+      - items
+      title: RenderedBriefSectionOut
+    RenderedEventBriefOut:
+      properties:
+        title:
+          type: string
+          title: Title
+        sections:
+          items:
+            $ref: '#/components/schemas/RenderedBriefSectionOut'
+          type: array
+          title: Sections
+        open_questions:
+          items:
+            type: string
+          type: array
+          title: Open Questions
+        evidence:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Evidence
+      type: object
+      required:
+      - title
+      - sections
+      - open_questions
+      - evidence
+      title: RenderedEventBriefOut
     RouterDecisionOut:
       properties:
         intent:
@@ -2421,6 +2519,75 @@ components:
       - document_title
       - contractor_name
       title: SourceRefOut
+    SupplierVerificationResultOut:
+      properties:
+        item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        ogrn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ogrn
+        legal_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Legal Name
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
+          - not_found
+          - not_verified
+          - error
+          title: Status
+        source:
+          type: string
+          title: Source
+        checked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Checked At
+        risk_flags:
+          items:
+            type: string
+          type: array
+          title: Risk Flags
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+      type: object
+      required:
+      - item_id
+      - supplier_name
+      - supplier_inn
+      - ogrn
+      - legal_name
+      - status
+      - source
+      - checked_at
+      - risk_flags
+      - message
+      title: SupplierVerificationResultOut
     UploadDocumentOut:
       properties:
         document_id:
