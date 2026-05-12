@@ -1,0 +1,1093 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic golden workflow cases for the event-brief assistant orchestrator rollout. These cases define expected behavior before real LLM routing is enabled.",
+  "integration_point": "Replace the phase_zero_expected_runner in backend/tests/features/assistant/test_workflow_golden_cases.py with EventBriefInterpreter + BriefWorkflowPolicy when those production services exist.",
+  "cases": [
+    {
+      "id": "brief-001-corporate-intake",
+      "case_group": "brief_workspace",
+      "message": "Нужно организовать корпоратив на 120 человек в Екатеринбурге",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_discovery",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "date_or_period",
+        "venue_status",
+        "budget_total",
+        "concept",
+        "required_services"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-001-light-search",
+      "case_group": "chat_search",
+      "message": "найди подрядчика по свету в Екатеринбурге",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "service_needs": [
+          {
+            "category": "свет",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct supplier search",
+            "notes": null
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["свет"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-002-radio-mics-vat",
+      "case_group": "chat_search",
+      "message": "покажи радиомикрофоны у поставщиков с НДС",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "service_needs": [
+          {
+            "category": "звук",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "радиомикрофоны are audio equipment",
+            "notes": "НДС"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["звук"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-003-light-300-guests",
+      "case_group": "chat_search",
+      "message": "а что есть по свету на 300 гостей?",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "audience_size": 300,
+        "service_needs": [
+          {
+            "category": "свет",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct catalog search",
+            "notes": null
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["свет"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-002-welcome-zone-planning",
+      "case_group": "brief_workspace",
+      "message": "надо закрыть welcome-зону",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "workflow_stage": "service_planning"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "service_planning",
+      "expected_workflow_stage": "service_planning",
+      "expected_brief_patch": {
+        "service_needs": [
+          {
+            "category": "welcome-зона",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "user asked to cover the welcome zone",
+            "notes": null
+          },
+          {
+            "category": "декор",
+            "priority": "nice_to_have",
+            "source": "policy_inferred",
+            "reason": "welcome-zone service bundle",
+            "notes": "possible photo zone or branded decor"
+          },
+          {
+            "category": "персонал",
+            "priority": "nice_to_have",
+            "source": "policy_inferred",
+            "reason": "welcome-zone service bundle",
+            "notes": "hostess or registration staff"
+          }
+        ],
+        "required_services": ["welcome-зона"],
+        "nice_to_have_services": ["декор", "персонал"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-004-ekb-fast-ambiguous",
+      "case_group": "chat_search",
+      "message": "в Екате кто сможет быстро?",
+      "brief_before": {},
+      "recent_turns": [
+        {
+          "role": "user",
+          "message": "Нужен свет для делового события"
+        },
+        {
+          "role": "assistant",
+          "message": "Уточните город и ограничения по срокам."
+        }
+      ],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "preferences": ["быстро"],
+        "service_needs": [
+          {
+            "category": "свет",
+            "priority": "required",
+            "source": "recent_turn_context",
+            "reason": "previous user turn requested light",
+            "notes": "быстро"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["свет"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-003-rigging-constraint-and-search",
+      "case_group": "brief_workspace",
+      "message": "добавь, что площадка без подвеса, и посмотри фермы",
+      "brief_before": {
+        "event_type": "презентация продукта",
+        "city": "Екатеринбург",
+        "audience_size": 300,
+        "workflow_stage": "service_planning"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "mixed",
+      "expected_workflow_stage": "supplier_searching",
+      "expected_brief_patch": {
+        "venue_constraints": ["площадка без подвеса"],
+        "service_needs": [
+          {
+            "category": "сценические конструкции",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "фермы",
+            "notes": "учесть площадку без подвеса"
+          },
+          {
+            "category": "свет",
+            "priority": "nice_to_have",
+            "source": "policy_inferred",
+            "reason": "площадка без подвеса",
+            "notes": "напольные приборы или ground support"
+          }
+        ],
+        "required_services": ["сценические конструкции"],
+        "nice_to_have_services": ["свет"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief", "search_items"],
+      "expected_search_categories": ["сценические конструкции"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-004-budget-city-update",
+      "case_group": "brief_workspace",
+      "message": "Бюджет около 2 млн, город Екатеринбург",
+      "brief_before": {
+        "event_type": "конференция",
+        "audience_size": 200,
+        "workflow_stage": "clarifying"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_update",
+      "expected_workflow_stage": "service_planning",
+      "expected_brief_patch": {
+        "budget_total": 2000000,
+        "city": "Екатеринбург"
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "date_or_period",
+        "venue_status",
+        "concept",
+        "required_services"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-005-catering-per-guest",
+      "case_group": "chat_search",
+      "message": "На 120 человек в Екатеринбурге нужен кейтеринг до 2500 на гостя",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "budget_per_guest": 2500,
+        "service_needs": [
+          {
+            "category": "кейтеринг",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct catalog search",
+            "notes": "до 2500 на гостя"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["кейтеринг"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-005-stage-light-context-search",
+      "case_group": "brief_workspace",
+      "message": "Ок, тогда найди сцену и свет под это",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "workflow_stage": "service_planning"
+      },
+      "recent_turns": [
+        {
+          "role": "assistant",
+          "message": "Есть черновик брифа, можно перейти к подбору подрядчиков."
+        }
+      ],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "supplier_searching",
+      "expected_brief_patch": {
+        "service_needs": [
+          {
+            "category": "сценические конструкции",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "сцена",
+            "notes": "под активный бриф"
+          },
+          {
+            "category": "свет",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "свет",
+            "notes": "под активный бриф"
+          }
+        ],
+        "required_services": ["сценические конструкции", "свет"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief", "search_items"],
+      "expected_search_categories": ["сценические конструкции", "свет"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-006-venue-night-install",
+      "case_group": "brief_workspace",
+      "message": "Площадка уже есть, монтаж только ночью",
+      "brief_before": {
+        "event_type": "конференция",
+        "city": "Екатеринбург",
+        "audience_size": 300,
+        "workflow_stage": "clarifying"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_update",
+      "expected_workflow_stage": "service_planning",
+      "expected_brief_patch": {
+        "venue_status": "venue_confirmed",
+        "venue_constraints": ["монтаж только ночью"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total", "concept"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-006-working-sound",
+      "case_group": "chat_search",
+      "message": "Нужен звук, но без премиума, что-то рабочее",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "preferences": ["без премиума", "рабочее решение"],
+        "service_needs": [
+          {
+            "category": "звук",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct catalog search",
+            "notes": "без премиума"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["звук"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-007-verify-found-with-context",
+      "case_group": "brief_workspace",
+      "message": "проверь найденных подрядчиков",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "selected_item_ids": ["00000000-0000-0000-0000-000000000201"],
+        "workflow_stage": "supplier_searching"
+      },
+      "recent_turns": [],
+      "visible_candidates": [
+        {
+          "ordinal": 1,
+          "item_id": "00000000-0000-0000-0000-000000000201",
+          "service_category": "свет"
+        },
+        {
+          "ordinal": 2,
+          "item_id": "00000000-0000-0000-0000-000000000202",
+          "service_category": "сценические конструкции"
+        }
+      ],
+      "candidate_item_ids": [
+        "00000000-0000-0000-0000-000000000201",
+        "00000000-0000-0000-0000-000000000202"
+      ],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "verification",
+      "expected_workflow_stage": "supplier_verification",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["verify_supplier_status"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [
+        {
+          "type": "item_id",
+          "value": "00000000-0000-0000-0000-000000000201"
+        },
+        {
+          "type": "item_id",
+          "value": "00000000-0000-0000-0000-000000000202"
+        }
+      ],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "verify_candidate_context"
+    },
+    {
+      "id": "chat-007-verify-found-without-context",
+      "case_group": "chat_search",
+      "message": "проверь найденных подрядчиков, но без visible_candidates/candidate_item_ids",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "verification",
+      "expected_workflow_stage": "search_clarifying",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["ask_clarification"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["candidate_context"],
+      "expected_verification_or_render_behavior": "clarify_no_candidate_context"
+    },
+    {
+      "id": "brief-008-render-final-brief",
+      "case_group": "brief_workspace",
+      "message": "сформируй итоговый бриф",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "venue_status": "venue_confirmed",
+        "selected_item_ids": ["00000000-0000-0000-0000-000000000201"],
+        "workflow_stage": "supplier_verification"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": ["00000000-0000-0000-0000-000000000201"],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "render_brief",
+      "expected_workflow_stage": "brief_rendered",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["render_event_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total", "concept"],
+      "expected_verification_or_render_behavior": "render_final_brief_with_open_questions"
+    },
+    {
+      "id": "brief-009-select-second-visible",
+      "case_group": "brief_workspace",
+      "message": "Добавь в подборку второй вариант",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "selected_item_ids": ["00000000-0000-0000-0000-000000000201"],
+        "workflow_stage": "supplier_searching"
+      },
+      "recent_turns": [],
+      "visible_candidates": [
+        {
+          "ordinal": 1,
+          "item_id": "00000000-0000-0000-0000-000000000201",
+          "service_category": "свет"
+        },
+        {
+          "ordinal": 2,
+          "item_id": "00000000-0000-0000-0000-000000000202",
+          "service_category": "свет"
+        }
+      ],
+      "candidate_item_ids": [
+        "00000000-0000-0000-0000-000000000201",
+        "00000000-0000-0000-0000-000000000202"
+      ],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "selection",
+      "expected_workflow_stage": "supplier_searching",
+      "expected_brief_patch": {
+        "selected_item_ids": ["00000000-0000-0000-0000-000000000202"]
+      },
+      "expected_action_plan_tool_intents": ["select_item"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-008-compare-first-two-price",
+      "case_group": "chat_search",
+      "message": "Сравни первые два по цене",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [
+        {
+          "ordinal": 1,
+          "item_id": "00000000-0000-0000-0000-000000000301",
+          "service_category": "кейтеринг"
+        },
+        {
+          "ordinal": 2,
+          "item_id": "00000000-0000-0000-0000-000000000302",
+          "service_category": "кейтеринг"
+        }
+      ],
+      "candidate_item_ids": [
+        "00000000-0000-0000-0000-000000000301",
+        "00000000-0000-0000-0000-000000000302"
+      ],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "comparison",
+      "expected_workflow_stage": "search_results_shown",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["compare_items"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-010-conference-brief",
+      "case_group": "brief_workspace",
+      "message": "Собери бриф на конференцию для партнеров в Москве",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_discovery",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {
+        "event_type": "конференция",
+        "city": "Москва",
+        "event_goal": "для партнеров"
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "audience_size",
+        "date_or_period",
+        "venue_status",
+        "budget_total",
+        "concept",
+        "required_services"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-009-catering-question",
+      "case_group": "chat_search",
+      "message": "Есть кто по кейтерингу до 2500 на гостя?",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "budget_per_guest": 2500,
+        "service_needs": [
+          {
+            "category": "кейтеринг",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct supplier search",
+            "notes": "до 2500 на гостя"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["кейтеринг"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["city", "audience_size"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-011-product-presentation",
+      "case_group": "brief_workspace",
+      "message": "Готовим презентацию продукта, нужна площадка и подрядчики",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_discovery",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {
+        "event_type": "презентация продукта",
+        "service_needs": [
+          {
+            "category": "площадка",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "нужна площадка",
+            "notes": null
+          }
+        ],
+        "required_services": ["площадка"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "city",
+        "audience_size",
+        "date_or_period",
+        "budget_total"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-010-screen-search",
+      "case_group": "chat_search",
+      "message": "Покажи цены на экран 4x3 в Екатеринбурге",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "service_needs": [
+          {
+            "category": "мультимедиа",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "экран",
+            "notes": "4x3"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["мультимедиа"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-012-graduation-intake",
+      "case_group": "brief_workspace",
+      "message": "Нужно организовать выпускной, город Москва, даты в июне",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_discovery",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {
+        "event_type": "выпускной",
+        "city": "Москва",
+        "date_or_period": "июнь"
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "audience_size",
+        "venue_status",
+        "budget_total",
+        "concept",
+        "required_services"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-013-catering-mandatory",
+      "case_group": "brief_workspace",
+      "message": "тогда добавь кейтеринг как обязательный",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "workflow_stage": "service_planning"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_update",
+      "expected_workflow_stage": "service_planning",
+      "expected_brief_patch": {
+        "service_needs": [
+          {
+            "category": "кейтеринг",
+            "priority": "must_have",
+            "source": "user_explicit",
+            "reason": "как обязательный",
+            "notes": null
+          }
+        ],
+        "must_have_services": ["кейтеринг"],
+        "required_services": ["кейтеринг"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "venue_status", "budget_total"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-011-verify-explicit-inn",
+      "case_group": "chat_search",
+      "message": "Проверь ИНН 7701234567",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "verification",
+      "expected_workflow_stage": "supplier_verification",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["verify_supplier_status"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [
+        {
+          "type": "inn",
+          "value": "7701234567"
+        }
+      ],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "verify_explicit_inn"
+    },
+    {
+      "id": "brief-014-render-without-selected",
+      "case_group": "brief_workspace",
+      "message": "Сформируй бриф без выбранных подрядчиков",
+      "brief_before": {
+        "event_type": "конференция",
+        "city": "Екатеринбург",
+        "audience_size": 300,
+        "workflow_stage": "brief_ready"
+      },
+      "recent_turns": [],
+      "visible_candidates": [
+        {
+          "ordinal": 1,
+          "item_id": "00000000-0000-0000-0000-000000000401",
+          "service_category": "звук"
+        }
+      ],
+      "candidate_item_ids": ["00000000-0000-0000-0000-000000000401"],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "render_brief",
+      "expected_workflow_stage": "brief_rendered",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["render_event_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total", "concept"],
+      "expected_verification_or_render_behavior": "render_candidates_not_selected_note"
+    },
+    {
+      "id": "chat-012-venue-budget-search",
+      "case_group": "chat_search",
+      "message": "Нужна площадка до 500 тыс в Екатеринбурге",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "budget_total": 500000,
+        "service_needs": [
+          {
+            "category": "площадка",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct venue search",
+            "notes": "до 500 тыс"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["площадка"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["audience_size", "date_or_period"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-015-chamber-format",
+      "case_group": "brief_workspace",
+      "message": "добавь в бриф, что нужен камерный формат",
+      "brief_before": {
+        "event_type": "презентация продукта",
+        "city": "Екатеринбург",
+        "workflow_stage": "clarifying"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_update",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {
+        "format": "камерный",
+        "preferences": ["камерный формат"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [
+        "audience_size",
+        "date_or_period",
+        "venue_status",
+        "budget_total"
+      ],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-013-welcome-decor-search",
+      "case_group": "chat_search",
+      "message": "Найди декор для welcome-зоны без премиума",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "preferences": ["без премиума"],
+        "service_needs": [
+          {
+            "category": "декор",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "decor for welcome zone",
+            "notes": "welcome-зона, без премиума"
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["декор"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-014-multi-service-search",
+      "case_group": "chat_search",
+      "message": "Подбери кейтеринг и свет на 120 человек в Екатеринбурге",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "service_needs": [
+          {
+            "category": "кейтеринг",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct catalog search",
+            "notes": null
+          },
+          {
+            "category": "свет",
+            "priority": "required",
+            "source": "user_explicit",
+            "reason": "direct catalog search",
+            "notes": null
+          }
+        ]
+      },
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["кейтеринг", "свет"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-015-compare-vat",
+      "case_group": "chat_search",
+      "message": "Сравни первые два по условиям НДС",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [
+        {
+          "ordinal": 1,
+          "item_id": "00000000-0000-0000-0000-000000000501",
+          "service_category": "звук"
+        },
+        {
+          "ordinal": 2,
+          "item_id": "00000000-0000-0000-0000-000000000502",
+          "service_category": "звук"
+        }
+      ],
+      "candidate_item_ids": [
+        "00000000-0000-0000-0000-000000000501",
+        "00000000-0000-0000-0000-000000000502"
+      ],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "comparison",
+      "expected_workflow_stage": "search_results_shown",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["compare_items"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-016-final-questions-before-ready",
+      "case_group": "brief_workspace",
+      "message": "Что еще нужно уточнить перед подбором?",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "city": "Екатеринбург",
+        "audience_size": 120,
+        "venue_status": "venue_unknown",
+        "workflow_stage": "clarifying"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "clarification",
+      "expected_workflow_stage": "clarifying",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["ask_clarification"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["date_or_period", "budget_total", "concept"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-016-inn-supplier-search",
+      "case_group": "chat_search",
+      "message": "Найди поставщика по ИНН 6671234567",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "supplier_search",
+      "expected_workflow_stage": "searching",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["search_items"],
+      "expected_search_categories": ["supplier_inn"],
+      "expected_verification_targets": [],
+      "expected_missing_fields": [],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-017-select-without-visible-context",
+      "case_group": "brief_workspace",
+      "message": "Добавь второй вариант",
+      "brief_before": {
+        "event_type": "корпоратив",
+        "workflow_stage": "supplier_searching"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "selection",
+      "expected_workflow_stage": "supplier_searching",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["ask_clarification"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["visible_candidates"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-017-price-only-ambiguous",
+      "case_group": "chat_search",
+      "message": "Сколько стоит аренда оборудования?",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "clarification",
+      "expected_workflow_stage": "search_clarifying",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["ask_clarification"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["service_category", "city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "brief-018-date-and-concept-update",
+      "case_group": "brief_workspace",
+      "message": "Дата 15 июня, концепция деловой нетворкинг без премиума",
+      "brief_before": {
+        "event_type": "конференция",
+        "city": "Екатеринбург",
+        "audience_size": 180,
+        "workflow_stage": "clarifying"
+      },
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "brief_workspace",
+      "expected_intent": "brief_update",
+      "expected_workflow_stage": "service_planning",
+      "expected_brief_patch": {
+        "date_or_period": "15 июня",
+        "concept": "деловой нетворкинг",
+        "preferences": ["без премиума"]
+      },
+      "expected_action_plan_tool_intents": ["update_brief"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["venue_status", "budget_total", "required_services"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    },
+    {
+      "id": "chat-018-no-query-clarification",
+      "case_group": "chat_search",
+      "message": "Подскажи варианты",
+      "brief_before": {},
+      "recent_turns": [],
+      "visible_candidates": [],
+      "candidate_item_ids": [],
+      "expected_interface_mode": "chat_search",
+      "expected_intent": "clarification",
+      "expected_workflow_stage": "search_clarifying",
+      "expected_brief_patch": {},
+      "expected_action_plan_tool_intents": ["ask_clarification"],
+      "expected_search_categories": [],
+      "expected_verification_targets": [],
+      "expected_missing_fields": ["service_category", "city"],
+      "expected_verification_or_render_behavior": "not_applicable"
+    }
+  ]
+}
