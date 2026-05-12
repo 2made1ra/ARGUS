@@ -97,6 +97,9 @@ def _interpretation_to_payload(interpretation: Interpretation) -> dict[str, Any]
             _search_request_to_payload(request)
             for request in interpretation.search_requests
         ],
+        "verification_targets": [
+            str(item_id) for item_id in interpretation.verification_targets
+        ],
         "missing_fields": list(interpretation.missing_fields),
         "clarification_questions": list(interpretation.clarification_questions),
     }

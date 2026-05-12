@@ -185,6 +185,7 @@ class Interpretation:
     service_needs: list[ServiceNeed] = field(default_factory=list)
     requested_actions: list[ToolIntent] = field(default_factory=list)
     search_requests: list[SearchRequest] = field(default_factory=list)
+    verification_targets: list[UUID] = field(default_factory=list)
     missing_fields: list[str] = field(default_factory=list)
     clarification_questions: list[str] = field(default_factory=list)
     user_visible_summary: str | None = None

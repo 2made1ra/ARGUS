@@ -46,6 +46,7 @@ class ChatTurnUseCase:
             brief=current_brief,
             recent_turns=list(request.recent_turns),
             visible_candidates=list(request.visible_candidates),
+            candidate_item_ids=list(request.candidate_item_ids),
         )
         action_plan = (
             decision.action_plan
@@ -72,6 +73,7 @@ class ChatTurnUseCase:
                 decision=decision,
                 brief=tool_results.brief,
                 found_items=tool_results.found_items,
+                verification_results=tool_results.verification_results,
             ),
             router=decision,
             brief=tool_results.brief,

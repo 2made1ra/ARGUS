@@ -7,6 +7,7 @@ from app.features.assistant.dto import (
     FoundCatalogItem,
     Interpretation,
     RouterDecision,
+    SupplierVerificationResult,
 )
 
 
@@ -37,7 +38,13 @@ class ResponseComposer:
         decision: RouterDecision,
         brief: BriefState,
         found_items: list[FoundCatalogItem],
+        verification_results: list[SupplierVerificationResult] | None = None,
     ) -> str:
+        if decision.intent == "verification":
+            return _verification_message_from_decision(
+                decision=decision,
+                verification_results=verification_results or [],
+            )
         if decision.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE:
             facts = _brief_fact_sentence(brief)
             questions = _question_sentence(decision.clarification_questions)
@@ -108,6 +115,27 @@ def _chat_search_message_from_decision(
         )
     questions = _question_sentence(decision.clarification_questions)
     return f"Уточните параметры поиска. {questions}".strip()
+
+
+def _verification_message_from_decision(
+    *,
+    decision: RouterDecision,
+    verification_results: list[SupplierVerificationResult],
+) -> str:
+    questions = _question_sentence(decision.clarification_questions)
+    if "candidate_context" in decision.missing_fields:
+        return f"Уточните, каких найденных подрядчиков проверить. {questions}".strip()
+    if verification_results:
+        return (
+            "Проверил поставщиков по доступным ИНН из переданных строк каталога. "
+            "Юридические статусы и риск-флаги вернул отдельно в "
+            "verification_results; status=active означает только действующее "
+            "юрлицо в проверочном источнике."
+        )
+    return (
+        "Не получил проверяемых результатов по переданным позициям. "
+        "Проверьте, что item id есть в каталоге и содержит данные поставщика."
+    )
 
 
 def _brief_fact_sentence(brief: BriefState) -> str:

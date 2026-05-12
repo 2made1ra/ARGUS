@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.features.assistant.brief import merge_brief
 from app.features.assistant.dto import (
     ActionPlan,
@@ -32,6 +34,13 @@ _INTAKE_QUESTIONS = {
 _SEARCH_QUESTIONS = {
     "service_category": "Какую услугу или категорию нужно найти?",
     "city": "В каком городе искать подрядчика или позицию каталога?",
+}
+
+_VERIFICATION_QUESTIONS = {
+    "candidate_context": (
+        "Каких найденных подрядчиков проверить? Передайте выбранные позиции, "
+        "candidate_item_ids, visible_candidates или явные item id."
+    ),
 }
 
 
@@ -74,6 +83,13 @@ def _brief_workspace_plan(
     interpretation: Interpretation,
     brief: BriefState,
 ) -> ActionPlan:
+    if interpretation.intent == "verification":
+        return _verification_plan(
+            interpretation=interpretation,
+            brief=brief,
+            fallback_stage=EventBriefWorkflowState.CLARIFYING,
+        )
+
     merged = merge_brief(brief, interpretation.brief_update)
     missing_fields = _dedupe(
         [
@@ -116,6 +132,13 @@ def _brief_workspace_plan(
 
 
 def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
+    if interpretation.intent == "verification":
+        return _verification_plan(
+            interpretation=interpretation,
+            brief=BriefState(),
+            fallback_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
+        )
+
     search_requests = [
         request
         for request in interpretation.search_requests
@@ -140,6 +163,43 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
         clarification_questions=_dedupe(
             [
                 *_questions_for(missing_fields, _SEARCH_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
+    )
+
+
+def _verification_plan(
+    *,
+    interpretation: Interpretation,
+    brief: BriefState,
+    fallback_stage: EventBriefWorkflowState,
+) -> ActionPlan:
+    verification_targets = _dedupe_uuid(
+        [
+            *brief.selected_item_ids,
+            *interpretation.verification_targets,
+        ],
+    )
+    has_context = bool(verification_targets)
+    if has_context and "verify_supplier_status" in interpretation.requested_actions:
+        return ActionPlan(
+            interface_mode=interpretation.interface_mode,
+            workflow_stage=EventBriefWorkflowState.SUPPLIER_VERIFICATION,
+            tool_intents=["verify_supplier_status"],
+            verification_targets=verification_targets,
+        )
+
+    missing_fields = _dedupe(["candidate_context", *interpretation.missing_fields])
+    return ActionPlan(
+        interface_mode=interpretation.interface_mode,
+        workflow_stage=fallback_stage,
+        tool_intents=[],
+        verification_targets=[],
+        missing_fields=missing_fields,
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _VERIFICATION_QUESTIONS),
                 *interpretation.clarification_questions,
             ],
         )[:3],
@@ -173,6 +233,17 @@ def _field_is_missing(field_name: str, brief: BriefState) -> bool:
 def _dedupe(values: list[str]) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        result.append(value)
+        seen.add(value)
+    return result
+
+
+def _dedupe_uuid(values: list[UUID]) -> list[UUID]:
+    result: list[UUID] = []
+    seen: set[UUID] = set()
     for value in values:
         if value in seen:
             continue

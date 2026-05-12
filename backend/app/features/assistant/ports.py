@@ -25,6 +25,7 @@ class AssistantRouter(Protocol):
         brief: BriefState,
         recent_turns: list[ChatTurn],
         visible_candidates: list[VisibleCandidate],
+        candidate_item_ids: list[UUID],
     ) -> RouterDecision: ...
 
 

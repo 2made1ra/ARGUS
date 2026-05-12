@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from uuid import UUID
 
 from app.features.assistant.domain.taxonomy import (
     BRIEF_CREATION_PHRASES,
@@ -18,6 +19,7 @@ class ActionSignals:
     event_creation: bool
     direct_catalog_search: bool
     contextual_brief_update: bool
+    verification_requested: bool
 
 
 def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
@@ -32,12 +34,26 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
     contextual_brief_update = _has_active_brief(brief) and any(
         phrase in lower for phrase in CONTEXTUAL_BRIEF_PHRASES
     )
+    verification_requested = _has_verification_signal(lower)
 
     return ActionSignals(
         event_creation=event_creation,
         direct_catalog_search=direct_catalog_search,
         contextual_brief_update=contextual_brief_update,
+        verification_requested=verification_requested,
     )
+
+
+def verification_item_ids_for(message: str) -> list[UUID]:
+    result: list[UUID] = []
+    seen: set[UUID] = set()
+    for match in _UUID_RE.finditer(message):
+        item_id = UUID(match.group(0))
+        if item_id in seen:
+            continue
+        result.append(item_id)
+        seen.add(item_id)
+    return result
 
 
 def _has_event_creation_signal(lower: str) -> bool:
@@ -86,6 +102,31 @@ def _has_direct_search_signal(
     ) or has_need_service
 
 
+def _has_verification_signal(lower: str) -> bool:
+    has_check_action = any(
+        phrase in lower
+        for phrase in (
+            "проверь",
+            "проверить",
+            "проверка",
+            "проверим",
+        )
+    )
+    if not has_check_action:
+        return False
+    return any(
+        marker in lower
+        for marker in (
+            "подряд",
+            "поставщик",
+            "найденн",
+            "инн",
+            "огрн",
+            "юрлиц",
+        )
+    ) or bool(verification_item_ids_for(lower))
+
+
 def _has_active_brief(brief: BriefState) -> bool:
     return any(
         (
@@ -102,4 +143,14 @@ def _has_active_brief(brief: BriefState) -> bool:
     )
 
 
-__all__ = ["ActionSignals", "detect_action_signals"]
+_UUID_RE = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+)
+
+
+__all__ = [
+    "ActionSignals",
+    "detect_action_signals",
+    "verification_item_ids_for",
+]

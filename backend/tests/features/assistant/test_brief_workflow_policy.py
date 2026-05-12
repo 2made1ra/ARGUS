@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.features.assistant.domain.brief_workflow_policy import BriefWorkflowPolicy
 from app.features.assistant.domain.event_brief_interpreter import EventBriefInterpreter
 from app.features.assistant.dto import (
@@ -99,3 +101,19 @@ def test_active_brief_preserves_workspace_for_contextual_update() -> None:
     assert plan.workflow_stage == EventBriefWorkflowState.CLARIFYING
     assert plan.tool_intents == ["update_brief"]
     assert plan.should_search_now is False
+
+
+def test_verification_plan_exposes_selected_item_targets() -> None:
+    selected_id = UUID("11111111-1111-1111-1111-111111111111")
+
+    plan = _plan_for(
+        "проверь найденных подрядчиков",
+        BriefState(
+            event_type="корпоратив",
+            selected_item_ids=[selected_id],
+        ),
+    )
+
+    assert plan.workflow_stage == EventBriefWorkflowState.SUPPLIER_VERIFICATION
+    assert plan.tool_intents == ["verify_supplier_status"]
+    assert plan.verification_targets == [selected_id]

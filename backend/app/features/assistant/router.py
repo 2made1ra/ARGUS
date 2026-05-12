@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from app.features.assistant.domain.brief_workflow_policy import BriefWorkflowPolicy
 from app.features.assistant.domain.event_brief_interpreter import EventBriefInterpreter
@@ -31,6 +32,7 @@ class HeuristicAssistantRouter:
         brief: BriefState,
         recent_turns: list[ChatTurn] | None = None,
         visible_candidates: list[VisibleCandidate] | None = None,
+        candidate_item_ids: list[UUID] | None = None,
     ) -> RouterDecision:
         normalized = _normalize_spaces(message)
         lower = normalized.lower()
@@ -45,6 +47,9 @@ class HeuristicAssistantRouter:
             recent_turns=recent_turns if recent_turns is not None else [],
             visible_candidates=(
                 visible_candidates if visible_candidates is not None else []
+            ),
+            candidate_item_ids=(
+                candidate_item_ids if candidate_item_ids is not None else []
             ),
         )
         action_plan = BriefWorkflowPolicy().plan(

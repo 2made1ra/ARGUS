@@ -82,6 +82,7 @@ def merge_llm_router_suggestion(
         service_needs=list(deterministic.service_needs),
         requested_actions=list(deterministic.requested_actions),
         search_requests=search_requests,
+        verification_targets=list(deterministic.verification_targets),
         missing_fields=_dedupe(
             [*deterministic.missing_fields, *suggestion.missing_fields],
         ),
@@ -112,6 +113,7 @@ def interpretation_with_reason(
         service_needs=list(interpretation.service_needs),
         requested_actions=list(interpretation.requested_actions),
         search_requests=list(interpretation.search_requests),
+        verification_targets=list(interpretation.verification_targets),
         missing_fields=list(interpretation.missing_fields),
         clarification_questions=list(interpretation.clarification_questions),
         user_visible_summary=interpretation.user_visible_summary,

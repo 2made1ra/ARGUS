@@ -5,11 +5,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from app.features.assistant.domain.tool_executor import ToolExecutor
 from app.features.assistant.dto import (
     ActionPlan,
     AssistantChatRequest,
     AssistantInterfaceMode,
     BriefState,
+    CatalogItemDetail,
     CatalogSearchFilters,
     ChatTurn,
     EventBriefWorkflowState,
@@ -17,6 +19,7 @@ from app.features.assistant.dto import (
     MatchReason,
     RouterDecision,
     SearchRequest,
+    SupplierVerificationResult,
     ToolResults,
     VisibleCandidate,
 )
@@ -36,6 +39,7 @@ class FakeRouter:
         brief: BriefState,
         recent_turns: list[ChatTurn],
         visible_candidates: list[VisibleCandidate],
+        candidate_item_ids: list[UUID],
     ) -> RouterDecision:
         self.calls.append(
             {
@@ -43,6 +47,7 @@ class FakeRouter:
                 "brief": brief,
                 "recent_turns": recent_turns,
                 "visible_candidates": visible_candidates,
+                "candidate_item_ids": candidate_item_ids,
             },
         )
         return self.decision
@@ -67,6 +72,45 @@ class FakeCatalogSearchTool:
     ) -> list[FoundCatalogItem]:
         self.calls.append({"query": query, "limit": limit, "filters": filters})
         return self.items_by_query.get(query, self.items)
+
+
+class FakeCatalogItemDetailsTool:
+    def __init__(self, details: dict[UUID, CatalogItemDetail]) -> None:
+        self.details = details
+        self.calls: list[UUID] = []
+
+    async def get_item_details(self, *, item_id: UUID) -> CatalogItemDetail | None:
+        self.calls.append(item_id)
+        return self.details.get(item_id)
+
+
+class FakeSupplierVerificationPort:
+    def __init__(self, *, status: str = "active") -> None:
+        self.status = status
+        self.calls: list[dict[str, str | None]] = []
+
+    async def verify_by_inn_or_ogrn(
+        self,
+        *,
+        inn: str | None,
+        ogrn: str | None,
+        supplier_name: str | None,
+    ) -> SupplierVerificationResult:
+        self.calls.append(
+            {"inn": inn, "ogrn": ogrn, "supplier_name": supplier_name},
+        )
+        return SupplierVerificationResult(
+            item_id=None,
+            supplier_name=supplier_name,
+            supplier_inn=inn,
+            ogrn=ogrn,
+            legal_name=supplier_name,
+            status=self.status,
+            source="fake_registry",
+            checked_at=None,
+            risk_flags=[],
+            message=None,
+        )
 
 
 class FakeToolExecutor:
@@ -128,6 +172,28 @@ def _found_item(
             code="semantic",
             label="Семантическое совпадение с запросом",
         ),
+    )
+
+
+def _item_detail(
+    item_id: UUID,
+    *,
+    supplier: str = "ООО НИКА",
+    supplier_inn: str | None = "7701234567",
+) -> CatalogItemDetail:
+    return CatalogItemDetail(
+        id=item_id,
+        name="Световой комплект",
+        category="Свет",
+        unit="день",
+        unit_price=Decimal("15000.00"),
+        supplier=supplier,
+        supplier_inn=supplier_inn,
+        supplier_city="Екатеринбург",
+        supplier_phone=None,
+        supplier_email=None,
+        supplier_status=None,
+        source_text="Световой комплект",
     )
 
 
@@ -553,3 +619,123 @@ async def test_chat_turn_plans_service_searches_for_catering_and_light_phrase() 
         "кейтеринг",
         "свет",
     ]
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_verifies_found_contractors_from_candidate_context() -> None:
+    first_id = UUID("66666666-6666-6666-6666-666666666661")
+    second_id = UUID("66666666-6666-6666-6666-666666666662")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: _item_detail(first_id, supplier="ООО НИКА"),
+            second_id: _item_detail(second_id, supplier="ООО НИКА"),
+        },
+    )
+    verifier = FakeSupplierVerificationPort(status="active")
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(
+            catalog_search=None,
+            item_details=details,
+            supplier_verification=verifier,
+        ),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="проверь найденных подрядчиков",
+            brief=BriefState(event_type="корпоратив"),
+            candidate_item_ids=[first_id, second_id],
+        ),
+    )
+
+    assert response.router.intent == "verification"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == ["verify_supplier_status"]
+    assert response.action_plan.workflow_stage == (
+        EventBriefWorkflowState.SUPPLIER_VERIFICATION
+    )
+    assert details.calls == [first_id, second_id]
+    assert verifier.calls == [
+        {"inn": "7701234567", "ogrn": None, "supplier_name": "ООО НИКА"},
+    ]
+    assert [result.item_id for result in response.verification_results] == [
+        first_id,
+        second_id,
+    ]
+    assert all(result.status == "active" for result in response.verification_results)
+    forbidden_fragments = ["доступен", "рекоменду", "действующий договор"]
+    assert all(
+        fragment not in response.message.lower()
+        for fragment in forbidden_fragments
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_verifies_explicit_item_id_without_candidate_context() -> None:
+    item_id = UUID("77777777-7777-7777-7777-777777777771")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            item_id: _item_detail(
+                item_id,
+                supplier="ООО Точка",
+                supplier_inn="1",
+            ),
+        },
+    )
+    verifier = FakeSupplierVerificationPort(status="active")
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(
+            catalog_search=None,
+            item_details=details,
+            supplier_verification=verifier,
+        ),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message=f"проверь подрядчика {item_id}",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.action_plan is not None
+    assert response.action_plan.verification_targets == [item_id]
+    assert [result.item_id for result in response.verification_results] == [item_id]
+    assert verifier.calls == [
+        {"inn": "1", "ogrn": None, "supplier_name": "ООО Точка"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_asks_clarification_without_candidate_context() -> None:
+    details = FakeCatalogItemDetailsTool(details={})
+    verifier = FakeSupplierVerificationPort()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(
+            catalog_search=None,
+            item_details=details,
+            supplier_verification=verifier,
+        ),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="проверь найденных подрядчиков",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.router.intent == "verification"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == []
+    assert response.action_plan.missing_fields == ["candidate_context"]
+    assert response.verification_results == []
+    assert details.calls == []
+    assert verifier.calls == []
+    assert "каких" in response.message.lower()

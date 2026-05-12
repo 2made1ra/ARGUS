@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.features.assistant.brief import merge_brief
-from app.features.assistant.domain.action_detection import detect_action_signals
+from app.features.assistant.domain.action_detection import (
+    detect_action_signals,
+    verification_item_ids_for,
+)
 from app.features.assistant.domain.brief_workflow_policy import (
     missing_event_intake_fields,
 )
@@ -31,7 +36,14 @@ class EventBriefInterpreter:
     ) -> None:
         self._llm_router = llm_router
 
-    def interpret(self, *, message: str, brief: BriefState) -> Interpretation:
+    def interpret(
+        self,
+        *,
+        message: str,
+        brief: BriefState,
+        visible_candidates: list[VisibleCandidate] | None = None,
+        candidate_item_ids: list[UUID] | None = None,
+    ) -> Interpretation:
         slots = extract_event_brief_slots(message)
         signals = detect_action_signals(message, brief)
         reason_codes: list[str] = []
@@ -41,8 +53,26 @@ class EventBriefInterpreter:
         requested_actions: list[str] = []
         search_requests: list[SearchRequest] = []
         brief_update = BriefState()
+        verification_targets: list[UUID] = []
 
-        if signals.event_creation or signals.contextual_brief_update:
+        if signals.verification_requested:
+            interface_mode = (
+                AssistantInterfaceMode.BRIEF_WORKSPACE
+                if _has_active_brief(brief)
+                else AssistantInterfaceMode.CHAT_SEARCH
+            )
+            intent = "verification"
+            reason_codes.append("verification_requested")
+            verification_targets = _verification_targets_from_context(
+                message=message,
+                visible_candidates=visible_candidates or [],
+                candidate_item_ids=candidate_item_ids or [],
+            )
+            if verification_targets or brief.selected_item_ids:
+                requested_actions.append("verify_supplier_status")
+            else:
+                reason_codes.append("verification_context_missing")
+        elif signals.event_creation or signals.contextual_brief_update:
             interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
             intent = "brief_discovery"
             requested_actions.append("update_brief")
@@ -75,6 +105,19 @@ class EventBriefInterpreter:
             service_needs=list(slots.service_needs),
             requested_actions=requested_actions,
             search_requests=search_requests,
+            verification_targets=verification_targets,
+            missing_fields=(
+                ["candidate_context"]
+                if signals.verification_requested
+                and "verify_supplier_status" not in requested_actions
+                else []
+            ),
+            clarification_questions=(
+                [_VERIFICATION_CONTEXT_QUESTION]
+                if signals.verification_requested
+                and "verify_supplier_status" not in requested_actions
+                else []
+            ),
         )
 
     async def interpret_with_llm(
@@ -84,8 +127,14 @@ class EventBriefInterpreter:
         brief: BriefState,
         recent_turns: list[ChatTurn],
         visible_candidates: list[VisibleCandidate],
+        candidate_item_ids: list[UUID] | None = None,
     ) -> Interpretation:
-        deterministic = self.interpret(message=message, brief=brief)
+        deterministic = self.interpret(
+            message=message,
+            brief=brief,
+            visible_candidates=visible_candidates,
+            candidate_item_ids=candidate_item_ids or [],
+        )
         if self._llm_router is None:
             return deterministic
 
@@ -114,6 +163,55 @@ class EventBriefInterpreter:
             deterministic=deterministic,
             suggestion=suggestion,
         )
+
+
+_VERIFICATION_CONTEXT_QUESTION = (
+    "Каких найденных подрядчиков проверить? Передайте выбранные позиции, "
+    "candidate_item_ids, visible_candidates или явные item id."
+)
+
+
+def _verification_targets_from_context(
+    *,
+    message: str,
+    visible_candidates: list[VisibleCandidate],
+    candidate_item_ids: list[UUID],
+) -> list[UUID]:
+    return _dedupe_uuid(
+        [
+            *candidate_item_ids,
+            *[candidate.item_id for candidate in visible_candidates],
+            *verification_item_ids_for(message),
+        ],
+    )
+
+
+def _dedupe_uuid(item_ids: list[UUID]) -> list[UUID]:
+    result: list[UUID] = []
+    seen: set[UUID] = set()
+    for item_id in item_ids:
+        if item_id in seen:
+            continue
+        result.append(item_id)
+        seen.add(item_id)
+    return result
+
+
+def _has_active_brief(brief: BriefState) -> bool:
+    return any(
+        (
+            brief.event_type,
+            brief.city,
+            brief.date_or_period,
+            brief.audience_size,
+            brief.venue_status,
+            brief.budget_total,
+            brief.budget_per_guest,
+            brief.required_services,
+            brief.service_needs,
+            brief.selected_item_ids,
+        )
+    )
 
 
 def _with_open_questions(update: BriefState, missing_fields: list[str]) -> BriefState:
