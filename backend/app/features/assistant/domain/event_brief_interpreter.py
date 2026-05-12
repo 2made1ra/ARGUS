@@ -94,7 +94,11 @@ def _with_open_questions(update: BriefState, missing_fields: list[str]) -> Brief
 
 
 def _search_requests(*, message: str, slots: BriefState) -> list[SearchRequest]:
-    categories = [need.category for need in slots.service_needs]
+    categories = [
+        need.category
+        for need in slots.service_needs
+        if need.source == "explicit"
+    ]
     if not categories:
         categories = list(slots.required_services)
     if not categories:

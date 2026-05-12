@@ -3,9 +3,12 @@ from __future__ import annotations
 import re
 
 from app.features.assistant.domain.taxonomy import (
+    SERVICE_ALIASES,
     canonical_city_for,
     event_type_for,
+    service_bundle_templates_for,
     service_categories_for,
+    venue_constraint_templates_for,
 )
 from app.features.assistant.dto import BriefState, ServiceNeed
 
@@ -30,16 +33,25 @@ _TOTAL_BUDGET_RE = re.compile(
 def extract_event_brief_slots(message: str) -> BriefState:
     normalized = _normalize_spaces(message)
     lower = normalized.lower()
-    services = service_categories_for(lower)
+    venue_constraints = _venue_constraints(lower)
+    services = _explicit_service_categories(lower, venue_constraints)
     if "музыкаль" in lower and "оборудован" in lower:
         services = [
             "музыкальное оборудование" if service == "оборудование" else service
             for service in services
         ]
-    service_needs = [
-        ServiceNeed(category=category, priority="required", source="explicit")
-        for category in services
-    ]
+    service_needs = _service_needs(lower, services, venue_constraints)
+    required_services = _service_projection(
+        services,
+        lower,
+        priority="required",
+    )
+    must_have_services = _service_projection(
+        services,
+        lower,
+        priority="must_have",
+    )
+    nice_to_have_services = _nice_to_have_projection(service_needs)
 
     return BriefState(
         event_type=event_type_for(lower),
@@ -50,13 +62,16 @@ def extract_event_brief_slots(message: str) -> BriefState:
         date_or_period=_date_or_period(normalized),
         audience_size=_audience_size(lower),
         venue_status=_venue_status(lower),
-        venue_constraints=_venue_constraints(lower),
+        venue_constraints=venue_constraints,
         budget_total=_budget_total(lower),
         budget_per_guest=_budget_per_guest(lower),
         catering_format=_catering_format(lower),
         technical_requirements=_technical_requirements(lower),
         service_needs=service_needs,
-        required_services=services,
+        required_services=required_services,
+        must_have_services=must_have_services,
+        nice_to_have_services=nice_to_have_services,
+        preferences=_preferences(lower),
     )
 
 
@@ -97,6 +112,148 @@ def _venue_constraints(lower: str) -> list[str]:
     if "низк" in lower and "потол" in lower:
         constraints.append("низкие потолки")
     return constraints
+
+
+def _explicit_service_categories(
+    lower: str,
+    venue_constraints: list[str],
+) -> list[str]:
+    categories = service_categories_for(lower)
+    if "площадка без подвеса" not in venue_constraints:
+        return categories
+    if _requests_venue_search(lower):
+        return categories
+    return [category for category in categories if category != "площадка"]
+
+
+def _requests_venue_search(lower: str) -> bool:
+    return any(
+        phrase in lower
+        for phrase in (
+            "нужна площадка",
+            "подобрать площадку",
+            "найди площадку",
+            "покажи площадку",
+            "посмотри площадку",
+        )
+    )
+
+
+def _service_needs(
+    lower: str,
+    services: list[str],
+    venue_constraints: list[str],
+) -> list[ServiceNeed]:
+    needs: list[ServiceNeed] = []
+    for category in services:
+        priority = _priority_for_category(lower, category)
+        needs.append(
+            ServiceNeed(
+                category=category,
+                priority=priority,
+                source="explicit",
+            )
+        )
+        needs.extend(
+            ServiceNeed(
+                category=template.category,
+                priority=template.priority,
+                source=template.source,
+                reason=template.reason,
+                notes=template.notes,
+            )
+            for template in service_bundle_templates_for(category)
+        )
+
+    needs.extend(
+        ServiceNeed(
+            category=template.category,
+            priority=template.priority,
+            source=template.source,
+            reason=template.reason,
+            notes=template.notes,
+        )
+        for template in venue_constraint_templates_for(venue_constraints)
+    )
+    return _unique_service_needs(needs)
+
+
+def _priority_for_category(lower: str, category: str) -> str:
+    category_position = lower.find(category)
+    if category_position < 0:
+        for alias_category in service_categories_for(lower):
+            if alias_category == category:
+                category_position = _first_alias_position(lower, category)
+                break
+    context = _priority_context(lower, category_position)
+    if any(marker in context for marker in ("обязательно", "критично", "must have")):
+        return "must_have"
+    if any(
+        marker in context
+        for marker in ("хорошо бы", "желательно", "можно добавить", "опционально")
+    ):
+        return "nice_to_have"
+    return "required"
+
+
+def _first_alias_position(lower: str, category: str) -> int:
+    positions: list[int] = []
+    for service_alias in SERVICE_ALIASES:
+        if service_alias.category != category:
+            continue
+        for alias in service_alias.aliases:
+            position = lower.find(alias)
+            if position >= 0:
+                positions.append(position)
+    if positions:
+        return min(positions)
+    return -1
+
+
+def _priority_context(lower: str, position: int) -> str:
+    if position < 0:
+        return lower
+    starts = [lower.rfind(separator, 0, position) for separator in (",", ";", ".")]
+    start = max(starts)
+    ends = [
+        next_position
+        for separator in (",", ";", ".")
+        if (next_position := lower.find(separator, position)) >= 0
+    ]
+    end = min(ends) if ends else len(lower)
+    return lower[start + 1 : end]
+
+
+def _service_projection(
+    services: list[str],
+    lower: str,
+    *,
+    priority: str,
+) -> list[str]:
+    return [
+        service
+        for service in services
+        if _priority_for_category(lower, service) == priority
+    ]
+
+
+def _nice_to_have_projection(service_needs: list[ServiceNeed]) -> list[str]:
+    return _unique(
+        [
+            need.category
+            for need in service_needs
+            if need.priority == "nice_to_have"
+        ]
+    )
+
+
+def _preferences(lower: str) -> list[str]:
+    preferences: list[str] = []
+    if "без премиума" in lower:
+        preferences.append("без премиума")
+    if "быстро" in lower:
+        preferences.append("быстро")
+    return preferences
 
 
 def _technical_requirements(lower: str) -> list[str]:
@@ -178,6 +335,24 @@ def _unique(values: list[str]) -> list[str]:
             continue
         result.append(value)
         seen.add(value)
+    return result
+
+
+def _unique_service_needs(needs: list[ServiceNeed]) -> list[ServiceNeed]:
+    result: list[ServiceNeed] = []
+    seen: set[tuple[str, str, str, str | None, str | None]] = set()
+    for need in needs:
+        key = (
+            need.category,
+            need.priority,
+            need.source,
+            need.reason,
+            need.notes,
+        )
+        if key in seen:
+            continue
+        result.append(need)
+        seen.add(key)
     return result
 
 

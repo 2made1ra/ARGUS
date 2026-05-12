@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.features.assistant.domain.taxonomy import (
@@ -23,7 +24,11 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
     lower = " ".join(message.strip().lower().split())
     service_categories = service_categories_for(lower)
     event_creation = _has_event_creation_signal(lower)
-    direct_catalog_search = _has_direct_search_signal(lower, service_categories)
+    direct_catalog_search = _has_direct_search_signal(
+        lower,
+        service_categories,
+        event_creation=event_creation,
+    )
     contextual_brief_update = _has_active_brief(brief) and any(
         phrase in lower for phrase in CONTEXTUAL_BRIEF_PHRASES
     )
@@ -37,6 +42,8 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
 
 def _has_event_creation_signal(lower: str) -> bool:
     if "собери бриф" in lower or "собрать бриф" in lower:
+        return True
+    if _has_needed_event_phrase(lower):
         return True
     if any(phrase in lower for phrase in BRIEF_CREATION_PHRASES):
         return any(
@@ -52,14 +59,29 @@ def _has_event_creation_signal(lower: str) -> bool:
     return False
 
 
-def _has_direct_search_signal(lower: str, service_categories: list[str]) -> bool:
+def _has_needed_event_phrase(lower: str) -> bool:
+    return re.search(
+        r"\bнуж(?:ен|на|но|ны)\s+"
+        r"(?:корпоратив|корпоративный|конференц\w*|мероприят\w*|"
+        r"презентац\w*|вечер)\b",
+        lower,
+    ) is not None
+
+
+def _has_direct_search_signal(
+    lower: str,
+    service_categories: list[str],
+    *,
+    event_creation: bool,
+) -> bool:
     has_search_phrase = any(phrase in lower for phrase in DIRECT_SEARCH_PHRASES)
     has_search_noun = any(noun in lower for noun in SEARCH_NOUNS)
     has_need_service = any(
         phrase in lower
         for phrase in ("нужен ", "нужна ", "нужны ", "нужно ")
-    ) and bool(service_categories)
-    return (has_search_phrase and (has_search_noun or service_categories)) or (
+    ) and bool(service_categories) and not event_creation
+    has_search_target = has_search_noun or bool(service_categories)
+    return (has_search_phrase and has_search_target) or (
         has_search_noun and bool(service_categories)
     ) or has_need_service
 

@@ -53,10 +53,20 @@ def missing_event_intake_fields(brief: BriefState) -> list[str]:
             ):
                 missing.append(field_name)
             continue
+        if field_name == "required_services":
+            if not _has_explicit_service_planning(brief):
+                missing.append(field_name)
+            continue
         value = getattr(brief, field_name)
         if value is None or value == []:
             missing.append(field_name)
     return missing
+
+
+def _has_explicit_service_planning(brief: BriefState) -> bool:
+    if brief.required_services or brief.must_have_services:
+        return True
+    return any(need.source == "explicit" for need in brief.service_needs)
 
 
 def _brief_workspace_plan(
