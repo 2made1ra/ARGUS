@@ -125,6 +125,9 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
                 "code": "semantic",
                 "label": "Семантическое совпадение с запросом",
             },
+            "result_group": None,
+            "matched_service_category": None,
+            "matched_service_categories": [],
         },
     ]
     call_request = fake_uc.execute.await_args.args[0]

@@ -169,9 +169,14 @@ def _catalog_filters_from_search_filters(
     return CatalogSearchFilters(
         category=filters.category,
         unit_price=_decimal_to_float(filters.unit_price),
+        unit_price_min=_decimal_to_float(filters.unit_price_min),
+        unit_price_max=_decimal_to_float(filters.unit_price_max),
         has_vat=filters.has_vat,
+        vat_mode=filters.vat_mode,
         supplier_city=filters.supplier_city,
+        supplier_city_normalized=filters.supplier_city_normalized,
         supplier_status=filters.supplier_status,
+        supplier_status_normalized=filters.supplier_status_normalized,
         embedding_template_version=embedding_template_version,
     )
 

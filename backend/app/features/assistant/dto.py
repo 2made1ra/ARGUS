@@ -227,6 +227,9 @@ class FoundCatalogItem:
     source_text_snippet: str | None
     source_text_full_available: bool
     match_reason: MatchReason
+    result_group: str | None = None
+    matched_service_category: str | None = None
+    matched_service_categories: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

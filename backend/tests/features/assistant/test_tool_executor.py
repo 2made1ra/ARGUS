@@ -10,6 +10,7 @@ from app.features.assistant.dto import (
     AssistantInterfaceMode,
     BriefState,
     CatalogItemDetail,
+    CatalogSearchFilters,
     EventBriefWorkflowState,
     FoundCatalogItem,
     MatchReason,
@@ -23,8 +24,14 @@ class FakeCatalogSearchTool:
         self.items = items if items is not None else []
         self.calls: list[dict[str, object]] = []
 
-    async def search_items(self, *, query: str, limit: int) -> list[FoundCatalogItem]:
-        self.calls.append({"query": query, "limit": limit})
+    async def search_items(
+        self,
+        *,
+        query: str,
+        limit: int,
+        filters: CatalogSearchFilters | None = None,
+    ) -> list[FoundCatalogItem]:
+        self.calls.append({"query": query, "limit": limit, "filters": filters})
         return list(self.items)
 
 
@@ -117,6 +124,7 @@ async def test_tool_executor_uses_action_plan_intents_and_caps_tool_calls() -> N
         search_requests=[
             SearchRequest(query="свет", service_category="свет", limit=8),
             SearchRequest(query="звук", service_category="звук", limit=8),
+            SearchRequest(query="декор", service_category="декор", limit=8),
         ],
         render_requested=True,
     )
@@ -129,10 +137,16 @@ async def test_tool_executor_uses_action_plan_intents_and_caps_tool_calls() -> N
 
     assert results.brief.city == "Екатеринбург"
     assert search.calls == [
-        {"query": "свет", "limit": 8},
-        {"query": "звук", "limit": 8},
+        {"query": "свет", "limit": 8, "filters": CatalogSearchFilters()},
+        {"query": "звук", "limit": 8, "filters": CatalogSearchFilters()},
+        {"query": "декор", "limit": 8, "filters": CatalogSearchFilters()},
     ]
-    assert len(results.found_items) == 2
+    assert len(results.found_items) == 1
+    assert results.found_items[0].matched_service_categories == [
+        "свет",
+        "звук",
+        "декор",
+    ]
     assert results.rendered_brief is None
     assert renderer.calls == 0
     assert "tool_call_limit_reached:render_event_brief" in results.skipped_actions

@@ -18,10 +18,15 @@ MatchReasonCode = Literal[
 @dataclass(frozen=True, slots=True)
 class SearchPriceItemsFilters:
     supplier_city: str | None = None
+    supplier_city_normalized: str | None = None
     category: str | None = None
     supplier_status: str | None = None
+    supplier_status_normalized: str | None = None
     has_vat: str | None = None
+    vat_mode: str | None = None
     unit_price: Decimal | None = None
+    unit_price_min: Decimal | None = None
+    unit_price_max: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -393,6 +393,9 @@ class FoundCatalogItemOut(BaseModel):
     source_text_snippet: str | None
     source_text_full_available: bool
     match_reason: MatchReasonOut
+    result_group: str | None
+    matched_service_category: str | None
+    matched_service_categories: list[str]
 
     @classmethod
     def from_domain(cls, item: FoundCatalogItem) -> FoundCatalogItemOut:
@@ -408,6 +411,9 @@ class FoundCatalogItemOut(BaseModel):
             source_text_snippet=item.source_text_snippet,
             source_text_full_available=item.source_text_full_available,
             match_reason=MatchReasonOut.from_domain(item.match_reason),
+            result_group=item.result_group,
+            matched_service_category=item.matched_service_category,
+            matched_service_categories=list(item.matched_service_categories),
         )
 
 

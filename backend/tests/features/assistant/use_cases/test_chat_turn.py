@@ -10,14 +10,17 @@ from app.features.assistant.dto import (
     AssistantChatRequest,
     AssistantInterfaceMode,
     BriefState,
+    CatalogSearchFilters,
     ChatTurn,
     EventBriefWorkflowState,
     FoundCatalogItem,
     MatchReason,
     RouterDecision,
+    SearchRequest,
     ToolResults,
     VisibleCandidate,
 )
+from app.features.assistant.router import HeuristicAssistantRouter
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
 
 
@@ -46,13 +49,24 @@ class FakeRouter:
 
 
 class FakeCatalogSearchTool:
-    def __init__(self, items: list[FoundCatalogItem] | None = None) -> None:
+    def __init__(
+        self,
+        items: list[FoundCatalogItem] | None = None,
+        items_by_query: dict[str, list[FoundCatalogItem]] | None = None,
+    ) -> None:
         self.items = items if items is not None else []
+        self.items_by_query = items_by_query if items_by_query is not None else {}
         self.calls: list[dict[str, Any]] = []
 
-    async def search_items(self, *, query: str, limit: int) -> list[FoundCatalogItem]:
-        self.calls.append({"query": query, "limit": limit})
-        return self.items
+    async def search_items(
+        self,
+        *,
+        query: str,
+        limit: int,
+        filters: CatalogSearchFilters | None = None,
+    ) -> list[FoundCatalogItem]:
+        self.calls.append({"query": query, "limit": limit, "filters": filters})
+        return self.items_by_query.get(query, self.items)
 
 
 class FakeToolExecutor:
@@ -93,12 +107,17 @@ def _decision(
     )
 
 
-def _found_item() -> FoundCatalogItem:
+def _found_item(
+    *,
+    item_id: UUID | None = None,
+    name: str = "Аренда акустической системы",
+    category: str | None = "Аренда",
+) -> FoundCatalogItem:
     return FoundCatalogItem(
-        id=uuid4(),
+        id=item_id or uuid4(),
         score=0.82,
-        name="Аренда акустической системы",
-        category="Аренда",
+        name=name,
+        category=category,
         unit="день",
         unit_price=Decimal("15000.00"),
         supplier="ООО НИКА",
@@ -195,7 +214,13 @@ async def test_supplier_search_calls_search_items_and_returns_found_items() -> N
         ),
     )
 
-    assert search.calls == [{"query": "музыкальное оборудование", "limit": 10}]
+    assert search.calls == [
+        {
+            "query": "музыкальное оборудование",
+            "limit": 10,
+            "filters": CatalogSearchFilters(),
+        },
+    ]
     assert response.router.intent == "supplier_search"
     assert response.found_items == [found]
     assert "found_items" in response.message
@@ -233,7 +258,8 @@ async def test_mixed_updates_brief_and_returns_cards_when_search_runs() -> None:
     assert response.brief.city == "Москва"
     assert response.brief.audience_size == 100
     assert response.brief.required_services == ["звук"]
-    assert response.found_items == [found]
+    assert [item.id for item in response.found_items] == [found.id]
+    assert response.found_items[0].result_group == "звук"
 
 
 @pytest.mark.asyncio
@@ -393,3 +419,137 @@ async def test_chat_turn_executes_policy_action_plan_without_reconstructing() ->
 
     assert executor.action_plans == [policy_plan]
     assert response.action_plan == policy_plan
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_executes_grouped_searches_and_dedupes_found_items() -> None:
+    shared_id = UUID("33333333-3333-3333-3333-333333333333")
+    catering_id = UUID("44444444-4444-4444-4444-444444444444")
+    light_id = UUID("55555555-5555-5555-5555-555555555555")
+    shared = _found_item(
+        item_id=shared_id,
+        name="Комплект для события",
+        category="Комплект",
+    )
+    catering = _found_item(
+        item_id=catering_id,
+        name="Фуршет на 120 гостей",
+        category="Кейтеринг",
+    )
+    light = _found_item(
+        item_id=light_id,
+        name="Световой комплект",
+        category="Свет",
+    )
+    search_requests = [
+        SearchRequest(
+            query="кейтеринг 120 человек Екатеринбург",
+            service_category="кейтеринг",
+            filters=CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
+            priority=1,
+            limit=8,
+        ),
+        SearchRequest(
+            query="свет 120 человек Екатеринбург",
+            service_category="свет",
+            filters=CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
+            priority=2,
+            limit=8,
+        ),
+    ]
+    action_plan = ActionPlan(
+        interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+        workflow_stage=EventBriefWorkflowState.SEARCHING,
+        tool_intents=["search_items"],
+        search_requests=search_requests,
+    )
+    router = FakeRouter(
+        RouterDecision(
+            intent="supplier_search",
+            confidence=0.88,
+            known_facts={},
+            missing_fields=[],
+            should_search_now=True,
+            search_query="кейтеринг 120 человек Екатеринбург",
+            brief_update=BriefState(),
+            interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+            workflow_stage=EventBriefWorkflowState.SEARCHING,
+            search_requests=search_requests,
+            tool_intents=["search_items"],
+            action_plan=action_plan,
+        ),
+    )
+    search = FakeCatalogSearchTool(
+        items_by_query={
+            "кейтеринг 120 человек Екатеринбург": [shared, catering],
+            "свет 120 человек Екатеринбург": [shared, light],
+        },
+    )
+    use_case = ChatTurnUseCase(router=router, catalog_search=search)
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="подбери кейтеринг и свет на 120 человек в Екатеринбурге",
+            brief=BriefState(),
+        ),
+    )
+
+    assert search.calls == [
+        {
+            "query": "кейтеринг 120 человек Екатеринбург",
+            "limit": 8,
+            "filters": CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
+        },
+        {
+            "query": "свет 120 человек Екатеринбург",
+            "limit": 8,
+            "filters": CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
+        },
+    ]
+    assert [item.id for item in response.found_items] == [
+        shared_id,
+        catering_id,
+        light_id,
+    ]
+    assert response.found_items[0].result_group == "кейтеринг"
+    assert response.found_items[0].matched_service_category == "кейтеринг"
+    assert response.found_items[0].matched_service_categories == [
+        "кейтеринг",
+        "свет",
+    ]
+    assert response.found_items[2].result_group == "свет"
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_plans_service_searches_for_catering_and_light_phrase() -> None:
+    found = _found_item()
+    search = FakeCatalogSearchTool(items=[found])
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="подбери кейтеринг и свет на 120 человек в Екатеринбурге",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.action_plan is not None
+    assert [
+        request.service_category
+        for request in response.action_plan.search_requests
+    ] == ["кейтеринг", "свет"]
+    assert len(search.calls) == 2
+    assert all(
+        call["filters"].supplier_city_normalized == "екатеринбург"
+        for call in search.calls
+    )
+    assert response.found_items[0].result_group == "кейтеринг"
+    assert response.found_items[0].matched_service_categories == [
+        "кейтеринг",
+        "свет",
+    ]

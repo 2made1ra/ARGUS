@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -31,11 +32,15 @@ from app.adapters.supplier_verification.manual import (
 from app.config import Settings, get_settings
 from app.entrypoints.http.session import _session, get_qdrant_client, get_sessionmaker
 from app.features.assistant.domain.tool_executor import ToolExecutor
-from app.features.assistant.dto import CatalogItemDetail, FoundCatalogItem
+from app.features.assistant.dto import (
+    CatalogItemDetail,
+    CatalogSearchFilters,
+    FoundCatalogItem,
+)
 from app.features.assistant.dto import MatchReason as AssistantMatchReason
 from app.features.assistant.router import HeuristicAssistantRouter
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
-from app.features.catalog.dto import FoundPriceItem
+from app.features.catalog.dto import FoundPriceItem, SearchPriceItemsFilters
 from app.features.catalog.ports import PriceItemNotFound
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
@@ -151,8 +156,13 @@ class _CatalogSearchToolAdapter:
         *,
         query: str,
         limit: int,
+        filters: CatalogSearchFilters | None = None,
     ) -> list[FoundCatalogItem]:
-        result = await self._search.search_items(query=query, limit=limit)
+        result = await self._search.search_items(
+            query=query,
+            filters=_catalog_search_filters(filters),
+            limit=limit,
+        )
         return [_found_catalog_item(item) for item in result.items]
 
 
@@ -202,6 +212,26 @@ def _found_catalog_item(item: FoundPriceItem) -> FoundCatalogItem:
             label=item.match_reason.label,
         ),
     )
+
+
+def _catalog_search_filters(
+    filters: CatalogSearchFilters | None,
+) -> SearchPriceItemsFilters:
+    if filters is None:
+        return SearchPriceItemsFilters()
+    return SearchPriceItemsFilters(
+        supplier_city_normalized=filters.supplier_city_normalized,
+        category=filters.category,
+        supplier_status_normalized=filters.supplier_status_normalized,
+        has_vat=filters.has_vat,
+        vat_mode=filters.vat_mode,
+        unit_price_min=_decimal_or_none(filters.unit_price_min),
+        unit_price_max=_decimal_or_none(filters.unit_price_max),
+    )
+
+
+def _decimal_or_none(value: int | None) -> Decimal | None:
+    return Decimal(value) if value is not None else None
 
 
 def get_chat_turn_uc(

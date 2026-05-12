@@ -313,14 +313,29 @@ def _search_filter_conditions(filters: SearchPriceItemsFilters) -> list[object]:
     conditions: list[object] = []
     if filters.supplier_city is not None:
         conditions.append(PriceItemRow.supplier_city == filters.supplier_city)
+    if filters.supplier_city_normalized is not None:
+        conditions.append(
+            PriceItemRow.supplier_city_normalized == filters.supplier_city_normalized,
+        )
     if filters.category is not None:
         conditions.append(PriceItemRow.category == filters.category)
     if filters.supplier_status is not None:
         conditions.append(PriceItemRow.supplier_status == filters.supplier_status)
+    if filters.supplier_status_normalized is not None:
+        conditions.append(
+            PriceItemRow.supplier_status_normalized
+            == filters.supplier_status_normalized,
+        )
     if filters.has_vat is not None:
         conditions.append(PriceItemRow.has_vat == filters.has_vat)
+    if filters.vat_mode is not None:
+        conditions.append(PriceItemRow.vat_mode == filters.vat_mode)
     if filters.unit_price is not None:
         conditions.append(PriceItemRow.unit_price == filters.unit_price)
+    if filters.unit_price_min is not None:
+        conditions.append(PriceItemRow.unit_price >= filters.unit_price_min)
+    if filters.unit_price_max is not None:
+        conditions.append(PriceItemRow.unit_price <= filters.unit_price_max)
     return conditions
 
 

@@ -6,6 +6,7 @@ from uuid import UUID
 from app.features.assistant.dto import (
     BriefState,
     CatalogItemDetail,
+    CatalogSearchFilters,
     ChatTurn,
     FoundCatalogItem,
     LLMStructuredRouterRequest,
@@ -41,6 +42,7 @@ class CatalogSearchTool(Protocol):
         *,
         query: str,
         limit: int,
+        filters: CatalogSearchFilters | None = None,
     ) -> list[FoundCatalogItem]: ...
 
 

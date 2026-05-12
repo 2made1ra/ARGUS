@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 from uuid import UUID
 
 from app.features.assistant.brief import merge_brief
@@ -65,8 +66,6 @@ class ToolExecutor:
 
         for intent in action_plan.tool_intents:
             if intent == "update_brief":
-                if not calls.consume("update_brief", skipped_actions):
-                    continue
                 working_brief = merge_brief(working_brief, brief_update)
                 continue
 
@@ -137,17 +136,29 @@ class ToolExecutor:
             skipped_actions.append("search_items_unavailable")
             return []
 
-        found_items: list[FoundCatalogItem] = []
+        found_items_by_id: dict[UUID, FoundCatalogItem] = {}
+        ordered_item_ids: list[UUID] = []
         for request in action_plan.search_requests:
             if not calls.consume("search_items", skipped_actions):
                 break
-            found_items.extend(
-                await self._catalog_search.search_items(
-                    query=request.query,
-                    limit=request.limit,
-                ),
+            results = await self._catalog_search.search_items(
+                query=request.query,
+                limit=request.limit,
+                filters=request.filters,
             )
-        return found_items
+            for item in results:
+                if item.id not in found_items_by_id:
+                    found_items_by_id[item.id] = _tag_found_item(
+                        item,
+                        result_group=request.service_category,
+                    )
+                    ordered_item_ids.append(item.id)
+                    continue
+                found_items_by_id[item.id] = _append_matched_group(
+                    found_items_by_id[item.id],
+                    result_group=request.service_category,
+                )
+        return [found_items_by_id[item_id] for item_id in ordered_item_ids]
 
     async def _execute_item_details(
         self,
@@ -297,6 +308,38 @@ def _dedupe_uuid(item_ids: Iterable[UUID]) -> list[UUID]:
         result.append(item_id)
         seen.add(item_id)
     return result
+
+
+def _tag_found_item(
+    item: FoundCatalogItem,
+    *,
+    result_group: str | None,
+) -> FoundCatalogItem:
+    categories = list(item.matched_service_categories)
+    if result_group is not None and result_group not in categories:
+        categories.append(result_group)
+    return replace(
+        item,
+        result_group=item.result_group or result_group,
+        matched_service_category=item.matched_service_category or result_group,
+        matched_service_categories=categories,
+    )
+
+
+def _append_matched_group(
+    item: FoundCatalogItem,
+    *,
+    result_group: str | None,
+) -> FoundCatalogItem:
+    if result_group is None or result_group in item.matched_service_categories:
+        return item
+    return replace(
+        item,
+        matched_service_categories=[
+            *item.matched_service_categories,
+            result_group,
+        ],
+    )
 
 
 def _limit_verification_targets(
