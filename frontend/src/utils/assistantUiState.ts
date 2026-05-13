@@ -33,6 +33,7 @@ export interface AssistantUiMessage {
   role: "assistant";
   content: string;
   foundItems?: FoundItem[];
+  foundItemsEmptyState?: "pending" | "no-results";
   verificationResults?: SupplierVerificationResult[];
   renderedBrief?: RenderedEventBrief | null;
 }
@@ -58,6 +59,9 @@ export function assistantUiStateFromResponse(
   const foundItems = nextVisibleCandidateItems(previousFoundItems, response);
   const visibleCandidates = buildVisibleCandidates(foundItems);
   const isChatSearch = interfaceMode === "chat_search";
+  const showInlineFoundItems =
+    isChatSearch &&
+    (response.found_items.length > 0 || responseRefreshesCandidates(response));
 
   return {
     interfaceMode,
@@ -72,7 +76,11 @@ export function assistantUiStateFromResponse(
     assistantMessage: {
       role: "assistant",
       content: response.message,
-      foundItems: isChatSearch ? response.found_items : undefined,
+      foundItems: showInlineFoundItems ? response.found_items : undefined,
+      foundItemsEmptyState:
+        showInlineFoundItems && response.found_items.length === 0
+          ? "no-results"
+          : undefined,
       verificationResults: isChatSearch
         ? response.verification_results
         : undefined,
@@ -95,4 +103,14 @@ export function assistantInterfaceModeFromResponse(
 
 function isAssistantInterfaceMode(value: unknown): value is AssistantInterfaceMode {
   return value === "brief_workspace" || value === "chat_search";
+}
+
+function responseRefreshesCandidates(
+  response: Pick<AssistantResponseForUi, "action_plan" | "router">,
+): boolean {
+  return (
+    response.action_plan?.tool_intents.includes("search_items") === true ||
+    response.router?.tool_intents?.includes("search_items") === true ||
+    response.router?.should_search_now === true
+  );
 }

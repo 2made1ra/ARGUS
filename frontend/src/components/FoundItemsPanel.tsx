@@ -7,6 +7,7 @@ interface Props {
   loading?: boolean;
   title?: string;
   variant?: "panel" | "inline";
+  emptyState?: "pending" | "no-results";
 }
 
 export default function FoundItemsPanel({
@@ -14,8 +15,10 @@ export default function FoundItemsPanel({
   loading = false,
   title = "Найденные позиции",
   variant = "panel",
+  emptyState = "pending",
 }: Props) {
   const groups = groupFoundItemsForDisplay(items);
+  const emptyCopy = foundItemsEmptyCopy(emptyState);
 
   return (
     <section
@@ -34,11 +37,8 @@ export default function FoundItemsPanel({
 
       {items.length === 0 ? (
         <div className="found-items-empty">
-          <strong>Позиции появятся после поискового запроса.</strong>
-          <span>
-            Ассистент может уточнять бриф без поиска, если потребность пока
-            слишком общая.
-          </span>
+          <strong>{emptyCopy.title}</strong>
+          <span>{emptyCopy.body}</span>
         </div>
       ) : (
         <div className="found-item-groups">
@@ -98,4 +98,21 @@ export default function FoundItemsPanel({
 
 function formatScore(score: number): string {
   return `score ${score.toFixed(2)}`;
+}
+
+function foundItemsEmptyCopy(emptyState: "pending" | "no-results"): {
+  title: string;
+  body: string;
+} {
+  if (emptyState === "no-results") {
+    return {
+      title: "В каталоге нет подходящих строк по этому запросу.",
+      body: "Уточните город, категорию, бюджет или формат задачи и повторите поиск.",
+    };
+  }
+
+  return {
+    title: "Позиции появятся после поискового запроса.",
+    body: "Ассистент может уточнять бриф без поиска, если потребность пока слишком общая.",
+  };
 }

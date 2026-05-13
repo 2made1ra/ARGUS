@@ -12,6 +12,7 @@ import VerificationResultsPanel from "./VerificationResultsPanel";
 
 export interface AssistantTimelineMessage extends ChatMessage {
   foundItems?: FoundItem[];
+  foundItemsEmptyState?: "pending" | "no-results";
   verificationResults?: SupplierVerificationResult[];
   renderedBrief?: RenderedEventBrief | null;
 }
@@ -95,10 +96,10 @@ export default function AssistantChat({
               </article>
 
               {message.role === "assistant" &&
-                message.foundItems !== undefined &&
-                message.foundItems.length > 0 && (
+                message.foundItems !== undefined && (
                   <FoundItemsPanel
                     items={message.foundItems}
+                    emptyState={message.foundItemsEmptyState}
                     title="Каталог в чате"
                     variant="inline"
                   />
