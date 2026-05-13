@@ -1021,6 +1021,50 @@ button:disabled {
   padding: 0.55rem 0.65rem;
 }
 
+.found-item-verification {
+  align-items: flex-start;
+  background: #f7f5ef;
+  border: 1px solid #d6cdbb;
+  display: flex;
+  gap: 0.55rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.48rem 0.6rem;
+}
+
+.found-item-verification span {
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.found-item-verification small {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.25;
+  max-width: 11rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.found-item-verification--active {
+  background: rgba(47, 136, 111, 0.1);
+  border-color: rgba(47, 136, 111, 0.28);
+  color: var(--ok);
+}
+
+.found-item-verification--inactive,
+.found-item-verification--not_found,
+.found-item-verification--error {
+  background: rgba(180, 35, 24, 0.08);
+  border-color: rgba(180, 35, 24, 0.24);
+  color: var(--danger);
+}
+
 .selected-items-section {
   border-top: 1px solid var(--line);
   display: grid;
@@ -1116,6 +1160,20 @@ button:disabled {
   color: var(--ok);
 }
 
+.verification-status--inactive,
+.verification-status--not_found,
+.verification-status--error {
+  background: rgba(180, 35, 24, 0.08);
+  border-color: rgba(180, 35, 24, 0.24);
+  color: var(--danger);
+}
+
+.verification-status--not_verified {
+  background: #f7f5ef;
+  border-color: #d6cdbb;
+  color: var(--muted);
+}
+
 .verification-facts {
   display: grid;
   gap: 0.45rem;
@@ -1157,6 +1215,34 @@ button:disabled {
   max-width: 100%;
   overflow-wrap: anywhere;
   padding: 0.28rem 0.45rem;
+}
+
+.verification-related {
+  border-left: 2px solid var(--cyan);
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding-left: 0.6rem;
+}
+
+.verification-related span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.verification-related ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.verification-related li {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .rendered-brief-section,
@@ -2085,6 +2171,7 @@ button:disabled {
   .search-bar,
   .contractor-card__top,
   .contractor-card__actions,
+  .found-item-verification,
   .found-item-card__top,
   .verification-item__top,
   .catalog-card,
@@ -2144,6 +2231,11 @@ button:disabled {
   }
 
   .verification-status {
+    max-width: none;
+    text-align: left;
+  }
+
+  .found-item-verification small {
     max-width: none;
     text-align: left;
   }

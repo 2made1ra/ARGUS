@@ -21,6 +21,7 @@ type TimelineMessage = {
   content: string;
   foundItems?: Array<{ id: string }>;
   foundItemsEmptyState?: "pending" | "no-results";
+  verificationResults?: Array<{ item_id: string | null; status: string }>;
 };
 
 const initialMessages: TimelineMessage[] = [
@@ -53,3 +54,22 @@ const preserved = appendAssistantTimelineMessage(replaced, {
 
 assert.deepStrictEqual(preserved[2].foundItems, nextCandidates);
 assert.equal(preserved[3].foundItems, undefined);
+
+const withVerification = appendAssistantTimelineMessage(preserved, {
+  role: "assistant",
+  content: "Проверил найденных.",
+  verificationResults: [{ item_id: nextCandidates[0].id, status: "active" }],
+});
+
+assert.deepStrictEqual(withVerification[4].verificationResults, [
+  { item_id: nextCandidates[0].id, status: "active" },
+]);
+
+const withoutVerification = appendAssistantTimelineMessage(withVerification, {
+  role: "assistant",
+  content: "Уточните, каких кандидатов проверить.",
+  verificationResults: [],
+});
+
+assert.equal(withoutVerification[4].verificationResults, undefined);
+assert.deepStrictEqual(withoutVerification[5].verificationResults, []);

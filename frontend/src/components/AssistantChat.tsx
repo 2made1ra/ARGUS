@@ -107,6 +107,7 @@ export default function AssistantChat({
                     title="Каталог в чате"
                     variant="inline"
                     selectedItemIds={selectedItemIds}
+                    verificationResults={message.verificationResults ?? []}
                     onSelectedItemIdsChange={onSelectedItemIdsChange}
                   />
                 )}
@@ -114,6 +115,7 @@ export default function AssistantChat({
                 message.verificationResults !== undefined &&
                 message.verificationResults.length > 0 && (
                   <VerificationResultsPanel
+                    relatedItems={message.foundItems ?? []}
                     results={message.verificationResults}
                     variant="inline"
                   />

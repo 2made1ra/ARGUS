@@ -62,6 +62,17 @@ export function assistantUiStateFromResponse(
   const showInlineFoundItems =
     isChatSearch &&
     (response.found_items.length > 0 || responseRefreshesCandidates(response));
+  const showInlineVerificationCards =
+    isChatSearch &&
+    response.verification_results.length > 0 &&
+    foundItems.length > 0;
+  const assistantMessageFoundItems = showInlineFoundItems
+    ? response.found_items
+    : showInlineVerificationCards
+      ? foundItems
+      : undefined;
+  const showInlineVerificationResults =
+    isChatSearch && responseHandlesVerification(response);
 
   return {
     interfaceMode,
@@ -76,12 +87,12 @@ export function assistantUiStateFromResponse(
     assistantMessage: {
       role: "assistant",
       content: response.message,
-      foundItems: showInlineFoundItems ? response.found_items : undefined,
+      foundItems: assistantMessageFoundItems,
       foundItemsEmptyState:
         showInlineFoundItems && response.found_items.length === 0
           ? "no-results"
           : undefined,
-      verificationResults: isChatSearch
+      verificationResults: showInlineVerificationResults
         ? response.verification_results
         : undefined,
       renderedBrief: isChatSearch ? response.rendered_brief : null,
@@ -112,5 +123,22 @@ function responseRefreshesCandidates(
     response.action_plan?.tool_intents.includes("search_items") === true ||
     response.router?.tool_intents?.includes("search_items") === true ||
     response.router?.should_search_now === true
+  );
+}
+
+function responseHandlesVerification(
+  response: Pick<
+    AssistantResponseForUi,
+    "action_plan" | "router" | "verification_results"
+  >,
+): boolean {
+  return (
+    response.verification_results.length > 0 ||
+    response.action_plan?.tool_intents.includes("verify_supplier_status") ===
+      true ||
+    response.action_plan?.workflow_stage === "supplier_verification" ||
+    response.router?.tool_intents?.includes("verify_supplier_status") === true ||
+    response.router?.intent === "verification" ||
+    response.router?.workflow_stage === "supplier_verification"
   );
 }

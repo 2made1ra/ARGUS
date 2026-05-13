@@ -77,6 +77,37 @@ test("empty chat-search results show no matching catalog rows without alternativ
   assert.doesNotMatch(html, /лучший вариант/iu);
 });
 
+test("chat-search verification renders legal status inline near candidate cards", () => {
+  const item = foundItem();
+  const uiState = assistantUiStateFromResponse([item], responseFixture({
+    message: "Проверил кандидатов, где есть ИНН.",
+    found_items: [],
+    verification_results: [verificationResult(item.id, "active")],
+    router: {
+      ...responseFixture().router,
+      intent: "verification",
+      should_search_now: false,
+      search_query: null,
+      workflow_stage: "supplier_verification",
+      tool_intents: ["verify_supplier_status"],
+    },
+    action_plan: {
+      ...responseFixture().action_plan,
+      workflow_stage: "supplier_verification",
+      tool_intents: ["verify_supplier_status"],
+    },
+  }));
+
+  const html = renderChat([uiState.assistantMessage]);
+
+  assert.match(html, /Каталог в чате/);
+  assert.match(html, /Световой комплект/);
+  assert.match(html, /Проверка: Юрлицо действует в реестре/);
+  assert.match(html, /Проверка поставщиков/);
+  assert.doesNotMatch(html, /доступ/iu);
+  assert.doesNotMatch(html, /рекоменд/iu);
+});
+
 function renderChat(messages) {
   return renderToStaticMarkup(
     React.createElement(
@@ -196,6 +227,21 @@ function foundItem() {
     result_group: "свет",
     matched_service_category: "свет",
     matched_service_categories: ["свет"],
+  };
+}
+
+function verificationResult(itemId, status) {
+  return {
+    item_id: itemId,
+    supplier_name: "ООО Световой Цех",
+    supplier_inn: "7700000000",
+    ogrn: null,
+    legal_name: null,
+    status,
+    source: "fake_registry",
+    checked_at: "2026-05-01T09:30:00Z",
+    risk_flags: [],
+    message: null,
   };
 }
 

@@ -111,10 +111,14 @@ export default function AssistantPage() {
               items={foundItems}
               loading={loading}
               selectedItemIds={selectedItemIds}
+              verificationResults={verificationResults}
               onSelectedItemIdsChange={handleSelectedItemIdsChange}
             />
             {verificationResults.length > 0 && (
-              <VerificationResultsPanel results={verificationResults} />
+              <VerificationResultsPanel
+                relatedItems={foundItems}
+                results={verificationResults}
+              />
             )}
             {renderedBrief && <RenderedBriefPanel brief={renderedBrief} />}
           </aside>

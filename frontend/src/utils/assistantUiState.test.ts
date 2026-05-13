@@ -6,6 +6,7 @@ import type {
   FoundItem,
   RouterIntent,
   RouterDecision,
+  SupplierVerificationResult,
 } from "../api.ts";
 import {
   assistantUiStateFromResponse,
@@ -86,6 +87,61 @@ assert.deepStrictEqual(
   [{ ordinal: 1, item_id: foundItem.id, service_category: "свет" }],
 );
 
+const chatSearchVerificationState = assistantUiStateFromResponse(
+  [foundItem],
+  responseFixture({
+    message: "Проверил кандидатов, где есть ИНН.",
+    router: routerFixture("chat_search", "verification", "supplier_verification", false),
+    action_plan: actionPlanFixture("chat_search", "supplier_verification", [
+      "verify_supplier_status",
+    ]),
+    found_items: [],
+    verification_results: [verificationResult(foundItem.id)],
+  }),
+);
+
+assert.equal(chatSearchVerificationState.interfaceMode, "chat_search");
+assert.deepStrictEqual(
+  chatSearchVerificationState.assistantMessage.foundItems?.map((item) => item.id),
+  [foundItem.id],
+);
+assert.deepStrictEqual(
+  chatSearchVerificationState.assistantMessage.verificationResults?.map(
+    (result) => result.item_id,
+  ),
+  [foundItem.id],
+);
+
+const verificationClarificationState = assistantUiStateFromResponse(
+  [foundItem],
+  responseFixture({
+    message: "Уточните, каких кандидатов проверить.",
+    router: routerFixture("chat_search", "verification", "supplier_verification", false),
+    action_plan: actionPlanFixture("chat_search", "supplier_verification", []),
+    found_items: [],
+    verification_results: [],
+  }),
+);
+
+assert.equal(verificationClarificationState.assistantMessage.foundItems, undefined);
+assert.deepStrictEqual(
+  verificationClarificationState.assistantMessage.verificationResults,
+  [],
+);
+
+const ordinaryChatSearchState = assistantUiStateFromResponse(
+  [foundItem],
+  responseFixture({
+    message: "Могу уточнить поиск по городу или бюджету.",
+    router: routerFixture("chat_search", "supplier_search", "search_clarifying", false),
+    action_plan: actionPlanFixture("chat_search", "search_clarifying", []),
+    found_items: [],
+    verification_results: [],
+  }),
+);
+
+assert.equal(ordinaryChatSearchState.assistantMessage.verificationResults, undefined);
+
 const legacyState = assistantUiStateFromResponse([], responseFixture({
   ui_mode: undefined,
   router: undefined,
@@ -160,6 +216,21 @@ function actionPlanFixture(
     missing_fields: [],
     clarification_questions: [],
     skipped_actions: [],
+  };
+}
+
+function verificationResult(itemId: string): SupplierVerificationResult {
+  return {
+    item_id: itemId,
+    supplier_name: "ООО Свет",
+    supplier_inn: "7700000000",
+    ogrn: null,
+    legal_name: null,
+    status: "active",
+    source: "fake_registry",
+    checked_at: "2026-05-01T09:30:00Z",
+    risk_flags: [],
+    message: null,
   };
 }
 

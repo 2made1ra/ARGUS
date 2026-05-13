@@ -1,9 +1,13 @@
 import { Link } from "react-router-dom";
-import type { FoundItem } from "../api";
+import type { FoundItem, SupplierVerificationResult } from "../api";
 import {
   groupFoundItemsForDisplay,
   orderFoundItemsForDisplay,
 } from "../utils/assistantCandidates";
+import {
+  verificationResultsByItemId,
+  verificationStatusLabel,
+} from "../utils/assistantVerification";
 
 interface Props {
   items: FoundItem[];
@@ -12,6 +16,7 @@ interface Props {
   variant?: "panel" | "inline";
   emptyState?: "pending" | "no-results";
   selectedItemIds?: string[];
+  verificationResults?: SupplierVerificationResult[];
   onSelectedItemIdsChange?: (itemIds: string[]) => void;
 }
 
@@ -22,11 +27,13 @@ export default function FoundItemsPanel({
   variant = "panel",
   emptyState = "pending",
   selectedItemIds = [],
+  verificationResults = [],
   onSelectedItemIdsChange,
 }: Props) {
   const groups = groupFoundItemsForDisplay(items);
   const orderedItems = orderFoundItemsForDisplay(items);
   const selectedIdSet = new Set(selectedItemIds);
+  const verificationByItemId = verificationResultsByItemId(verificationResults);
   const itemsById = new Map(orderedItems.map((item) => [item.id, item]));
   const ordinalById = new Map(
     orderedItems.map((item, index) => [item.id, index + 1]),
@@ -71,79 +78,102 @@ export default function FoundItemsPanel({
             <section className="found-item-group" key={group.title}>
               {groups.length > 1 && <h3>{group.title}</h3>}
               <div className="found-item-list">
-                {group.items.map((item) => (
-                  <article
-                    className={`found-item-card ${
-                      selectedIdSet.has(item.id) ? "found-item-card--selected" : ""
-                    }`}
-                    key={item.id}
-                  >
-                    <div className="found-item-card__actions">
-                      <span className="candidate-ordinal">
-                        Вариант {ordinalById.get(item.id)}
-                      </span>
-                      <label className="candidate-selection">
-                        <input
-                          aria-label={
-                            selectedIdSet.has(item.id)
-                              ? `Убрать ${item.name} из подборки`
-                              : `Добавить ${item.name} в подборку`
-                          }
-                          type="checkbox"
-                          checked={selectedIdSet.has(item.id)}
-                          readOnly={onSelectedItemIdsChange === undefined}
-                          onChange={(event) =>
-                            handleItemSelected(item.id, event.currentTarget.checked)
-                          }
-                        />
-                        <span>
-                          {selectedIdSet.has(item.id)
-                            ? "В подборке"
-                            : "В подборку"}
+                {group.items.map((item) => {
+                  const verificationResult = verificationByItemId.get(item.id);
+
+                  return (
+                    <article
+                      className={`found-item-card ${
+                        selectedIdSet.has(item.id)
+                          ? "found-item-card--selected"
+                          : ""
+                      }`}
+                      key={item.id}
+                    >
+                      <div className="found-item-card__actions">
+                        <span className="candidate-ordinal">
+                          Вариант {ordinalById.get(item.id)}
                         </span>
-                      </label>
-                      <Link
-                        className="found-item-open-link"
-                        to={`/catalog/items/${item.id}`}
-                      >
-                        Открыть карточку
-                      </Link>
-                    </div>
-                    <div className="found-item-card__top">
-                      <div>
-                        <h4>{item.name}</h4>
-                        <p className="meta">
-                          {item.category ?? "Без категории"} ·{" "}
-                          {formatScore(item.score)}
+                        <label className="candidate-selection">
+                          <input
+                            aria-label={
+                              selectedIdSet.has(item.id)
+                                ? `Убрать ${item.name} из подборки`
+                                : `Добавить ${item.name} в подборку`
+                            }
+                            type="checkbox"
+                            checked={selectedIdSet.has(item.id)}
+                            readOnly={onSelectedItemIdsChange === undefined}
+                            onChange={(event) =>
+                              handleItemSelected(
+                                item.id,
+                                event.currentTarget.checked,
+                              )
+                            }
+                          />
+                          <span>
+                            {selectedIdSet.has(item.id)
+                              ? "В подборке"
+                              : "В подборку"}
+                          </span>
+                        </label>
+                        <Link
+                          className="found-item-open-link"
+                          to={`/catalog/items/${item.id}`}
+                        >
+                          Открыть карточку
+                        </Link>
+                      </div>
+                      {verificationResult !== undefined && (
+                        <div
+                          className={`found-item-verification found-item-verification--${verificationResult.status}`}
+                        >
+                          <span>
+                            Проверка:{" "}
+                            {verificationStatusLabel(verificationResult.status)}
+                          </span>
+                          <small>{verificationResult.source}</small>
+                        </div>
+                      )}
+                      <div className="found-item-card__top">
+                        <div>
+                          <h4>{item.name}</h4>
+                          <p className="meta">
+                            {item.category ?? "Без категории"} ·{" "}
+                            {formatScore(item.score)}
+                          </p>
+                        </div>
+                        <span className="found-item-price">
+                          {item.unit_price} / {item.unit}
+                        </span>
+                      </div>
+
+                      <dl className="found-item-facts">
+                        <div>
+                          <dt>Поставщик</dt>
+                          <dd>{item.supplier ?? "Не указан"}</dd>
+                        </div>
+                        <div>
+                          <dt>Город</dt>
+                          <dd>{item.supplier_city ?? "Не указан"}</dd>
+                        </div>
+                      </dl>
+
+                      <div className="found-item-source">
+                        <span>Исходный фрагмент</span>
+                        <p>
+                          {item.source_text_snippet ??
+                            "Фрагмент не передан API"}
                         </p>
                       </div>
-                      <span className="found-item-price">
-                        {item.unit_price} / {item.unit}
-                      </span>
-                    </div>
 
-                    <dl className="found-item-facts">
-                      <div>
-                        <dt>Поставщик</dt>
-                        <dd>{item.supplier ?? "Не указан"}</dd>
+                      <div className="found-item-reason">
+                        <span>{item.match_reason.label}</span>
+                        <small>{item.match_reason.code}</small>
                       </div>
-                      <div>
-                        <dt>Город</dt>
-                        <dd>{item.supplier_city ?? "Не указан"}</dd>
-                      </div>
-                    </dl>
-
-                    <div className="found-item-source">
-                      <span>Исходный фрагмент</span>
-                      <p>{item.source_text_snippet ?? "Фрагмент не передан API"}</p>
-                    </div>
-
-                    <div className="found-item-reason">
-                      <span>{item.match_reason.label}</span>
-                      <small>{item.match_reason.code}</small>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           ))}
