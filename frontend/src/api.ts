@@ -340,7 +340,7 @@ export interface AssistantChatRequest {
 export interface AssistantChatResponse {
   session_id: string;
   message: string;
-  ui_mode: AssistantInterfaceMode;
+  ui_mode?: AssistantInterfaceMode | null;
   router: RouterDecision;
   action_plan: ActionPlan | null;
   brief: BriefState;

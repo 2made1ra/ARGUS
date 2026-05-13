@@ -15,8 +15,8 @@ import RenderedBriefPanel from "../components/RenderedBriefPanel";
 import VerificationResultsPanel from "../components/VerificationResultsPanel";
 import {
   buildVisibleCandidates,
-  nextVisibleCandidateItems,
 } from "../utils/assistantCandidates";
+import { assistantUiStateFromResponse } from "../utils/assistantUiState";
 
 export default function AssistantPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -30,7 +30,8 @@ export default function AssistantPage() {
     null,
   );
   const [router, setRouter] = useState<RouterDecision | null>(null);
-  const [uiMode, setUiMode] = useState<AssistantInterfaceMode>("chat_search");
+  const [interfaceMode, setInterfaceMode] =
+    useState<AssistantInterfaceMode>("chat_search");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,28 +54,17 @@ export default function AssistantPage() {
         visible_candidates: visibleCandidates,
         candidate_item_ids: visibleCandidates.map((candidate) => candidate.item_id),
       });
-      const nextFoundItems = nextVisibleCandidateItems(foundItems, response);
+      const nextUiState = assistantUiStateFromResponse(foundItems, response);
       setSessionId(response.session_id);
-      setBrief(response.brief);
-      setFoundItems(nextFoundItems);
-      setVerificationResults(response.verification_results);
-      setRenderedBrief(response.rendered_brief);
+      setBrief(nextUiState.brief);
+      setFoundItems(nextUiState.foundItems);
+      setVerificationResults(nextUiState.verificationResults);
+      setRenderedBrief(nextUiState.renderedBrief);
       setRouter(response.router);
-      setUiMode(response.ui_mode);
+      setInterfaceMode(nextUiState.interfaceMode);
       setMessages((current) => [
         ...current,
-        {
-          role: "assistant",
-          content: response.message,
-          foundItems:
-            response.ui_mode === "chat_search" ? response.found_items : undefined,
-          verificationResults:
-            response.ui_mode === "chat_search"
-              ? response.verification_results
-              : undefined,
-          renderedBrief:
-            response.ui_mode === "chat_search" ? response.rendered_brief : null,
-        },
+        nextUiState.assistantMessage,
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -98,7 +88,7 @@ export default function AssistantPage() {
 
       <section
         className={`assistant-layout ${
-          uiMode === "chat_search" ? "assistant-layout--chat-search" : ""
+          interfaceMode === "chat_search" ? "assistant-layout--chat-search" : ""
         }`}
       >
         <AssistantChat
@@ -110,7 +100,7 @@ export default function AssistantPage() {
           onInputChange={setInput}
           onSend={handleSend}
         />
-        {uiMode === "brief_workspace" && (
+        {interfaceMode === "brief_workspace" && (
           <aside className="assistant-side">
             <BriefDraftPanel brief={brief} />
             <FoundItemsPanel items={foundItems} loading={loading} />

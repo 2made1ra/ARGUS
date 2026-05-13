@@ -1,15 +1,29 @@
-import type { AssistantCandidateItem } from "./assistantCandidates";
+import type { AssistantCandidateItem } from "./assistantCandidates.ts";
 import {
   buildVisibleCandidates,
   nextVisibleCandidateItems,
   orderFoundItemsForDisplay,
-} from "./assistantCandidates";
+} from "./assistantCandidates.ts";
 
-declare const require: (id: string) => {
+declare const process: {
+  getBuiltinModule(id: "node:assert/strict"): {
+    deepStrictEqual: (actual: unknown, expected: unknown) => void;
+  };
+};
+
+const assert = process.getBuiltinModule("node:assert/strict");
+
+/*
+ * These tests run through Node's built-in TypeScript loader. Keeping them under
+ * src/utils avoids pulling React components into the runtime test runner.
+ */
+void process;
+
+type StrictAssert = {
   deepStrictEqual: (actual: unknown, expected: unknown) => void;
 };
 
-const assert = require("node:assert/strict");
+void (assert satisfies StrictAssert);
 
 const lightA = item("00000000-0000-0000-0000-000000000001", "Свет");
 const sound = item("00000000-0000-0000-0000-000000000002", "Звук");
