@@ -19,6 +19,7 @@ class ActionSignals:
     event_creation: bool
     direct_catalog_search: bool
     contextual_brief_update: bool
+    selection_requested: bool
     verification_requested: bool
     render_requested: bool
 
@@ -35,6 +36,7 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
     contextual_brief_update = _has_active_brief(brief) and any(
         phrase in lower for phrase in CONTEXTUAL_BRIEF_PHRASES
     )
+    selection_requested = _has_selection_signal(lower)
     verification_requested = _has_verification_signal(lower)
     render_requested = _has_render_signal(lower)
 
@@ -42,6 +44,7 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
         event_creation=event_creation,
         direct_catalog_search=direct_catalog_search,
         contextual_brief_update=contextual_brief_update,
+        selection_requested=selection_requested,
         verification_requested=verification_requested,
         render_requested=render_requested,
     )
@@ -128,6 +131,23 @@ def _has_verification_signal(lower: str) -> bool:
             "юрлиц",
         )
     ) or bool(verification_item_ids_for(lower))
+
+
+def _has_selection_signal(lower: str) -> bool:
+    has_selection_action = any(
+        phrase in lower
+        for phrase in (
+            "добавь",
+            "добавить",
+            "выбери",
+            "выбрать",
+            "возьми",
+            "оставь",
+        )
+    )
+    if not has_selection_action:
+        return False
+    return "вариант" in lower or "подборк" in lower
 
 
 def _has_render_signal(lower: str) -> bool:

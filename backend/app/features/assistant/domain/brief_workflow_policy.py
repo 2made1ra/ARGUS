@@ -43,6 +43,13 @@ _VERIFICATION_QUESTIONS = {
     ),
 }
 
+_SELECTION_QUESTIONS = {
+    "candidate_context": (
+        "Какой вариант добавить? Выберите позицию из карточек или передайте "
+        "visible_candidates с ordinal и item_id."
+    ),
+}
+
 _RENDER_QUESTIONS = {
     "brief_context": (
         "Сначала зафиксируйте хотя бы тип мероприятия, город или количество гостей."
@@ -96,6 +103,12 @@ def _brief_workspace_plan(
         return _verification_plan(
             interpretation=interpretation,
             brief=brief,
+            fallback_stage=EventBriefWorkflowState.CLARIFYING,
+        )
+
+    if interpretation.intent == "selection":
+        return _selection_plan(
+            interpretation=interpretation,
             fallback_stage=EventBriefWorkflowState.CLARIFYING,
         )
 
@@ -191,6 +204,12 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
             fallback_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
         )
 
+    if interpretation.intent == "selection":
+        return _selection_plan(
+            interpretation=interpretation,
+            fallback_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
+        )
+
     search_requests = [
         request
         for request in interpretation.search_requests
@@ -252,6 +271,36 @@ def _verification_plan(
         clarification_questions=_dedupe(
             [
                 *_questions_for(missing_fields, _VERIFICATION_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
+    )
+
+
+def _selection_plan(
+    *,
+    interpretation: Interpretation,
+    fallback_stage: EventBriefWorkflowState,
+) -> ActionPlan:
+    if (
+        interpretation.brief_update.selected_item_ids
+        and "select_item" in interpretation.requested_actions
+    ):
+        return ActionPlan(
+            interface_mode=interpretation.interface_mode,
+            workflow_stage=EventBriefWorkflowState.SUPPLIER_SEARCHING,
+            tool_intents=["select_item"],
+        )
+
+    missing_fields = _dedupe(["candidate_context", *interpretation.missing_fields])
+    return ActionPlan(
+        interface_mode=interpretation.interface_mode,
+        workflow_stage=fallback_stage,
+        tool_intents=[],
+        missing_fields=missing_fields,
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _SELECTION_QUESTIONS),
                 *interpretation.clarification_questions,
             ],
         )[:3],

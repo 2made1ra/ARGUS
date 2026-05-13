@@ -52,6 +52,8 @@ class ResponseComposer:
                 decision=decision,
                 verification_results=verification_results or [],
             )
+        if decision.intent == "selection":
+            return _selection_message_from_decision(decision=decision, brief=brief)
         if decision.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE:
             facts = _brief_fact_sentence(brief)
             questions = _question_sentence(decision.clarification_questions)
@@ -142,6 +144,26 @@ def _verification_message_from_decision(
     return (
         "Не получил проверяемых результатов по переданным позициям. "
         "Проверьте, что item id есть в каталоге и содержит данные поставщика."
+    )
+
+
+def _selection_message_from_decision(
+    *,
+    decision: RouterDecision,
+    brief: BriefState,
+) -> str:
+    questions = _question_sentence(decision.clarification_questions)
+    if "candidate_context" in decision.missing_fields:
+        return f"Уточните, какой вариант добавить в подборку. {questions}".strip()
+    if brief.selected_item_ids:
+        return (
+            "Добавил выбранный вариант в selected_item_ids. "
+            "Найденные карточки остаются кандидатами, пока пользователь явно "
+            "не добавит их в подборку."
+        )
+    return (
+        "Не удалось связать вариант с видимой карточкой. "
+        "Передайте visible_candidates."
     )
 
 

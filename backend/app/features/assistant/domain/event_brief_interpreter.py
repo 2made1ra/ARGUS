@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from app.features.assistant.brief import merge_brief
 from app.features.assistant.domain.action_detection import (
+    ActionSignals,
     detect_action_signals,
     verification_item_ids_for,
 )
@@ -63,6 +65,24 @@ class EventBriefInterpreter:
                 requested_actions.append("render_event_brief")
             else:
                 reason_codes.append("brief_context_missing")
+        elif signals.selection_requested:
+            interface_mode = (
+                AssistantInterfaceMode.BRIEF_WORKSPACE
+                if _has_active_brief(brief)
+                else AssistantInterfaceMode.CHAT_SEARCH
+            )
+            intent = "selection"
+            reason_codes.append("selection_requested")
+            selection_targets = _selection_targets_from_context(
+                message=message,
+                visible_candidates=visible_candidates or [],
+            )
+            if selection_targets:
+                requested_actions.append("select_item")
+                brief_update = BriefState(selected_item_ids=selection_targets)
+                reason_codes.append("contextual_reference_resolved")
+            else:
+                reason_codes.append("context_missing_for_reference")
         elif signals.verification_requested:
             interface_mode = (
                 AssistantInterfaceMode.BRIEF_WORKSPACE
@@ -80,6 +100,22 @@ class EventBriefInterpreter:
                 requested_actions.append("verify_supplier_status")
             else:
                 reason_codes.append("verification_context_missing")
+        elif signals.direct_catalog_search and (
+            _has_active_brief(brief) or signals.contextual_brief_update
+        ):
+            interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
+            intent = "mixed"
+            requested_actions.extend(["update_brief", "search_items"])
+            reason_codes.append("brief_update_detected")
+            reason_codes.append("search_action_detected")
+            if slots.service_needs:
+                reason_codes.append("service_need_detected")
+            merged_preview = merge_brief(brief, slots)
+            brief_update = _with_open_questions(
+                slots,
+                missing_event_intake_fields(merged_preview),
+            )
+            search_requests = _search_requests(message=message, slots=slots)
         elif signals.event_creation or signals.contextual_brief_update:
             interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
             intent = "brief_discovery"
@@ -116,14 +152,26 @@ class EventBriefInterpreter:
             verification_targets=verification_targets,
             missing_fields=(
                 ["candidate_context"]
-                if signals.verification_requested
-                and "verify_supplier_status" not in requested_actions
+                if (
+                    signals.verification_requested
+                    and "verify_supplier_status" not in requested_actions
+                )
+                or (
+                    signals.selection_requested
+                    and "select_item" not in requested_actions
+                )
                 else []
             ),
             clarification_questions=(
-                [_VERIFICATION_CONTEXT_QUESTION]
-                if signals.verification_requested
-                and "verify_supplier_status" not in requested_actions
+                [_context_question_for(signals)]
+                if (
+                    signals.verification_requested
+                    and "verify_supplier_status" not in requested_actions
+                )
+                or (
+                    signals.selection_requested
+                    and "select_item" not in requested_actions
+                )
                 else []
             ),
         )
@@ -177,6 +225,58 @@ _VERIFICATION_CONTEXT_QUESTION = (
     "Каких найденных подрядчиков проверить? Передайте выбранные позиции, "
     "candidate_item_ids, visible_candidates или явные item id."
 )
+_SELECTION_CONTEXT_QUESTION = (
+    "Какой вариант добавить? Передайте visible_candidates с ordinal и item_id "
+    "или выберите позицию в карточках."
+)
+
+
+def _context_question_for(signals: ActionSignals) -> str:
+    if signals.selection_requested:
+        return _SELECTION_CONTEXT_QUESTION
+    return _VERIFICATION_CONTEXT_QUESTION
+
+
+def _selection_targets_from_context(
+    *,
+    message: str,
+    visible_candidates: list[VisibleCandidate],
+) -> list[UUID]:
+    if not visible_candidates:
+        return []
+    ordinals = _selection_ordinals_for(message)
+    if not ordinals:
+        return []
+    candidates_by_ordinal = {
+        candidate.ordinal: candidate.item_id for candidate in visible_candidates
+    }
+    return _dedupe_uuid(
+        [
+            candidates_by_ordinal[ordinal]
+            for ordinal in ordinals
+            if ordinal in candidates_by_ordinal
+        ],
+    )
+
+
+def _selection_ordinals_for(message: str) -> list[int]:
+    lower = message.lower()
+    ordinals: list[int] = []
+    target_noun = r"(?:вариант\w*|позици\w*|карточк\w*)"
+    if re.search(rf"\bпервые\s+(?:два|2)\s+{target_noun}\b", lower):
+        ordinals.extend([1, 2])
+    ordinal_markers = {
+        1: r"(?:перв(?:ый|ого|ую)|1-й|1)",
+        2: r"(?:втор(?:ой|ого|ую)|2-й|2)",
+        3: r"(?:трет(?:ий|ьего|ью)|3-й|3)",
+    }
+    for ordinal, marker_pattern in ordinal_markers.items():
+        if re.search(rf"\b{marker_pattern}\s+{target_noun}\b", lower) or re.search(
+            rf"\b{target_noun}\s+{marker_pattern}\b",
+            lower,
+        ):
+            ordinals.append(ordinal)
+    return _dedupe_int(ordinals)
 
 
 def _verification_targets_from_context(
@@ -202,6 +302,17 @@ def _dedupe_uuid(item_ids: list[UUID]) -> list[UUID]:
             continue
         result.append(item_id)
         seen.add(item_id)
+    return result
+
+
+def _dedupe_int(values: list[int]) -> list[int]:
+    result: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        if value in seen:
+            continue
+        result.append(value)
+        seen.add(value)
     return result
 
 

@@ -87,6 +87,10 @@ class ToolExecutor:
                 item_details.extend(details)
                 continue
 
+            if intent == "select_item":
+                working_brief = merge_brief(working_brief, brief_update)
+                continue
+
             if intent == "verify_supplier_status":
                 if not calls.consume("verify_supplier_status", skipped_actions):
                     continue
