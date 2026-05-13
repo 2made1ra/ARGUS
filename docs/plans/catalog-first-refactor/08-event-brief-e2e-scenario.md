@@ -490,6 +490,97 @@ Unsafe phrasing:
 Подрядчик работает, хотя verification_results нет.
 ```
 
+## Phase UX-0: Response Contract Inventory
+
+Status: contract inventory complete. This phase documents the API surface the
+frontend needs before broader UI work; it does not imply new runtime behavior,
+layout implementation or additional tool execution.
+
+Checked contract surfaces:
+
+- Backend domain DTOs:
+  `backend/app/features/assistant/dto.py`.
+- HTTP schemas:
+  `backend/app/entrypoints/http/schemas/assistant.py`.
+- Checked-in OpenAPI:
+  `docs/api/openapi.yaml`.
+- Frontend API types:
+  `frontend/src/api.ts`.
+
+Already available fields:
+
+- `message`: top-level assistant prose for explanation, status and questions.
+- `ui_mode`: top-level layout mode, with `brief_workspace` and `chat_search`.
+- `router.interface_mode` and `action_plan.interface_mode`: nested diagnostics
+  and policy state that mirror the selected mode.
+- `router`: intent, confidence, known facts, missing fields, legacy
+  `search_query`, `brief_update`, workflow stage, reason codes,
+  `search_requests`, `tool_intents`, clarification questions and optional
+  user-visible summary.
+- `action_plan`: workflow stage, approved tool intents, `search_requests`,
+  verification targets, item detail ids, render flag, missing fields,
+  clarification questions and skipped action reasons.
+- `brief`: v2 brief state, including concept, event goal, venue constraints,
+  separate budget fields, service fields and `selected_item_ids`.
+- `found_items`: checkable catalog candidates with the minimum card fields plus
+  grouping metadata: `result_group`, `matched_service_category` and
+  `matched_service_categories`.
+- `search_requests`: available on both `router` and `action_plan`; clients
+  should prefer `action_plan.search_requests` for planned/executed UI state.
+- `visible_candidates`: accepted in the request as explicit UI context for
+  ordinal references.
+- `candidate_item_ids`: accepted in the request as explicit candidate context
+  for phrases such as `найденных подрядчиков`.
+- `verification_results`: explicit supplier verification evidence.
+- `rendered_brief`: deterministic final brief artifact when rendering runs.
+
+Missing fields or intentionally absent fields:
+
+- There is no top-level `interface_mode` response alias. The public top-level
+  field is `ui_mode`; `interface_mode` exists inside `router` and
+  `action_plan`.
+- There is no response echo of `visible_candidates` or `candidate_item_ids`.
+  The frontend must build next-turn context from the candidate cards it actually
+  renders, or a later phase must add a backward-compatible response projection.
+- There is no separate grouped-results container. Grouping is currently carried
+  by `found_items` metadata plus `search_requests`.
+
+Fields that need backward-compatible aliases during migration:
+
+- Keep `ui_mode` as the top-level layout field. If a top-level
+  `interface_mode` is added later, keep `ui_mode` until existing clients move.
+- Keep `router.search_query` as a legacy compatibility field while clients
+  migrate to `action_plan.search_requests[]`.
+- Keep legacy `brief.budget` compatibility, but UI should read
+  `budget_total`, `budget_per_guest` and `budget_notes` for new brief surfaces.
+- Keep scalar `matched_service_category` while grouped displays adopt
+  `matched_service_categories`.
+
+Fields that must not be inferred from assistant prose:
+
+- `ui_mode` / `interface_mode`; the brief panel opens only from structured mode.
+- Catalog facts such as supplier, price, unit, city, INN, contacts, source text
+  and match reason; they come from `found_items` or item details.
+- Candidate references such as `второй вариант`, `первые два` and
+  `найденных подрядчиков`; they require `visible_candidates`,
+  `candidate_item_ids` or `brief.selected_item_ids`.
+- Selection state; candidates become proposal rows only through
+  `brief.selected_item_ids`.
+- Supplier legal status; it comes only from `verification_results`, and
+  `active` means registry/legal status only.
+- Final brief evidence; selected candidates and verification summaries must come
+  from structured IDs/results, not prose.
+
+Smallest next implementation slice:
+
+Add a frontend state adapter with focused tests that maps
+`AssistantChatResponse` into explicit UI state:
+`ui_mode`, `brief`, `found_items`, derived `visible_candidates`,
+`candidate_item_ids`, `selected_item_ids`, `verification_results` and
+`rendered_brief`. The adapter should gate the draft brief panel only on
+`ui_mode === "brief_workspace"` and keep direct `chat_search` results inline in
+the chat timeline, without changing backend behavior.
+
 ## Response Contract Examples
 
 ### Verification With Candidate Context
