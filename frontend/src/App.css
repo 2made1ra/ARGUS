@@ -774,6 +774,32 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.brief-panel__sections {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.brief-section {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  padding-top: 0.75rem;
+}
+
+.brief-section h3 {
+  font-size: 0.86rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.brief-empty {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
 .brief-chip-groups {
   display: grid;
   gap: 0.85rem;
