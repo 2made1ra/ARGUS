@@ -4,6 +4,7 @@ import type {
   BriefState,
   EventBriefWorkflowState,
   FoundItem,
+  RenderedEventBrief,
   RouterIntent,
   RouterDecision,
   SupplierVerificationResult,
@@ -142,6 +143,31 @@ const ordinaryChatSearchState = assistantUiStateFromResponse(
 
 assert.equal(ordinaryChatSearchState.assistantMessage.verificationResults, undefined);
 
+const renderedBriefState = assistantUiStateFromResponse(
+  [foundItem],
+  responseFixture({
+    message: "Подготовил структурированный бриф.",
+    rendered_brief: renderedBrief(),
+    router: routerFixture("chat_search", "render_brief", "brief_rendered", false),
+    action_plan: {
+      ...actionPlanFixture("chat_search", "brief_rendered", [
+        "render_event_brief",
+      ]),
+      render_requested: true,
+    },
+  }),
+);
+
+assert.equal(renderedBriefState.renderedBrief?.title, "Бриф мероприятия");
+assert.equal(renderedBriefState.assistantMessage.content, "Подготовил структурированный бриф.");
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    renderedBriefState.assistantMessage,
+    "renderedBrief",
+  ),
+  false,
+);
+
 const legacyState = assistantUiStateFromResponse([], responseFixture({
   ui_mode: undefined,
   router: undefined,
@@ -231,6 +257,23 @@ function verificationResult(itemId: string): SupplierVerificationResult {
     checked_at: "2026-05-01T09:30:00Z",
     risk_flags: [],
     message: null,
+  };
+}
+
+function renderedBrief(): RenderedEventBrief {
+  return {
+    title: "Бриф мероприятия",
+    sections: [
+      {
+        title: "Основная информация",
+        items: ["Тип: корпоратив"],
+      },
+    ],
+    open_questions: [],
+    evidence: {
+      selected_item_ids: [],
+      verification_result_ids: [],
+    },
   };
 }
 

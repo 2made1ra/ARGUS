@@ -1,20 +1,17 @@
 import type {
   ChatMessage,
   FoundItem,
-  RenderedEventBrief,
   RouterDecision,
   SupplierVerificationResult,
 } from "../api";
 import AssistantContent from "./AssistantContent";
 import FoundItemsPanel from "./FoundItemsPanel";
-import RenderedBriefPanel from "./RenderedBriefPanel";
 import VerificationResultsPanel from "./VerificationResultsPanel";
 
 export interface AssistantTimelineMessage extends ChatMessage {
   foundItems?: FoundItem[];
   foundItemsEmptyState?: "pending" | "no-results";
   verificationResults?: SupplierVerificationResult[];
-  renderedBrief?: RenderedEventBrief | null;
 }
 
 interface Props {
@@ -120,9 +117,6 @@ export default function AssistantChat({
                     variant="inline"
                   />
                 )}
-              {message.role === "assistant" && message.renderedBrief && (
-                <RenderedBriefPanel brief={message.renderedBrief} variant="inline" />
-              )}
             </div>
           ))
         )}

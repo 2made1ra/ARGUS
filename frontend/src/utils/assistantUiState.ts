@@ -35,7 +35,6 @@ export interface AssistantUiMessage {
   foundItems?: FoundItem[];
   foundItemsEmptyState?: "pending" | "no-results";
   verificationResults?: SupplierVerificationResult[];
-  renderedBrief?: RenderedEventBrief | null;
 }
 
 export interface AssistantUiState {
@@ -95,7 +94,6 @@ export function assistantUiStateFromResponse(
       verificationResults: showInlineVerificationResults
         ? response.verification_results
         : undefined,
-      renderedBrief: isChatSearch ? response.rendered_brief : null,
     },
   };
 }

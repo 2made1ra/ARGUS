@@ -863,7 +863,8 @@ button:disabled {
 
 .found-item-group > h3,
 .rendered-brief-section h3,
-.rendered-brief-open h3 {
+.rendered-brief-open h3,
+.rendered-brief-evidence h3 {
   font-size: 0.92rem;
   line-height: 1.25;
   margin: 0;
@@ -1246,7 +1247,8 @@ button:disabled {
 }
 
 .rendered-brief-section,
-.rendered-brief-open {
+.rendered-brief-open,
+.rendered-brief-evidence {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 0.45rem;
@@ -1264,6 +1266,42 @@ button:disabled {
 .rendered-brief-section li,
 .rendered-brief-open li {
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rendered-brief-evidence {
+  background: #f7f5ef;
+  border: 1px solid #d6cdbb;
+  padding: 0.75rem;
+}
+
+.rendered-brief-evidence dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.rendered-brief-evidence div {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(8.5rem, 0.36fr) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.rendered-brief-evidence dt {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.rendered-brief-evidence dd {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -2216,7 +2254,8 @@ button:disabled {
   .brief-grid__row,
   .catalog-detail-facts div,
   .found-item-facts div,
-  .verification-facts div {
+  .verification-facts div,
+  .rendered-brief-evidence div {
     grid-template-columns: 1fr;
   }
 
