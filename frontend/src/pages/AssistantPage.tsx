@@ -13,9 +13,8 @@ import BriefDraftPanel from "../components/BriefDraftPanel";
 import FoundItemsPanel from "../components/FoundItemsPanel";
 import RenderedBriefPanel from "../components/RenderedBriefPanel";
 import VerificationResultsPanel from "../components/VerificationResultsPanel";
-import {
-  buildVisibleCandidates,
-} from "../utils/assistantCandidates";
+import { buildAssistantChatRequest } from "../utils/assistantRequest";
+import { appendAssistantTimelineMessage } from "../utils/assistantTimeline";
 import { assistantUiStateFromResponse } from "../utils/assistantUiState";
 
 export default function AssistantPage() {
@@ -35,25 +34,22 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedItemIds = brief.selected_item_ids;
 
   async function handleSend(message: string): Promise<void> {
     setLoading(true);
     setError(null);
     setInput("");
     setMessages((current) => [...current, { role: "user", content: message }]);
-    const visibleCandidates = buildVisibleCandidates(foundItems);
 
     try {
-      const response = await assistantChat({
-        session_id: sessionId,
+      const response = await assistantChat(buildAssistantChatRequest({
+        sessionId,
         message,
         brief,
-        recent_turns: messages
-          .slice(-6)
-          .map(({ role, content }) => ({ role, content })),
-        visible_candidates: visibleCandidates,
-        candidate_item_ids: visibleCandidates.map((candidate) => candidate.item_id),
-      });
+        messages,
+        visibleFoundItems: foundItems,
+      }));
       const nextUiState = assistantUiStateFromResponse(foundItems, response);
       setSessionId(response.session_id);
       setBrief(nextUiState.brief);
@@ -62,15 +58,21 @@ export default function AssistantPage() {
       setRenderedBrief(nextUiState.renderedBrief);
       setRouter(response.router);
       setInterfaceMode(nextUiState.interfaceMode);
-      setMessages((current) => [
-        ...current,
-        nextUiState.assistantMessage,
-      ]);
+      setMessages((current) =>
+        appendAssistantTimelineMessage(current, nextUiState.assistantMessage),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleSelectedItemIdsChange(nextSelectedItemIds: string[]): void {
+    setBrief((current) => ({
+      ...current,
+      selected_item_ids: nextSelectedItemIds,
+    }));
   }
 
   return (
@@ -97,13 +99,20 @@ export default function AssistantPage() {
           loading={loading}
           error={error}
           latestRouter={router}
+          selectedItemIds={selectedItemIds}
           onInputChange={setInput}
           onSend={handleSend}
+          onSelectedItemIdsChange={handleSelectedItemIdsChange}
         />
         {interfaceMode === "brief_workspace" && (
           <aside className="assistant-side">
             <BriefDraftPanel brief={brief} />
-            <FoundItemsPanel items={foundItems} loading={loading} />
+            <FoundItemsPanel
+              items={foundItems}
+              loading={loading}
+              selectedItemIds={selectedItemIds}
+              onSelectedItemIdsChange={handleSelectedItemIdsChange}
+            />
             {verificationResults.length > 0 && (
               <VerificationResultsPanel results={verificationResults} />
             )}

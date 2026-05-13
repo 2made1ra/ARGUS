@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import type { FoundItem } from "../api";
-import { groupFoundItemsForDisplay } from "../utils/assistantCandidates";
+import {
+  groupFoundItemsForDisplay,
+  orderFoundItemsForDisplay,
+} from "../utils/assistantCandidates";
 
 interface Props {
   items: FoundItem[];
@@ -8,6 +11,8 @@ interface Props {
   title?: string;
   variant?: "panel" | "inline";
   emptyState?: "pending" | "no-results";
+  selectedItemIds?: string[];
+  onSelectedItemIdsChange?: (itemIds: string[]) => void;
 }
 
 export default function FoundItemsPanel({
@@ -16,9 +21,29 @@ export default function FoundItemsPanel({
   title = "Найденные позиции",
   variant = "panel",
   emptyState = "pending",
+  selectedItemIds = [],
+  onSelectedItemIdsChange,
 }: Props) {
   const groups = groupFoundItemsForDisplay(items);
+  const orderedItems = orderFoundItemsForDisplay(items);
+  const selectedIdSet = new Set(selectedItemIds);
+  const itemsById = new Map(orderedItems.map((item) => [item.id, item]));
+  const ordinalById = new Map(
+    orderedItems.map((item, index) => [item.id, index + 1]),
+  );
+  const selectedItems = selectedItemIds
+    .map((itemId) => itemsById.get(itemId))
+    .filter((item): item is FoundItem => item !== undefined);
   const emptyCopy = foundItemsEmptyCopy(emptyState);
+
+  function handleItemSelected(itemId: string, selected: boolean): void {
+    if (onSelectedItemIdsChange === undefined) return;
+    if (selected) {
+      onSelectedItemIdsChange([...selectedItemIds, itemId].filter(unique));
+      return;
+    }
+    onSelectedItemIdsChange(selectedItemIds.filter((id) => id !== itemId));
+  }
 
   return (
     <section
@@ -47,11 +72,43 @@ export default function FoundItemsPanel({
               {groups.length > 1 && <h3>{group.title}</h3>}
               <div className="found-item-list">
                 {group.items.map((item) => (
-                  <Link
-                    className="found-item-card"
+                  <article
+                    className={`found-item-card ${
+                      selectedIdSet.has(item.id) ? "found-item-card--selected" : ""
+                    }`}
                     key={item.id}
-                    to={`/catalog/items/${item.id}`}
                   >
+                    <div className="found-item-card__actions">
+                      <span className="candidate-ordinal">
+                        Вариант {ordinalById.get(item.id)}
+                      </span>
+                      <label className="candidate-selection">
+                        <input
+                          aria-label={
+                            selectedIdSet.has(item.id)
+                              ? `Убрать ${item.name} из подборки`
+                              : `Добавить ${item.name} в подборку`
+                          }
+                          type="checkbox"
+                          checked={selectedIdSet.has(item.id)}
+                          readOnly={onSelectedItemIdsChange === undefined}
+                          onChange={(event) =>
+                            handleItemSelected(item.id, event.currentTarget.checked)
+                          }
+                        />
+                        <span>
+                          {selectedIdSet.has(item.id)
+                            ? "В подборке"
+                            : "В подборку"}
+                        </span>
+                      </label>
+                      <Link
+                        className="found-item-open-link"
+                        to={`/catalog/items/${item.id}`}
+                      >
+                        Открыть карточку
+                      </Link>
+                    </div>
                     <div className="found-item-card__top">
                       <div>
                         <h4>{item.name}</h4>
@@ -85,12 +142,43 @@ export default function FoundItemsPanel({
                       <span>{item.match_reason.label}</span>
                       <small>{item.match_reason.code}</small>
                     </div>
-                  </Link>
+                  </article>
                 ))}
               </div>
             </section>
           ))}
         </div>
+      )}
+
+      {selectedItems.length > 0 && (
+        <section
+          className="selected-items-section"
+          aria-label="Выбрано в подборку"
+        >
+          <div className="selected-items-section__heading">
+            <h3>Выбрано в подборку</h3>
+            <span className="meta">{selectedItems.length} шт.</span>
+          </div>
+          <div className="selected-item-list">
+            {selectedItems.map((item) => (
+              <article className="selected-item-card" key={item.id}>
+                <div>
+                  <h4>{item.name}</h4>
+                  <p className="meta">
+                    {item.supplier ?? "Поставщик не указан"} ·{" "}
+                    {item.unit_price} / {item.unit}
+                  </p>
+                </div>
+                <Link
+                  className="found-item-open-link"
+                  to={`/catalog/items/${item.id}`}
+                >
+                  Открыть
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
     </section>
   );
@@ -115,4 +203,8 @@ function foundItemsEmptyCopy(emptyState: "pending" | "no-results"): {
     title: "Позиции появятся после поискового запроса.",
     body: "Ассистент может уточнять бриф без поиска, если потребность пока слишком общая.",
   };
+}
+
+function unique(value: string, index: number, values: string[]): boolean {
+  return values.indexOf(value) === index;
 }

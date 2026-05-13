@@ -88,8 +88,10 @@ function renderChat(messages) {
         loading: false,
         error: null,
         latestRouter: null,
+        selectedItemIds: [],
         onInputChange: () => undefined,
         onSend: async () => undefined,
+        onSelectedItemIdsChange: () => undefined,
       }),
     ),
   );

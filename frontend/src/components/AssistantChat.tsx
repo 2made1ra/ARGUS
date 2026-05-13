@@ -23,8 +23,10 @@ interface Props {
   loading: boolean;
   error: string | null;
   latestRouter: RouterDecision | null;
+  selectedItemIds: string[];
   onInputChange: (value: string) => void;
   onSend: (message: string) => Promise<void>;
+  onSelectedItemIdsChange: (itemIds: string[]) => void;
 }
 
 const intentLabels: Record<RouterDecision["intent"], string> = {
@@ -44,8 +46,10 @@ export default function AssistantChat({
   loading,
   error,
   latestRouter,
+  selectedItemIds,
   onInputChange,
   onSend,
+  onSelectedItemIdsChange,
 }: Props) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +106,8 @@ export default function AssistantChat({
                     emptyState={message.foundItemsEmptyState}
                     title="Каталог в чате"
                     variant="inline"
+                    selectedItemIds={selectedItemIds}
+                    onSelectedItemIdsChange={onSelectedItemIdsChange}
                   />
                 )}
               {message.role === "assistant" &&
