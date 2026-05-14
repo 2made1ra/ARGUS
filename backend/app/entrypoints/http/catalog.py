@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from app.entrypoints.http.dependencies import (
     get_get_price_item_uc,
     get_import_prices_csv_uc,
+    get_index_price_items_uc,
     get_list_price_items_uc,
     get_search_price_items_uc,
 )
 from app.entrypoints.http.schemas.catalog import (
+    CatalogImportIndexedOut,
     CatalogSearchRequestIn,
     CatalogSearchResultOut,
     PriceImportSummaryOut,
@@ -24,6 +26,7 @@ from app.entrypoints.http.schemas.catalog import (
 from app.features.catalog.ports import PriceItemNotFound
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
+from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
 from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
 from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
 
@@ -52,6 +55,36 @@ async def import_catalog_csv(
         content=content,
     )
     return PriceImportSummaryOut.from_domain(summary)
+
+
+@router.post(
+    "/imports/indexed",
+    status_code=201,
+    response_model=CatalogImportIndexedOut,
+    operation_id="importAndIndexCatalogCsv",
+    summary="Import and index catalog CSV",
+    description=(
+        "Imports a prices.csv-compatible file into price_items and immediately "
+        "indexes active catalog items into price_items_search_v1 for service "
+        "testing."
+    ),
+)
+async def import_and_index_catalog_csv(
+    file: UploadFile,
+    import_uc: Annotated[ImportPricesCsvUseCase, Depends(get_import_prices_csv_uc)],
+    index_uc: Annotated[IndexPriceItemsUseCase, Depends(get_index_price_items_uc)],
+    index_limit: int = 1000,
+) -> CatalogImportIndexedOut:
+    content = await file.read()
+    import_summary = await import_uc.execute(
+        filename=file.filename or "prices.csv",
+        content=content,
+    )
+    indexing_result = await index_uc.execute(limit=index_limit)
+    return CatalogImportIndexedOut.from_domain(
+        import_summary=import_summary,
+        indexing_result=indexing_result,
+    )
 
 
 @router.get(

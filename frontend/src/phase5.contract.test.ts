@@ -2,6 +2,7 @@ import {
   assistantChat,
   emptyBriefState,
   getCatalogItem,
+  importAndIndexCatalogCsv,
   listCatalogItems,
   searchCatalogItems,
 } from "./api";
@@ -9,6 +10,7 @@ import type {
   ActionPlan,
   AssistantChatResponse,
   BriefState,
+  CatalogImportIndexedOut,
   FoundItem,
   PriceItemDetailOut,
   PriceItemListOut,
@@ -153,6 +155,28 @@ const chatSearchResponse: AssistantChatResponse = {
   rendered_brief: renderedBrief,
 };
 
+const catalogImportIndexedResponse: CatalogImportIndexedOut = {
+  import: {
+    id: "00000000-0000-0000-0000-000000000001",
+    source_file_id: "00000000-0000-0000-0000-000000000002",
+    filename: "prices.csv",
+    status: "imported",
+    row_count: 12,
+    valid_row_count: 10,
+    invalid_row_count: 2,
+    embedding_template_version: "prices_v1",
+    embedding_model: "text-embedding-model",
+    duplicate_file: false,
+  },
+  indexing: {
+    total: 10,
+    indexed: 9,
+    embedding_failed: 1,
+    indexing_failed: 0,
+    skipped: 0,
+  },
+};
+
 async function phase5ApiContract(): Promise<void> {
   const chatResponse: AssistantChatResponse = await assistantChat({
     session_id: null,
@@ -175,11 +199,16 @@ async function phase5ApiContract(): Promise<void> {
     limit: 10,
     filters: { supplier_city: "г. Москва" },
   });
+  const importResponse: CatalogImportIndexedOut = await importAndIndexCatalogCsv(
+    new File(["name,unit_price"], "prices.csv", { type: "text/csv" }),
+    25,
+  );
 
   void chatResponse;
   void listResponse;
   void detailResponse;
   void searchResponse;
+  void importResponse;
 }
 
 const phase5Components = [
@@ -196,5 +225,6 @@ void foundItem;
 void verification;
 void renderedBrief;
 void chatSearchResponse;
+void catalogImportIndexedResponse;
 void phase5ApiContract;
 void phase5Components;

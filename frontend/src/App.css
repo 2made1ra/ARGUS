@@ -1653,6 +1653,54 @@ button:disabled {
   line-height: 1;
 }
 
+.catalog-import {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.catalog-import__file {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.catalog-import__file span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.catalog-import__file input {
+  background: #fff;
+  border: 1px solid #cfd5d8;
+  min-width: 0;
+  padding: 0.62rem 0.75rem;
+  width: 100%;
+}
+
+.catalog-import .secondary-action {
+  min-height: 2.9rem;
+  white-space: nowrap;
+}
+
+.catalog-import-result {
+  align-items: center;
+  background: #eefbf7;
+  border: 1px solid #bde9dc;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  padding: 0.72rem 0.9rem;
+}
+
+.catalog-import-result strong {
+  color: var(--ok);
+}
+
 .catalog-grid {
   align-items: stretch;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr));
