@@ -124,6 +124,7 @@ class PriceItemDetail:
 class PriceItemList:
     items: list[PriceItem]
     total: int
+    indexed_total: int
 
 
 __all__ = [
@@ -137,4 +138,3 @@ __all__ = [
     "PriceItemSource",
     "PriceItemSourceRef",
 ]
-

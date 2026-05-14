@@ -12,7 +12,11 @@ from app.features.catalog.entities.price_item import (
     PriceItem,
     PriceItemSource,
 )
-from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
+from app.features.catalog.ports import PriceItemDuplicateFingerprint
+from app.features.catalog.use_cases.import_prices_csv import (
+    ImportPricesCsvProgress,
+    ImportPricesCsvUseCase,
+)
 
 
 class _FakeImportRepository:
@@ -54,8 +58,12 @@ class _FakeItemRepository:
     def __init__(self) -> None:
         self.items: list[PriceItem] = []
         self.sources: list[PriceItemSource] = []
+        self.duplicate_once = False
 
     async def add(self, item: PriceItem) -> None:
+        if self.duplicate_once:
+            self.duplicate_once = False
+            raise PriceItemDuplicateFingerprint(item.row_fingerprint)
         self.items.append(item)
 
     async def add_source(self, source: PriceItemSource) -> None:
@@ -73,10 +81,13 @@ class _FakeItemRepository:
 
 class _FakeUoW:
     def __init__(self) -> None:
+        self.enter_count = 0
+        self.exit_count = 0
         self.commit_count = 0
         self.rollback_count = 0
 
     async def __aenter__(self) -> _FakeUoW:
+        self.enter_count += 1
         return self
 
     async def __aexit__(
@@ -85,6 +96,7 @@ class _FakeUoW:
         exc: BaseException | None,
         tb: object | None,
     ) -> None:
+        self.exit_count += 1
         if exc_type is not None:
             await self.rollback()
 
@@ -193,6 +205,38 @@ async def test_import_prices_csv_stores_raw_rows_and_normalized_items() -> None:
     assert uow.commit_count == 1
 
 
+async def test_import_prices_csv_reports_row_progress_and_final_summary() -> None:
+    uc, _imports, _items, _uow = _use_case()
+    events: list[ImportPricesCsvProgress] = []
+
+    async def capture(event: ImportPricesCsvProgress) -> None:
+        events.append(event)
+
+    summary = await uc.execute(
+        filename="prices.csv",
+        content=_csv(
+            [
+                _catalog_row(external_id="1"),
+                "2,,Работы,усл.,3500,,2026-01-01,,ООО,Без НДС,,"
+                "7701234567,Москва,+7,a@example.com,Активен",
+            ],
+        ),
+        progress_callback=capture,
+    )
+
+    assert len(events) == 3
+    assert events[0].processed_rows == 1
+    assert events[0].total_rows == 2
+    assert events[0].valid_row_count == 1
+    assert events[0].invalid_row_count == 0
+    assert events[1].processed_rows == 2
+    assert events[1].valid_row_count == 1
+    assert events[1].invalid_row_count == 1
+    assert events[2].done is True
+    assert events[2].import_batch_id == summary.id
+    assert events[2].source_file_id == summary.source_file_id
+
+
 async def test_import_prices_csv_loads_representative_rows_from_fixture() -> None:
     uc, imports, items, uow = _use_case()
 
@@ -229,7 +273,7 @@ async def test_import_prices_csv_loads_representative_rows_from_fixture() -> Non
 
 
 async def test_import_prices_csv_returns_existing_summary_for_duplicate_file() -> None:
-    uc, imports, items, _uow = _use_case()
+    uc, imports, items, uow = _use_case()
     content = _csv(
         [
             "10,Аренда света,Аренда,шт.,1200,,2026-01-01,Свет,ООО,"
@@ -245,6 +289,8 @@ async def test_import_prices_csv_returns_existing_summary_for_duplicate_file() -
     assert len(imports.imports) == 1
     assert len(imports.rows) == 1
     assert len(items.items) == 1
+    assert uow.enter_count == 2
+    assert uow.exit_count == 2
 
 
 async def test_import_prices_csv_links_repeated_fingerprint_to_existing_item() -> None:
@@ -275,6 +321,26 @@ async def test_import_prices_csv_links_repeated_fingerprint_to_existing_item() -
     assert len(items.items) == 1
     assert imports.rows[1].price_item_id == items.items[0].id
     assert len(items.sources) == 2
+
+
+async def test_import_prices_csv_reselects_existing_item_after_duplicate_race() -> None:
+    uc, imports, items, _uow = _use_case()
+    await uc.execute(
+        filename="first.csv",
+        content=_csv([_catalog_row(external_id="1")]),
+    )
+    existing = items.items[0]
+    items.duplicate_once = True
+
+    summary = await uc.execute(
+        filename="second.csv",
+        content=_csv([_catalog_row(external_id="2", created_at="2026-02-01")]),
+    )
+
+    assert summary.valid_row_count == 1
+    assert len(items.items) == 1
+    assert imports.rows[-1].price_item_id == existing.id
+    assert items.sources[-1].price_item_id == existing.id
 
 
 async def test_import_prices_csv_creates_new_item_when_price_changes() -> None:

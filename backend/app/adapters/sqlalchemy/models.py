@@ -160,6 +160,46 @@ class PriceImport(Base):
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
 
+class CatalogImportJob(Base):
+    __tablename__ = "catalog_import_jobs"
+    __table_args__ = (
+        Index("ix_catalog_import_jobs_status", "status"),
+        Index("ix_catalog_import_jobs_created_at", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True)
+    filename: Mapped[str] = mapped_column(Text)
+    source_path: Mapped[str] = mapped_column(Text)
+    file_size_bytes: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text)
+    stage: Mapped[str] = mapped_column(Text)
+    progress_percent: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    stage_progress_percent: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+    )
+    row_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    valid_row_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    invalid_row_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    index_total: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    indexed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    embedding_failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    indexing_failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    skipped: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    import_batch_id: Mapped[UUID | None] = mapped_column(PostgresUUID(as_uuid=True))
+    source_file_id: Mapped[UUID | None] = mapped_column(PostgresUUID(as_uuid=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+
 class PriceImportRow(Base):
     __tablename__ = "price_import_rows"
     __table_args__ = (
@@ -202,12 +242,16 @@ class PriceItem(Base):
         Index(
             "ix_price_items_row_fingerprint_active",
             "row_fingerprint",
+            unique=True,
             postgresql_where=text("is_active = true"),
         ),
         Index("ix_price_items_catalog_index_status", "catalog_index_status"),
         Index("ix_price_items_supplier_city_normalized", "supplier_city_normalized"),
         Index("ix_price_items_category_normalized", "category_normalized"),
-        Index("ix_price_items_supplier_status_normalized", "supplier_status_normalized"),
+        Index(
+            "ix_price_items_supplier_status_normalized",
+            "supplier_status_normalized",
+        ),
         Index("ix_price_items_supplier_inn", "supplier_inn"),
     )
 

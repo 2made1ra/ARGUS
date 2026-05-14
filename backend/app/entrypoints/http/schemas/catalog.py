@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -12,6 +13,7 @@ from app.features.catalog.dto import (
     SearchPriceItemsFilters,
     SearchPriceItemsResult,
 )
+from app.features.catalog.entities.import_job import CatalogImportJob
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsResult
@@ -82,6 +84,58 @@ class CatalogImportIndexedOut(BaseModel):
         )
 
 
+class CatalogImportJobOut(BaseModel):
+    id: UUID
+    filename: str
+    source_path: str
+    file_size_bytes: int
+    status: str
+    stage: str
+    progress_percent: int
+    stage_progress_percent: int
+    row_count: int
+    valid_row_count: int
+    invalid_row_count: int
+    index_total: int
+    indexed: int
+    embedding_failed: int
+    indexing_failed: int
+    skipped: int
+    import_batch_id: UUID | None
+    source_file_id: UUID | None
+    error_message: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    completed_at: datetime | None
+
+    @classmethod
+    def from_domain(cls, job: CatalogImportJob) -> CatalogImportJobOut:
+        return cls(
+            id=job.id,
+            filename=job.filename,
+            source_path=job.source_path,
+            file_size_bytes=job.file_size_bytes,
+            status=job.status,
+            stage=job.stage,
+            progress_percent=job.progress_percent,
+            stage_progress_percent=job.stage_progress_percent,
+            row_count=job.row_count,
+            valid_row_count=job.valid_row_count,
+            invalid_row_count=job.invalid_row_count,
+            index_total=job.index_total,
+            indexed=job.indexed,
+            embedding_failed=job.embedding_failed,
+            indexing_failed=job.indexing_failed,
+            skipped=job.skipped,
+            import_batch_id=job.import_batch_id,
+            source_file_id=job.source_file_id,
+            error_message=job.error_message,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            completed_at=job.completed_at,
+        )
+
+
 class PriceItemOut(BaseModel):
     id: UUID
     name: str
@@ -119,6 +173,7 @@ class PriceItemOut(BaseModel):
 class PriceItemListOut(BaseModel):
     items: list[PriceItemOut]
     total: int
+    indexed_total: int
 
 
 class PriceItemDetailItemOut(BaseModel):

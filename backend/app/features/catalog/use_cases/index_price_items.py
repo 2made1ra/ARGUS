@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from app.features.catalog.entities.price_item import PriceItem
 from app.features.catalog.ports import (
@@ -21,6 +23,23 @@ class IndexPriceItemsResult:
     embedding_failed: int = 0
     indexing_failed: int = 0
     skipped: int = 0
+
+
+@dataclass(slots=True)
+class IndexPriceItemsProgress:
+    total: int
+    processed: int
+    indexed: int
+    embedding_failed: int
+    indexing_failed: int
+    skipped: int
+    done: bool = False
+
+
+type IndexPriceItemsProgressCallback = Callable[
+    [IndexPriceItemsProgress],
+    Awaitable[None],
+]
 
 
 class IndexPriceItemsUseCase:
@@ -45,20 +64,34 @@ class IndexPriceItemsUseCase:
         self._catalog_embedding_template_version = catalog_embedding_template_version
         self._catalog_document_prefix = catalog_document_prefix
 
-    async def execute(self, *, limit: int = 100) -> IndexPriceItemsResult:
+    async def execute(
+        self,
+        *,
+        limit: int | None = 100,
+        import_batch_id: UUID | None = None,
+        progress_callback: IndexPriceItemsProgressCallback | None = None,
+    ) -> IndexPriceItemsResult:
         async with self._uow:
-            items = await self._items.list_active_for_indexing(limit=limit)
+            items = await self._items.list_active_for_indexing(
+                limit=limit,
+                import_batch_id=import_batch_id,
+            )
             await self._uow.commit()
 
         result = IndexPriceItemsResult(total=len(items))
+        processed = 0
         for item in items:
             if not item.is_active:
                 result.skipped += 1
+                processed += 1
+                await _emit_progress(progress_callback, result, processed)
                 continue
 
             vector = await self._generate_vector(item)
             if vector is None:
                 result.embedding_failed += 1
+                processed += 1
+                await _emit_progress(progress_callback, result, processed)
                 continue
 
             point = CatalogVectorPoint(
@@ -75,11 +108,16 @@ class IndexPriceItemsUseCase:
             except Exception as exc:
                 await self._mark_indexing_failed(item, str(exc))
                 result.indexing_failed += 1
+                processed += 1
+                await _emit_progress(progress_callback, result, processed)
                 continue
 
             await self._mark_indexed(item)
             result.indexed += 1
+            processed += 1
+            await _emit_progress(progress_callback, result, processed)
 
+        await _emit_progress(progress_callback, result, processed, done=True)
         return result
 
     async def _generate_vector(self, item: PriceItem) -> list[float] | None:
@@ -158,4 +196,31 @@ def _decimal_to_float(value: Decimal) -> float:
     return float(value)
 
 
-__all__ = ["IndexPriceItemsResult", "IndexPriceItemsUseCase"]
+async def _emit_progress(
+    callback: IndexPriceItemsProgressCallback | None,
+    result: IndexPriceItemsResult,
+    processed: int,
+    *,
+    done: bool = False,
+) -> None:
+    if callback is None:
+        return
+    await callback(
+        IndexPriceItemsProgress(
+            total=result.total,
+            processed=processed,
+            indexed=result.indexed,
+            embedding_failed=result.embedding_failed,
+            indexing_failed=result.indexing_failed,
+            skipped=result.skipped,
+            done=done,
+        ),
+    )
+
+
+__all__ = [
+    "IndexPriceItemsProgress",
+    "IndexPriceItemsProgressCallback",
+    "IndexPriceItemsResult",
+    "IndexPriceItemsUseCase",
+]

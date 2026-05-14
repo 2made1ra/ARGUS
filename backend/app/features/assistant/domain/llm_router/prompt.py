@@ -52,7 +52,7 @@ def build_llm_router_prompt(
         "allowed_interface_modes": sorted(ALLOWED_INTERFACE_MODES),
         "allowed_intents": sorted(ALLOWED_INTENTS),
         "allowed_tool_intents": sorted(ALLOWED_TOOL_INTENTS),
-        "strict_json_schema": _strict_json_schema(),
+        "strict_json_schema": llm_router_json_schema(),
     }
     return LLMStructuredRouterRequest(
         messages=[
@@ -138,7 +138,7 @@ def _serialize_value(value: object) -> object:
     return value
 
 
-def _strict_json_schema() -> dict[str, Any]:
+def llm_router_json_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
@@ -187,4 +187,4 @@ def _strict_json_schema() -> dict[str, Any]:
     }
 
 
-__all__ = ["build_llm_router_prompt"]
+__all__ = ["build_llm_router_prompt", "llm_router_json_schema"]

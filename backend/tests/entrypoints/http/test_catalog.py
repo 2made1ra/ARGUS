@@ -5,15 +5,22 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
+import pytest
+from app.entrypoints.http.catalog import _job_status_stream
 from app.entrypoints.http.dependencies import (
+    get_catalog_import_job_fetcher,
+    get_get_catalog_import_job_uc,
     get_get_price_item_uc,
     get_import_prices_csv_uc,
     get_index_price_items_uc,
     get_list_price_items_uc,
     get_search_price_items_uc,
+    get_start_catalog_import_job_uc,
 )
 from app.features.catalog.dto import FoundPriceItem, MatchReason, SearchPriceItemsResult
+from app.features.catalog.entities.import_job import CatalogImportJob
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
+from app.features.catalog.ports import CatalogImportJobNotFound
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsResult
 from app.features.catalog.use_cases.list_price_items import PriceItemList
@@ -62,6 +69,34 @@ def _item() -> PriceItem:
         legacy_embedding_dim=None,
         created_at=now,
         updated_at=now,
+    )
+
+
+def _job(*, status: str = "QUEUED", progress_percent: int = 0) -> CatalogImportJob:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    return CatalogImportJob(
+        id=uuid4(),
+        filename="prices.csv",
+        source_path="/tmp/prices.csv",
+        file_size_bytes=128,
+        status=status,
+        stage="upload" if status == "QUEUED" else status.lower(),
+        progress_percent=progress_percent,
+        stage_progress_percent=0,
+        row_count=0,
+        valid_row_count=0,
+        invalid_row_count=0,
+        index_total=0,
+        indexed=0,
+        embedding_failed=0,
+        indexing_failed=0,
+        skipped=0,
+        import_batch_id=None,
+        source_file_id=None,
+        error_message=None,
+        created_at=now,
+        updated_at=now,
+        completed_at=None,
     )
 
 
@@ -162,13 +197,154 @@ async def test_import_catalog_indexed_imports_csv_and_indexes_items(
         filename="prices.csv",
         content=b"id,name\n1,test\n",
     )
-    index_uc.execute.assert_awaited_once_with(limit=25)
+    index_uc.execute.assert_awaited_once_with(
+        limit=25,
+        import_batch_id=import_id,
+    )
+
+
+async def test_import_catalog_indexed_uses_default_index_limit(app: FastAPI) -> None:
+    import_id = uuid4()
+    import_uc = AsyncMock()
+    import_uc.execute.return_value = PriceImportSummary(
+        id=import_id,
+        source_file_id=uuid4(),
+        filename="prices.csv",
+        status="IMPORTED",
+        row_count=1,
+        valid_row_count=1,
+        invalid_row_count=0,
+        embedding_template_version="prices_v1",
+        embedding_model="nomic-embed-text-v1.5",
+        duplicate_file=False,
+    )
+    index_uc = AsyncMock()
+    index_uc.execute.return_value = IndexPriceItemsResult(total=0)
+    app.dependency_overrides[get_import_prices_csv_uc] = lambda: import_uc
+    app.dependency_overrides[get_index_price_items_uc] = lambda: index_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.post(
+            "/catalog/imports/indexed",
+            files={"file": ("prices.csv", b"id,name\n1,test\n", "text/csv")},
+        )
+
+    assert resp.status_code == 201
+    index_uc.execute.assert_awaited_once_with(
+        limit=1000,
+        import_batch_id=import_id,
+    )
+
+
+async def test_start_catalog_import_job_returns_accepted_snapshot(app: FastAPI) -> None:
+    job = _job(status="QUEUED", progress_percent=10)
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = job
+    app.dependency_overrides[get_start_catalog_import_job_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.post(
+            "/catalog/import-jobs",
+            files={"file": ("prices.csv", b"id,name\n1,test\n", "text/csv")},
+        )
+
+    assert resp.status_code == 202
+    assert resp.json()["id"] == str(job.id)
+    assert resp.json()["status"] == "QUEUED"
+    assert resp.json()["stage"] == "upload"
+    assert resp.json()["progress_percent"] == 10
+    fake_uc.execute.assert_awaited_once()
+    call = fake_uc.execute.await_args.kwargs
+    assert call["filename"] == "prices.csv"
+
+
+async def test_get_catalog_import_job_returns_snapshot(app: FastAPI) -> None:
+    job = _job(status="INDEXING", progress_percent=50)
+    fake_uc = AsyncMock()
+    fake_uc.execute.return_value = job
+    app.dependency_overrides[get_get_catalog_import_job_uc] = lambda: fake_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get(f"/catalog/import-jobs/{job.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(job.id)
+    assert resp.json()["status"] == "INDEXING"
+    assert resp.json()["progress_percent"] == 50
+    fake_uc.execute.assert_awaited_once_with(job.id)
+
+
+async def test_catalog_import_job_stream_emits_terminal_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import json
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+
+    queued = _job(status="QUEUED", progress_percent=10)
+    completed = _job(status="COMPLETED", progress_percent=100)
+    completed.id = queued.id
+    completed.stage = "completed"
+    completed.stage_progress_percent = 100
+    completed.row_count = 3
+    completed.valid_row_count = 2
+    completed.invalid_row_count = 1
+    jobs = [queued, completed]
+
+    async def fake_repo(job_id: UUID) -> CatalogImportJob:
+        return jobs.pop(0)
+
+    events: list[str] = []
+    async for event in _job_status_stream(queued.id, fake_repo):
+        events.append(event)
+
+    assert len(events) == 2
+    payload = json.loads(events[-1].removeprefix("data: ").strip())
+    assert payload["id"] == str(queued.id)
+    assert payload["status"] == "COMPLETED"
+    assert payload["stage"] == "completed"
+    assert payload["progress_percent"] == 100
+    assert payload["row_count"] == 3
+
+
+async def test_catalog_import_job_stream_returns_404_for_unknown_job(
+    app: FastAPI,
+) -> None:
+    job_id = uuid4()
+
+    async def fake_fetcher(id: UUID) -> CatalogImportJob:
+        raise CatalogImportJobNotFound(id)
+
+    app.dependency_overrides[get_catalog_import_job_fetcher] = lambda: fake_fetcher
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get(f"/catalog/import-jobs/{job_id}/stream")
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Catalog import job not found"
 
 
 async def test_list_catalog_items_returns_items_and_total(app: FastAPI) -> None:
     item = _item()
     fake_uc = AsyncMock()
-    fake_uc.execute.return_value = PriceItemList(items=[item], total=1)
+    fake_uc.execute.return_value = PriceItemList(
+        items=[item],
+        total=1557,
+        indexed_total=1490,
+    )
     app.dependency_overrides[get_list_price_items_uc] = lambda: fake_uc
 
     async with AsyncClient(
@@ -179,7 +355,8 @@ async def test_list_catalog_items_returns_items_and_total(app: FastAPI) -> None:
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 1
+    assert body["total"] == 1557
+    assert body["indexed_total"] == 1490
     assert UUID(body["items"][0]["id"]) == item.id
     assert body["items"][0]["unit_price"] == "1200.00"
 

@@ -669,6 +669,9 @@ def _strip_search_prefix(message: str) -> str:
     normalized = " ".join(message.strip().split())
     lowered = normalized.lower()
     for prefix in (
+        "найди мне ",
+        "подбери мне ",
+        "покажи мне ",
         "найди ",
         "подбери ",
         "покажи ",

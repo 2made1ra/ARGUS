@@ -1,23 +1,28 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends
 from qdrant_client import AsyncQdrantClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.adapters.celery.catalog_task_queue import CeleryCatalogImportTaskQueue
 from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
 from app.adapters.llm.assistant_router import LMStudioAssistantRouterAdapter
 from app.adapters.llm.chat import LMStudioChatClient
 from app.adapters.llm.embeddings import LMStudioEmbeddings
+from app.adapters.local_fs.catalog_import_storage import LocalCatalogImportStorage
 from app.adapters.local_fs.file_storage import LocalFileStorage
 from app.adapters.qdrant.catalog_index import QdrantCatalogIndex
 from app.adapters.qdrant.catalog_search import QdrantCatalogSearch
 from app.adapters.qdrant.client import make_qdrant_client
 from app.adapters.qdrant.index import QdrantVectorIndex
 from app.adapters.qdrant.search import QdrantVectorSearch
+from app.adapters.sqlalchemy.catalog_import_jobs import (
+    SqlAlchemyCatalogImportJobRepository,
+)
 from app.adapters.sqlalchemy.contractors import (
     SqlAlchemyContractorRepository,
     SqlAlchemyRawContractorMappingRepository,
@@ -27,7 +32,7 @@ from app.adapters.sqlalchemy.fields import SqlAlchemyFieldsRepository
 from app.adapters.sqlalchemy.price_imports import SqlAlchemyPriceImportRepository
 from app.adapters.sqlalchemy.price_items import SqlAlchemyPriceItemRepository
 from app.adapters.sqlalchemy.summaries import SqlAlchemySummaryRepository
-from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork
+from app.adapters.sqlalchemy.unit_of_work import SessionUnitOfWork, SqlAlchemyUnitOfWork
 from app.adapters.supplier_verification.manual import (
     ManualNotVerifiedSupplierVerificationAdapter,
 )
@@ -43,6 +48,7 @@ from app.features.assistant.dto import MatchReason as AssistantMatchReason
 from app.features.assistant.router import HeuristicAssistantRouter
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
 from app.features.catalog.dto import FoundPriceItem, SearchPriceItemsFilters
+from app.features.catalog.entities.import_job import CatalogImportJob
 from app.features.catalog.ports import (
     CatalogSearchFilters as CatalogVectorFilters,
 )
@@ -50,11 +56,13 @@ from app.features.catalog.ports import (
     CatalogSearchHit,
     PriceItemNotFound,
 )
+from app.features.catalog.use_cases.get_import_job import GetCatalogImportJobUseCase
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
 from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
 from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
+from app.features.catalog.use_cases.start_import_job import StartCatalogImportJobUseCase
 from app.features.contractors.use_cases.get_contractor_profile import (
     GetContractorProfileUseCase,
 )
@@ -86,6 +94,8 @@ from app.features.search.use_cases.search_within_document import (
 # Catalog use cases
 # ---------------------------------------------------------------------------
 
+type CatalogImportJobFetcher = Callable[[UUID], Coroutine[Any, Any, CatalogImportJob]]
+
 
 def get_import_prices_csv_uc(
     settings: Annotated[Settings, Depends(get_settings)],
@@ -97,6 +107,41 @@ def get_import_prices_csv_uc(
         uow=SessionUnitOfWork(session),
         embedding_model=settings.catalog_embedding_model,
     )
+
+
+def get_start_catalog_import_job_uc(
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> StartCatalogImportJobUseCase:
+    return StartCatalogImportJobUseCase(
+        storage=LocalCatalogImportStorage(
+            Path(settings.upload_dir) / "catalog_imports",
+        ),
+        jobs=SqlAlchemyCatalogImportJobRepository(session),
+        tasks=CeleryCatalogImportTaskQueue(),
+        uow=SessionUnitOfWork(session),
+    )
+
+
+def get_get_catalog_import_job_uc(
+    session: Annotated[AsyncSession, Depends(_session)],
+) -> GetCatalogImportJobUseCase:
+    return GetCatalogImportJobUseCase(
+        jobs=SqlAlchemyCatalogImportJobRepository(session),
+    )
+
+
+def get_catalog_import_job_fetcher(
+    sm: Annotated[
+        async_sessionmaker[AsyncSession],
+        Depends(get_sessionmaker),
+    ],
+) -> CatalogImportJobFetcher:
+    async def _fetch(job_id: UUID) -> CatalogImportJob:
+        async with SqlAlchemyUnitOfWork(sm) as uow:
+            return await SqlAlchemyCatalogImportJobRepository(uow.session).get(job_id)
+
+    return _fetch
 
 
 def get_list_price_items_uc(

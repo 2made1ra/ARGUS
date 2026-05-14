@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -21,6 +22,7 @@ from app.features.catalog.normalization import (
 )
 from app.features.catalog.ports import (
     PriceImportRepository,
+    PriceItemDuplicateFingerprint,
     PriceItemRepository,
     UnitOfWork,
 )
@@ -44,6 +46,23 @@ class PriceImportSummary:
     duplicate_file: bool = False
 
 
+@dataclass(slots=True)
+class ImportPricesCsvProgress:
+    total_rows: int
+    processed_rows: int
+    valid_row_count: int
+    invalid_row_count: int
+    import_batch_id: UUID | None
+    source_file_id: UUID | None
+    done: bool = False
+
+
+type ImportPricesCsvProgressCallback = Callable[
+    [ImportPricesCsvProgress],
+    Awaitable[None],
+]
+
+
 class ImportPricesCsvUseCase:
     def __init__(
         self,
@@ -64,11 +83,9 @@ class ImportPricesCsvUseCase:
         filename: str,
         content: bytes,
         source_path: str | None = None,
+        progress_callback: ImportPricesCsvProgressCallback | None = None,
     ) -> PriceImportSummary:
         file_sha256 = hashlib.sha256(content).hexdigest()
-        existing = await self._imports.find_imported_by_file_sha256(file_sha256)
-        if existing is not None:
-            return _summary(existing, duplicate_file=True)
 
         now = datetime.now(UTC)
         import_batch = PriceImport(
@@ -91,6 +108,10 @@ class ImportPricesCsvUseCase:
         parsed_rows = parse_price_csv(content)
 
         async with self._uow:
+            existing = await self._imports.find_imported_by_file_sha256(file_sha256)
+            if existing is not None:
+                return _summary(existing, duplicate_file=True)
+
             await self._imports.add(import_batch)
             valid_count = 0
             invalid_count = 0
@@ -102,6 +123,15 @@ class ImportPricesCsvUseCase:
                     invalid_count += 1
                     await self._imports.add_row(
                         _invalid_import_row(import_batch, parsed_row, str(exc)),
+                    )
+                    await _emit_progress(
+                        progress_callback,
+                        total_rows=len(parsed_rows),
+                        processed_rows=valid_count + invalid_count,
+                        valid_row_count=valid_count,
+                        invalid_row_count=invalid_count,
+                        import_batch_id=import_batch.id,
+                        source_file_id=import_batch.source_file_id,
                     )
                     continue
 
@@ -128,6 +158,15 @@ class ImportPricesCsvUseCase:
                         created_at=now,
                     ),
                 )
+                await _emit_progress(
+                    progress_callback,
+                    total_rows=len(parsed_rows),
+                    processed_rows=valid_count + invalid_count,
+                    valid_row_count=valid_count,
+                    invalid_row_count=invalid_count,
+                    import_batch_id=import_batch.id,
+                    source_file_id=import_batch.source_file_id,
+                )
 
             import_batch.row_count = len(parsed_rows)
             import_batch.valid_row_count = valid_count
@@ -135,6 +174,16 @@ class ImportPricesCsvUseCase:
             import_batch.status = "IMPORTED"
             import_batch.completed_at = datetime.now(UTC)
             await self._imports.update(import_batch)
+            await _emit_progress(
+                progress_callback,
+                total_rows=len(parsed_rows),
+                processed_rows=len(parsed_rows),
+                valid_row_count=valid_count,
+                invalid_row_count=invalid_count,
+                import_batch_id=import_batch.id,
+                source_file_id=import_batch.source_file_id,
+                done=True,
+            )
             await self._uow.commit()
 
         return _summary(import_batch)
@@ -198,7 +247,13 @@ class ImportPricesCsvUseCase:
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
-        await self._items.add(item)
+        try:
+            await self._items.add(item)
+        except PriceItemDuplicateFingerprint:
+            existing = await self._items.find_active_by_row_fingerprint(fingerprint)
+            if existing is not None:
+                return existing
+            raise
         return item
 
 
@@ -263,5 +318,35 @@ def _summary(
     )
 
 
-__all__ = ["ImportPricesCsvUseCase", "PriceImportSummary"]
+async def _emit_progress(
+    callback: ImportPricesCsvProgressCallback | None,
+    *,
+    total_rows: int,
+    processed_rows: int,
+    valid_row_count: int,
+    invalid_row_count: int,
+    import_batch_id: UUID | None,
+    source_file_id: UUID | None,
+    done: bool = False,
+) -> None:
+    if callback is None:
+        return
+    await callback(
+        ImportPricesCsvProgress(
+            total_rows=total_rows,
+            processed_rows=processed_rows,
+            valid_row_count=valid_row_count,
+            invalid_row_count=invalid_row_count,
+            import_batch_id=import_batch_id,
+            source_file_id=source_file_id,
+            done=done,
+        ),
+    )
 
+
+__all__ = [
+    "ImportPricesCsvProgress",
+    "ImportPricesCsvProgressCallback",
+    "ImportPricesCsvUseCase",
+    "PriceImportSummary",
+]

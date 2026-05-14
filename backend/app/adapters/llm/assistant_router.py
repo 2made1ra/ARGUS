@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 
+from app.features.assistant.domain.llm_router.prompt import llm_router_json_schema
 from app.features.assistant.dto import LLMStructuredRouterRequest
 
 
@@ -38,7 +39,13 @@ class LMStudioAssistantRouterAdapter:
             ],
             "temperature": 0,
             "stream": False,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "argus_assistant_router",
+                    "schema": llm_router_json_schema(),
+                },
+            },
         }
         async with httpx.AsyncClient(
             timeout=self._timeout,

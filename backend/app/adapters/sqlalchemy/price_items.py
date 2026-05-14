@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, func, insert, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.sqlalchemy.models import PriceImportRow as PriceImportRowRow
@@ -24,7 +25,10 @@ from app.features.catalog.entities.price_item import (
     PriceItemSource,
     PriceItemSourceRef,
 )
-from app.features.catalog.ports import PriceItemNotFound
+from app.features.catalog.ports import (
+    PriceItemDuplicateFingerprint,
+    PriceItemNotFound,
+)
 
 
 class SqlAlchemyPriceItemRepository:
@@ -33,7 +37,13 @@ class SqlAlchemyPriceItemRepository:
 
     async def add(self, item: PriceItem) -> None:
         statement = insert(PriceItemRow).values(**_item_values(item))
-        await self._session.execute(statement)
+        try:
+            async with self._session.begin_nested():
+                await self._session.execute(statement)
+        except IntegrityError as exc:
+            if _is_active_fingerprint_integrity_error(exc):
+                raise PriceItemDuplicateFingerprint(item.row_fingerprint) from exc
+            raise
 
     async def add_source(self, source: PriceItemSource) -> None:
         statement = insert(PriceItemSourceRow).values(
@@ -77,7 +87,26 @@ class SqlAlchemyPriceItemRepository:
         )
         total_value = await self._session.scalar(count_statement)
         total = total_value if isinstance(total_value, int) else len(items)
-        return PriceItemList(items=items, total=total)
+
+        indexed_count_statement = (
+            select(func.count())
+            .select_from(PriceItemRow)
+            .where(
+                PriceItemRow.is_active.is_(True),
+                PriceItemRow.catalog_index_status == "indexed",
+            )
+        )
+        indexed_total_value = await self._session.scalar(indexed_count_statement)
+        indexed_total = (
+            indexed_total_value
+            if isinstance(indexed_total_value, int)
+            else sum(1 for item in items if item.catalog_index_status == "indexed")
+        )
+        return PriceItemList(
+            items=items,
+            total=total,
+            indexed_total=indexed_total,
+        )
 
     async def list_active_by_ids(
         self,
@@ -139,16 +168,26 @@ class SqlAlchemyPriceItemRepository:
                 break
         return hits
 
-    async def list_active_for_indexing(self, *, limit: int) -> list[PriceItem]:
+    async def list_active_for_indexing(
+        self,
+        *,
+        limit: int | None,
+        import_batch_id: UUID | None = None,
+    ) -> list[PriceItem]:
+        conditions: list[object] = [
+            PriceItemRow.is_active.is_(True),
+            PriceItemRow.catalog_index_status != "indexed",
+        ]
+        if import_batch_id is not None:
+            conditions.append(PriceItemRow.import_batch_id == import_batch_id)
+
         statement = (
             select(PriceItemRow)
-            .where(
-                PriceItemRow.is_active.is_(True),
-                PriceItemRow.catalog_index_status != "indexed",
-            )
+            .where(*conditions)
             .order_by(PriceItemRow.created_at.asc(), PriceItemRow.id.asc())
-            .limit(limit)
         )
+        if limit is not None:
+            statement = statement.limit(limit)
         rows = await self._session.scalars(statement)
         return [_item_to_entity(row) for row in rows]
 
@@ -317,6 +356,13 @@ def _item_to_entity(row: PriceItemRow) -> PriceItem:
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _is_active_fingerprint_integrity_error(exc: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "ix_price_items_row_fingerprint_active":
+        return True
+    return "ix_price_items_row_fingerprint_active" in str(exc.orig)
 
 
 def _search_filter_conditions(filters: SearchPriceItemsFilters) -> list[object]:

@@ -29,6 +29,27 @@ from app.features.catalog.ports import PriceItemNotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+class _FakeNestedTransaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None:
+        return None
+
+
+class _FakeAsyncSession:
+    def __init__(self) -> None:
+        self.execute = AsyncMock()
+
+    def begin_nested(self) -> _FakeNestedTransaction:
+        return _FakeNestedTransaction()
+
+
 def _import_entity() -> PriceImport:
     return PriceImport(
         id=uuid4(),
@@ -94,9 +115,10 @@ def _item_row() -> PriceItemRow:
 
 
 def test_price_item_metadata_contains_duplicate_guard_index() -> None:
-    index_names = {index.name for index in PriceItemRow.__table__.indexes}
+    indexes = {index.name: index for index in PriceItemRow.__table__.indexes}
 
-    assert "ix_price_items_row_fingerprint_active" in index_names
+    index = indexes["ix_price_items_row_fingerprint_active"]
+    assert index.unique is True
 
 
 def test_price_item_adapter_does_not_import_catalog_use_case_helpers() -> None:
@@ -167,8 +189,10 @@ async def test_import_repository_finds_imported_file_hash() -> None:
 @pytest.mark.asyncio
 async def test_item_repository_lists_active_items() -> None:
     row = _item_row()
+    row.catalog_index_status = "indexed"
     session = AsyncMock()
     session.scalars.return_value = [row]
+    session.scalar.side_effect = [1, 1]
     repository = SqlAlchemyPriceItemRepository(cast(AsyncSession, session))
 
     result = await repository.list_active(limit=20, offset=10)
@@ -176,10 +200,12 @@ async def test_item_repository_lists_active_items() -> None:
     assert len(result.items) == 1
     assert result.items[0].id == row.id
     assert result.total == 1
+    assert result.indexed_total == 1
     statement = session.scalars.await_args.args[0]
     sql = str(statement.compile())
     assert "WHERE price_items.is_active IS true" in sql
     assert "LIMIT :param_1 OFFSET :param_2" in sql
+    assert session.scalar.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -233,7 +259,7 @@ async def test_item_repository_get_with_sources_raises_when_missing() -> None:
 
 @pytest.mark.asyncio
 async def test_item_repository_adds_item_and_source() -> None:
-    session = AsyncMock()
+    session = _FakeAsyncSession()
     repository = SqlAlchemyPriceItemRepository(cast(AsyncSession, session))
     row = _item_row()
     item = PriceItem(

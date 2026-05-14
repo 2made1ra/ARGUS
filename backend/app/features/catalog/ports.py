@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from pathlib import Path
+from typing import Any, BinaryIO, Protocol
 from uuid import UUID
 
 from app.features.catalog.dto import (
@@ -10,6 +11,7 @@ from app.features.catalog.dto import (
     SearchPriceItemsFilters,
     SearchPriceItemsResult,
 )
+from app.features.catalog.entities.import_job import CatalogImportJob
 from app.features.catalog.entities.price_item import (
     PriceImport,
     PriceImportRow,
@@ -18,6 +20,18 @@ from app.features.catalog.entities.price_item import (
     PriceItemList,
     PriceItemSource,
 )
+
+
+class CatalogImportJobNotFound(Exception):
+    def __init__(self, job_id: UUID) -> None:
+        super().__init__(f"Catalog import job not found: {job_id}")
+        self.job_id = job_id
+
+
+class PriceItemDuplicateFingerprint(Exception):
+    def __init__(self, row_fingerprint: str) -> None:
+        super().__init__(f"Active price item already exists: {row_fingerprint}")
+        self.row_fingerprint = row_fingerprint
 
 
 class PriceItemNotFound(Exception):
@@ -72,7 +86,12 @@ class PriceItemRepository(Protocol):
 
 
 class PriceItemIndexRepository(Protocol):
-    async def list_active_for_indexing(self, *, limit: int) -> list[PriceItem]: ...
+    async def list_active_for_indexing(
+        self,
+        *,
+        limit: int | None,
+        import_batch_id: UUID | None = None,
+    ) -> list[PriceItem]: ...
 
     async def mark_indexed(
         self,
@@ -167,7 +186,33 @@ class SearchItemsService(Protocol):
     ) -> SearchPriceItemsResult: ...
 
 
+class CatalogImportJobRepository(Protocol):
+    async def add(self, job: CatalogImportJob) -> None: ...
+
+    async def get(self, job_id: UUID) -> CatalogImportJob: ...
+
+    async def update(self, job: CatalogImportJob) -> None: ...
+
+
+class CatalogImportTaskQueue(Protocol):
+    async def enqueue_import_and_index(self, job_id: UUID) -> None: ...
+
+
+class CatalogImportFileStorage(Protocol):
+    async def save(
+        self,
+        job_id: UUID,
+        stream: BinaryIO,
+        filename: str,
+    ) -> tuple[Path, int]:
+        ...
+
+
 __all__ = [
+    "CatalogImportJobNotFound",
+    "CatalogImportFileStorage",
+    "CatalogImportJobRepository",
+    "CatalogImportTaskQueue",
     "CatalogEmbeddingService",
     "CatalogSearchFilters",
     "CatalogSearchHit",
@@ -175,6 +220,7 @@ __all__ = [
     "CatalogVectorPoint",
     "CatalogVectorSearch",
     "PriceImportRepository",
+    "PriceItemDuplicateFingerprint",
     "PriceItemNotFound",
     "PriceItemIndexRepository",
     "PriceItemRepository",
