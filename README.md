@@ -65,6 +65,50 @@ npm run dev
 - Каталог: `http://localhost:5173/catalog`
 - Ассистент: `http://localhost:5173/`
 
+### Мок-режим для демо без локальной LLM
+
+Мок-режим покрывает текущий MVP-сценарий ассистента по каталогу и обычный
+поиск по каталогу. Он не требует LM Studio, не подключает Qdrant для semantic
+search и не предназначен для проверки document upload/SAGE pipeline.
+
+Поднимите инфраструктуру, примените миграции и загрузите демо-каталог из
+`test_files/prices.csv`:
+
+```bash
+uv sync
+cp .env.example .env
+make infra-up
+make migrate
+make demo-seed
+```
+
+Запустите backend в мок-режиме:
+
+```bash
+ARGUS_DEMO_MODE=true make dev
+```
+
+Frontend запускается стандартно:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+По умолчанию `make demo-seed` использует `test_files/prices.csv`. Для другого
+CSV укажите путь явно:
+
+```bash
+ARGUS_DEMO_CATALOG_CSV_PATH=/absolute/path/to/prices.csv make demo-seed
+ARGUS_DEMO_MODE=true ARGUS_DEMO_CATALOG_CSV_PATH=/absolute/path/to/prices.csv make dev
+```
+
+После запуска можно открыть `http://localhost:5173/` и проверить запросы вроде
+`Найди радиомикрофоны в Екатеринбурге`. Ответ строится на строках
+`price_items` из Postgres; мок-режим использует deterministic router и
+keyword-only catalog search.
+
 Перед ручной проверкой запустите focused checks:
 
 ```bash

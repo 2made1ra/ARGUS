@@ -21,6 +21,8 @@ CONFIG_ENV_KEYS = (
     "CATALOG_EMBEDDING_TEMPLATE_VERSION",
     "CATALOG_DOCUMENT_PREFIX",
     "CATALOG_QUERY_PREFIX",
+    "ARGUS_DEMO_MODE",
+    "ARGUS_DEMO_CATALOG_CSV_PATH",
 )
 ENV_KEYS = CONFIG_ENV_KEYS + tuple(key.lower() for key in CONFIG_ENV_KEYS)
 ENV_FILE_KEYS = ENV_KEYS + ("ALEMBIC_DATABASE_URL", "alembic_database_url")
@@ -76,6 +78,8 @@ def test_settings_parses_env_and_defaults(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.catalog_embedding_template_version == "prices_v1"
     assert settings.catalog_document_prefix == "search_document: "
     assert settings.catalog_query_prefix == "search_query: "
+    assert settings.argus_demo_mode is False
+    assert settings.argus_demo_catalog_csv_path == REPO_ROOT / "test_files/prices.csv"
 
 
 def test_settings_parses_catalog_vector_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,6 +103,21 @@ def test_settings_parses_catalog_vector_env(monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.catalog_embedding_template_version == "prices_v2"
     assert settings.catalog_document_prefix == "doc: "
     assert settings.catalog_query_prefix == "query: "
+
+
+def test_settings_parses_demo_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    set_required_env(monkeypatch)
+    demo_catalog = tmp_path / "prices-demo.csv"
+    monkeypatch.setenv("ARGUS_DEMO_MODE", "true")
+    monkeypatch.setenv("ARGUS_DEMO_CATALOG_CSV_PATH", str(demo_catalog))
+
+    settings = _settings_without_env_file()
+
+    assert settings.argus_demo_mode is True
+    assert settings.argus_demo_catalog_csv_path == demo_catalog
 
 
 def test_settings_requires_database_url(monkeypatch: pytest.MonkeyPatch) -> None:

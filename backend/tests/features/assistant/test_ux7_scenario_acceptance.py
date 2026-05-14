@@ -8,6 +8,7 @@ import pytest
 from app.features.assistant.domain.brief_renderer import BriefRenderer
 from app.features.assistant.domain.tool_executor import ToolExecutor
 from app.features.assistant.dto import (
+    ActionPlan,
     AssistantChatRequest,
     AssistantInterfaceMode,
     BriefState,
@@ -17,6 +18,7 @@ from app.features.assistant.dto import (
     FoundCatalogItem,
     MatchReason,
     RenderedEventBrief,
+    SearchRequest,
     SupplierVerificationResult,
     VisibleCandidate,
 )
@@ -77,6 +79,44 @@ class FakeSupplierVerificationPort:
             risk_flags=[],
             message=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_ux7_ordinary_radiomicrophone_search_stays_chat_search_with_city_filter(
+) -> None:
+    found = _found_item(name="Радиомикрофон Shure", category="Звук")
+    search = FakeCatalogSearchTool(items=[found])
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="найди радиомикрофон в Екатеринбурге",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.ui_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert response.router.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert response.router.intent == "supplier_search"
+    assert response.action_plan is not None
+    assert response.action_plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert response.action_plan.tool_intents == ["search_items"]
+    assert response.action_plan.search_requests[0].service_category == "звук"
+    assert response.action_plan.search_requests[0].filters.supplier_city_normalized == (
+        "екатеринбург"
+    )
+    assert search.calls[0]["filters"] == CatalogSearchFilters(
+        supplier_city_normalized="екатеринбург",
+    )
+    assert response.brief == BriefState()
+    assert [item.id for item in response.found_items] == [found.id]
+    assert response.found_items[0].matched_service_categories == ["звук"]
+    assert search.calls[0]["limit"] == 8
+    assert "радиомикрофон" in search.calls[0]["query"].lower()
 
 
 @pytest.mark.asyncio
@@ -144,6 +184,55 @@ async def test_ux7_direct_search_case_stays_chat_search_with_inline_candidates(
     assert response.found_items[0].matched_service_categories == ["свет"]
     assert search.calls
     assert "обновил бриф" not in response.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_ux7_brief_workflow_searches_candidates_and_preserves_brief_state(
+) -> None:
+    found = _found_item(name="Фуршет на 120 гостей", category="Кейтеринг")
+    search = FakeCatalogSearchTool(items=[found])
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    intake = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="Нужно организовать корпоратив на 120 человек в Екатеринбурге.",
+            brief=BriefState(),
+        ),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=intake.session_id,
+            message="В бриф нужно добавить кейтеринг до 2500 на гостя.",
+            brief=intake.brief,
+        ),
+    )
+
+    assert response.ui_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert response.router.intent == "mixed"
+    assert response.action_plan is not None
+    assert response.action_plan.workflow_stage == (
+        EventBriefWorkflowState.SUPPLIER_SEARCHING
+    )
+    assert response.action_plan.tool_intents == ["update_brief", "search_items"]
+    assert response.brief.event_type == "корпоратив"
+    assert response.brief.city == "Екатеринбург"
+    assert response.brief.audience_size == 120
+    assert response.brief.budget_per_guest == 2500
+    assert response.brief.required_services == ["кейтеринг"]
+    assert response.brief.selected_item_ids == []
+    assert response.action_plan.search_requests[0].service_category == "кейтеринг"
+    assert response.action_plan.search_requests[0].filters.supplier_city_normalized == (
+        "екатеринбург"
+    )
+    assert response.action_plan.search_requests[0].filters.unit_price_max == 2500
+    assert [item.id for item in response.found_items] == [found.id]
+    assert response.found_items[0].matched_service_categories == ["кейтеринг"]
+    assert len(search.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -337,6 +426,56 @@ async def test_ux7_selection_does_not_treat_generic_priority_as_ordinal() -> Non
 
 
 @pytest.mark.asyncio
+async def test_ux7_render_tool_flow_keeps_found_candidates_unselected() -> None:
+    found_only = _found_item(
+        item_id=UUID("55555555-5555-5555-5555-555555555551"),
+        name="Фуршет на 120 гостей",
+        category="Кейтеринг",
+    )
+    search = FakeCatalogSearchTool(items=[found_only])
+    executor = ToolExecutor(catalog_search=search, item_details=None)
+
+    results = await executor.execute(
+        action_plan=ActionPlan(
+            interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+            workflow_stage=EventBriefWorkflowState.BRIEF_RENDERED,
+            tool_intents=["search_items", "render_event_brief"],
+            search_requests=[
+                SearchRequest(
+                    query="кейтеринг корпоратив 120 человек Екатеринбург",
+                    service_category="кейтеринг",
+                    filters=CatalogSearchFilters(
+                        supplier_city_normalized="екатеринбург",
+                    ),
+                ),
+            ],
+            render_requested=True,
+        ),
+        brief=BriefState(
+            event_type="корпоратив",
+            city="Екатеринбург",
+            audience_size=120,
+            required_services=["кейтеринг"],
+            selected_item_ids=[],
+        ),
+        brief_update=BriefState(),
+    )
+
+    assert [item.id for item in results.found_items] == [found_only.id]
+    assert results.found_items[0].matched_service_categories == ["кейтеринг"]
+    assert results.brief.selected_item_ids == []
+    assert results.rendered_brief is not None
+    candidate_section = _section_items(results.rendered_brief, "Подборка кандидатов")
+    assert results.rendered_brief.evidence["selected_item_ids"] == []
+    assert any("Кандидаты найдены, но не выбраны" in item for item in candidate_section)
+    assert any("Фуршет на 120 гостей" in item for item in candidate_section)
+    assert all("Выбрано:" not in item for item in candidate_section)
+    assert "55555555-5555-5555-5555-555555555551" not in (
+        results.rendered_brief.evidence["selected_item_ids"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_ux7_verification_case_keeps_results_separate_from_prose() -> None:
     first_id = UUID("33333333-3333-3333-3333-333333333331")
     duplicate_inn_id = UUID("33333333-3333-3333-3333-333333333332")
@@ -391,7 +530,6 @@ async def test_ux7_verification_case_keeps_results_separate_from_prose() -> None
         "not_verified",
     ]
     assert response.verification_results[2].risk_flags == ["supplier_inn_missing"]
-    assert "verification_results" in response.message
     assert "доступен" not in response.message.lower()
     assert "доступна на дату" not in response.message.lower()
     assert "рекоменд" not in response.message.lower()

@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     rag_similarity_top_k: int = 15
     rag_context_top_k: int = 5
     rag_reranker_enabled: bool = False
+    argus_demo_mode: bool = False
+    argus_demo_catalog_csv_path: Path = REPO_ROOT / "test_files/prices.csv"
 
     model_config = SettingsConfigDict(
         env_file=REPO_ROOT / ".env",
