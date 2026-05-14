@@ -13,6 +13,10 @@ from app.entrypoints.http.router import router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    if settings.argus_demo_mode:
+        yield
+        return
+
     qdrant = make_qdrant_client(settings.qdrant_url)
     try:
         await bootstrap_qdrant_collections(

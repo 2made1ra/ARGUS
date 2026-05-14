@@ -1,27 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { PriceItemOut } from "../api";
-import { listCatalogItems } from "../api";
+import type { CatalogImportIndexedOut, PriceItemOut } from "../api";
+import { importAndIndexCatalogCsv, listCatalogItems } from "../api";
 
 export default function CatalogPage() {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<PriceItemOut[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importResult, setImportResult] =
+    useState<CatalogImportIndexedOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshCatalog = useCallback(async (): Promise<void> => {
+    const response = await listCatalogItems(100, 0);
+    setItems(response.items);
+    setTotal(response.total);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listCatalogItems(100, 0)
-      .then((response) => {
-        if (cancelled) return;
-        setItems(response.items);
-        setTotal(response.total);
-      })
+    refreshCatalog()
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -29,7 +35,34 @@ export default function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshCatalog]);
+
+  const handleImportSubmit = async (
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event.preventDefault();
+    if (!selectedFile) {
+      setError("Выберите CSV-файл для импорта.");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setImportResult(null);
+    try {
+      const result = await importAndIndexCatalogCsv(selectedFile);
+      setImportResult(result);
+      await refreshCatalog();
+    } catch (err: unknown) {
+      setError(
+        `Не удалось импортировать и проиндексировать CSV: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
@@ -78,6 +111,27 @@ export default function CatalogPage() {
               indexed
             </span>
           </div>
+          <form className="catalog-import" onSubmit={handleImportSubmit}>
+            <label className="catalog-import__file">
+              <span>CSV import</span>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                disabled={uploading}
+                onChange={(event) => {
+                  setSelectedFile(event.target.files?.[0] ?? null);
+                  setImportResult(null);
+                }}
+              />
+            </label>
+            <button
+              className="secondary-action"
+              type="submit"
+              disabled={uploading || selectedFile === null}
+            >
+              {uploading ? "Импортирую..." : "Импорт + индекс"}
+            </button>
+          </form>
           <label className="catalog-filter">
             <span>Фильтр</span>
             <input
@@ -98,9 +152,24 @@ export default function CatalogPage() {
           <p className="eyebrow">Пусто</p>
           <h2>Позиции каталога пока не импортированы</h2>
           <p className="muted">
-            Импортируйте prices.csv через backend endpoint, затем проиндексируйте
-            строки в price_items_search_v1.
+            Загрузите prices.csv через действие CSV import в верхней панели,
+            чтобы заполнить price_items и индекс price_items_search_v1.
           </p>
+        </section>
+      )}
+
+      {importResult && (
+        <section className="catalog-import-result" aria-live="polite">
+          <strong>{importResult.import.filename}</strong>
+          <span>
+            строк: {importResult.import.valid_row_count}/
+            {importResult.import.row_count}, invalid:{" "}
+            {importResult.import.invalid_row_count}
+          </span>
+          <span>
+            indexed: {importResult.indexing.indexed}/
+            {importResult.indexing.total}, skipped: {importResult.indexing.skipped}
+          </span>
         </section>
       )}
 

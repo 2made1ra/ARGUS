@@ -8,12 +8,14 @@ from uuid import UUID, uuid4
 from app.entrypoints.http.dependencies import (
     get_get_price_item_uc,
     get_import_prices_csv_uc,
+    get_index_price_items_uc,
     get_list_price_items_uc,
     get_search_price_items_uc,
 )
 from app.features.catalog.dto import FoundPriceItem, MatchReason, SearchPriceItemsResult
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
+from app.features.catalog.use_cases.index_price_items import IndexPriceItemsResult
 from app.features.catalog.use_cases.list_price_items import PriceItemList
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -94,6 +96,73 @@ async def test_import_catalog_returns_summary(app: FastAPI) -> None:
     assert resp.json()["id"] == str(import_id)
     assert resp.json()["source_file_id"] == str(source_file_id)
     fake_uc.execute.assert_awaited_once()
+
+
+async def test_import_catalog_indexed_imports_csv_and_indexes_items(
+    app: FastAPI,
+) -> None:
+    import_id = uuid4()
+    source_file_id = uuid4()
+    import_uc = AsyncMock()
+    import_uc.execute.return_value = PriceImportSummary(
+        id=import_id,
+        source_file_id=source_file_id,
+        filename="prices.csv",
+        status="IMPORTED",
+        row_count=3,
+        valid_row_count=2,
+        invalid_row_count=1,
+        embedding_template_version="prices_v1",
+        embedding_model="nomic-embed-text-v1.5",
+        duplicate_file=False,
+    )
+    index_uc = AsyncMock()
+    index_uc.execute.return_value = IndexPriceItemsResult(
+        total=2,
+        indexed=1,
+        embedding_failed=0,
+        indexing_failed=1,
+        skipped=0,
+    )
+    app.dependency_overrides[get_import_prices_csv_uc] = lambda: import_uc
+    app.dependency_overrides[get_index_price_items_uc] = lambda: index_uc
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.post(
+            "/catalog/imports/indexed?index_limit=25",
+            files={"file": ("prices.csv", b"id,name\n1,test\n", "text/csv")},
+        )
+
+    assert resp.status_code == 201
+    assert resp.json() == {
+        "import": {
+            "id": str(import_id),
+            "source_file_id": str(source_file_id),
+            "filename": "prices.csv",
+            "status": "IMPORTED",
+            "row_count": 3,
+            "valid_row_count": 2,
+            "invalid_row_count": 1,
+            "embedding_template_version": "prices_v1",
+            "embedding_model": "nomic-embed-text-v1.5",
+            "duplicate_file": False,
+        },
+        "indexing": {
+            "total": 2,
+            "indexed": 1,
+            "embedding_failed": 0,
+            "indexing_failed": 1,
+            "skipped": 0,
+        },
+    }
+    import_uc.execute.assert_awaited_once_with(
+        filename="prices.csv",
+        content=b"id,name\n1,test\n",
+    )
+    index_uc.execute.assert_awaited_once_with(limit=25)
 
 
 async def test_list_catalog_items_returns_items_and_total(app: FastAPI) -> None:

@@ -60,6 +60,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /catalog/imports/indexed:
+    post:
+      tags:
+      - catalog
+      summary: Import and index catalog CSV
+      description: Imports a prices.csv-compatible file into price_items and immediately
+        indexes active catalog items into price_items_search_v1 for service testing.
+      operationId: importAndIndexCatalogCsv
+      parameters:
+      - name: index_limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1000
+          title: Index Limit
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_importAndIndexCatalogCsv'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogImportIndexedOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /catalog/items:
     get:
       tags:
@@ -940,6 +975,16 @@ components:
       required:
       - file
       title: Body_importCatalogCsv
+    Body_importAndIndexCatalogCsv:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_importAndIndexCatalogCsv
     Body_uploadDocument:
       properties:
         file:
@@ -1392,6 +1437,17 @@ components:
       required:
       - items
       title: CatalogSearchResultOut
+    CatalogImportIndexedOut:
+      properties:
+        import:
+          $ref: '#/components/schemas/PriceImportSummaryOut'
+        indexing:
+          $ref: '#/components/schemas/IndexPriceItemsSummaryOut'
+      type: object
+      required:
+      - import
+      - indexing
+      title: CatalogImportIndexedOut
     ChatMessageIn:
       properties:
         role:
@@ -1928,6 +1984,31 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    IndexPriceItemsSummaryOut:
+      properties:
+        total:
+          type: integer
+          title: Total
+        indexed:
+          type: integer
+          title: Indexed
+        embedding_failed:
+          type: integer
+          title: Embedding Failed
+        indexing_failed:
+          type: integer
+          title: Indexing Failed
+        skipped:
+          type: integer
+          title: Skipped
+      type: object
+      required:
+      - total
+      - indexed
+      - embedding_failed
+      - indexing_failed
+      - skipped
+      title: IndexPriceItemsSummaryOut
     MatchReasonOut:
       properties:
         code:

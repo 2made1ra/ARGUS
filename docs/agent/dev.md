@@ -81,6 +81,27 @@ make migrate  # Alembic upgrade head
 Start infra before `make dev`. Start the worker before uploading documents.
 FastAPI docs: `http://localhost:8000/docs`. OpenAPI spec: `docs/api/openapi.yaml`.
 
+### Demo mode
+
+Demo mode runs the assistant/catalog/brief/search path from a seeded CSV catalog
+without local LM Studio. It does not cover document upload, SAGE processing, or
+document RAG.
+
+```bash
+make infra-up
+make migrate
+make demo-seed
+ARGUS_DEMO_MODE=true make dev
+```
+
+By default `make demo-seed` imports `test_files/prices.csv` through
+`ARGUS_DEMO_CATALOG_CSV_PATH`. Override it when needed:
+
+```bash
+ARGUS_DEMO_CATALOG_CSV_PATH=/path/to/prices.csv make demo-seed
+ARGUS_DEMO_MODE=true ARGUS_DEMO_CATALOG_CSV_PATH=/path/to/prices.csv make dev
+```
+
 ### Database migrations
 
 Three migrations exist:

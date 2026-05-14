@@ -405,6 +405,32 @@ export interface PriceItemListOut {
   total: number;
 }
 
+export interface PriceImportSummaryOut {
+  id: string;
+  source_file_id: string;
+  filename: string;
+  status: string;
+  row_count: number;
+  valid_row_count: number;
+  invalid_row_count: number;
+  embedding_template_version: string;
+  embedding_model: string;
+  duplicate_file: boolean;
+}
+
+export interface IndexPriceItemsSummaryOut {
+  total: number;
+  indexed: number;
+  embedding_failed: number;
+  indexing_failed: number;
+  skipped: number;
+}
+
+export interface CatalogImportIndexedOut {
+  import: PriceImportSummaryOut;
+  indexing: IndexPriceItemsSummaryOut;
+}
+
 export interface PriceItemDetailItemOut extends PriceItemOut {
   external_id: string | null;
   source_text: string | null;
@@ -523,6 +549,26 @@ export const getCatalogItem = (id: string) =>
 
 export const searchCatalogItems = (body: CatalogSearchRequest) =>
   postJson<CatalogSearchResult>("/catalog/search", body);
+
+export async function importAndIndexCatalogCsv(
+  file: File,
+  indexLimit = 1000,
+): Promise<CatalogImportIndexedOut> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(
+    `${API_URL}/catalog/imports/indexed?index_limit=${encodeURIComponent(
+      String(indexLimit),
+    )}`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json() as Promise<CatalogImportIndexedOut>;
+}
 
 export async function patchDocumentFacts(
   id: string,

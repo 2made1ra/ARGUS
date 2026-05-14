@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down infra-logs infra-ps app-up app-down dev worker migrate install-ocr uninstall-ocr
+.PHONY: help infra-up infra-down infra-logs infra-ps app-up app-down dev worker migrate demo-seed install-ocr uninstall-ocr
 
 help:
 	@echo "Хранилища (postgres, redis, qdrant):"
@@ -11,6 +11,7 @@ help:
 	@echo "  make dev           — uvicorn (hot-reload)"
 	@echo "  make worker        — celery worker"
 	@echo "  make migrate       — применить миграции Alembic"
+	@echo "  make demo-seed     — импортировать demo catalog CSV"
 	@echo ""
 	@echo "Полный стек (docker, профиль app):"
 	@echo "  make app-up        — поднять api + celery-worker в docker"
@@ -52,6 +53,9 @@ worker:
 
 migrate:
 	cd backend && uv run alembic upgrade head
+
+demo-seed:
+	uv run --project backend python -m app.entrypoints.cli.seed_demo_catalog
 
 # --- OCR deps (macOS / Homebrew) ---
 

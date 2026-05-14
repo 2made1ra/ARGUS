@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.features.catalog.dto import (
     FoundPriceItem,
@@ -14,6 +14,7 @@ from app.features.catalog.dto import (
 )
 from app.features.catalog.entities.price_item import PriceItem, PriceItemSourceRef
 from app.features.catalog.use_cases.import_prices_csv import PriceImportSummary
+from app.features.catalog.use_cases.index_price_items import IndexPriceItemsResult
 
 
 class PriceImportSummaryOut(BaseModel):
@@ -41,6 +42,43 @@ class PriceImportSummaryOut(BaseModel):
             embedding_template_version=summary.embedding_template_version,
             embedding_model=summary.embedding_model,
             duplicate_file=summary.duplicate_file,
+        )
+
+
+class IndexPriceItemsSummaryOut(BaseModel):
+    total: int
+    indexed: int
+    embedding_failed: int
+    indexing_failed: int
+    skipped: int
+
+    @classmethod
+    def from_domain(cls, result: IndexPriceItemsResult) -> IndexPriceItemsSummaryOut:
+        return cls(
+            total=result.total,
+            indexed=result.indexed,
+            embedding_failed=result.embedding_failed,
+            indexing_failed=result.indexing_failed,
+            skipped=result.skipped,
+        )
+
+
+class CatalogImportIndexedOut(BaseModel):
+    import_: PriceImportSummaryOut = Field(alias="import")
+    indexing: IndexPriceItemsSummaryOut
+
+    model_config = {"populate_by_name": True}
+
+    @classmethod
+    def from_domain(
+        cls,
+        *,
+        import_summary: PriceImportSummary,
+        indexing_result: IndexPriceItemsResult,
+    ) -> CatalogImportIndexedOut:
+        return cls(
+            import_=PriceImportSummaryOut.from_domain(import_summary),
+            indexing=IndexPriceItemsSummaryOut.from_domain(indexing_result),
         )
 
 

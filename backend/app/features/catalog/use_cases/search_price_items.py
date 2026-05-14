@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from uuid import UUID
 
@@ -24,6 +25,27 @@ from app.features.catalog.ports import (
 )
 
 _SNIPPET_LENGTH = 96
+_CATALOG_QUERY_STOP_WORDS = frozenset(
+    {
+        "в",
+        "во",
+        "г",
+        "город",
+        "мне",
+        "найди",
+        "найдите",
+        "найти",
+        "нужен",
+        "нужна",
+        "нужно",
+        "нужны",
+        "покажи",
+        "покажите",
+        "подбери",
+        "подберите",
+    },
+)
+_EKATERINBURG_ALIASES = ("екат", "екб", "екатеринбург")
 
 
 class SearchPriceItemsUseCase:
@@ -35,12 +57,14 @@ class SearchPriceItemsUseCase:
         vector_search: CatalogVectorSearch,
         catalog_query_prefix: str,
         catalog_embedding_template_version: str,
+        semantic_search_enabled: bool = True,
     ) -> None:
         self._items = items
         self._embeddings = embeddings
         self._vector_search = vector_search
         self._catalog_query_prefix = catalog_query_prefix
         self._catalog_embedding_template_version = catalog_embedding_template_version
+        self._semantic_search_enabled = semantic_search_enabled
 
     async def execute(
         self,
@@ -66,16 +90,29 @@ class SearchPriceItemsUseCase:
             filters or SearchPriceItemsFilters(),
             infer_search_filters_from_query(query),
         )
-        semantic_hits = await self._semantic_hits(
-            query=query,
-            filters=filters,
-            limit=limit,
+        semantic_hits = (
+            await self._semantic_hits(
+                query=query,
+                filters=filters,
+                limit=limit,
+            )
+            if self._semantic_search_enabled
+            else []
         )
         keyword_hits = await self._items.search_active_by_keywords(
             query=query,
             filters=filters,
             limit=limit,
         )
+        if not keyword_hits and not self._semantic_search_enabled:
+            cleaned_query = _clean_catalog_keyword_query(query, filters)
+            if cleaned_query is not None:
+                keyword_hits = await self._items.search_active_by_keywords(
+                    query=cleaned_query,
+                    filters=filters,
+                    limit=limit,
+                )
+
         candidates = _merge_candidates(semantic_hits, keyword_hits, limit=limit)
         if not candidates:
             return SearchPriceItemsResult(items=[])
@@ -238,6 +275,38 @@ def _match_reason_label(code: MatchReasonCode) -> str:
         "keyword_external_id": "Совпадение по внешнему идентификатору",
     }
     return labels[code]
+
+
+def _clean_catalog_keyword_query(
+    query: str,
+    filters: SearchPriceItemsFilters,
+) -> str | None:
+    terms = _catalog_query_terms(query)
+    cleaned_terms = [
+        term
+        for term in terms
+        if not _is_catalog_query_context_term(term, filters)
+    ]
+    if not cleaned_terms or cleaned_terms == terms:
+        return None
+    return " ".join(cleaned_terms)
+
+
+def _catalog_query_terms(query: str) -> list[str]:
+    normalized = query.replace("ё", "е").replace("Ё", "е").casefold()
+    return re.findall(r"[0-9a-zа-я]+", normalized)
+
+
+def _is_catalog_query_context_term(
+    term: str,
+    filters: SearchPriceItemsFilters,
+) -> bool:
+    if term in _CATALOG_QUERY_STOP_WORDS:
+        return True
+    return (
+        filters.supplier_city_normalized == "екатеринбург"
+        and any(alias in term for alias in _EKATERINBURG_ALIASES)
+    )
 
 
 def _single_vector(vectors: list[list[float]]) -> list[float]:

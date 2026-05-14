@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
@@ -14,6 +15,7 @@ from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.file_storage import LocalFileStorage
 from app.adapters.qdrant.catalog_index import QdrantCatalogIndex
 from app.adapters.qdrant.catalog_search import QdrantCatalogSearch
+from app.adapters.qdrant.client import make_qdrant_client
 from app.adapters.qdrant.index import QdrantVectorIndex
 from app.adapters.qdrant.search import QdrantVectorSearch
 from app.adapters.sqlalchemy.contractors import (
@@ -41,7 +43,13 @@ from app.features.assistant.dto import MatchReason as AssistantMatchReason
 from app.features.assistant.router import HeuristicAssistantRouter
 from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
 from app.features.catalog.dto import FoundPriceItem, SearchPriceItemsFilters
-from app.features.catalog.ports import PriceItemNotFound
+from app.features.catalog.ports import (
+    CatalogSearchFilters as CatalogVectorFilters,
+)
+from app.features.catalog.ports import (
+    CatalogSearchHit,
+    PriceItemNotFound,
+)
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
@@ -124,22 +132,59 @@ def get_index_price_items_uc(
     )
 
 
-def get_search_price_items_uc(
+class _DisabledCatalogEmbeddings:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("Catalog semantic search is disabled")
+
+
+class _DisabledCatalogVectorSearch:
+    async def search(
+        self,
+        *,
+        query_vector: list[float],
+        filters: CatalogVectorFilters | None,
+        limit: int,
+    ) -> list[CatalogSearchHit]:
+        raise RuntimeError("Catalog semantic search is disabled")
+
+
+async def get_search_price_items_uc(
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(_session)],
-    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
-) -> SearchPriceItemsUseCase:
-    return SearchPriceItemsUseCase(
-        items=SqlAlchemyPriceItemRepository(session),
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.catalog_embedding_model,
-            embedding_dim=settings.catalog_embedding_dim,
-        ),
-        vector_search=QdrantCatalogSearch(qdrant, settings.catalog_qdrant_collection),
-        catalog_query_prefix=settings.catalog_query_prefix,
-        catalog_embedding_template_version=settings.catalog_embedding_template_version,
-    )
+) -> AsyncIterator[SearchPriceItemsUseCase]:
+    if settings.argus_demo_mode:
+        yield SearchPriceItemsUseCase(
+            items=SqlAlchemyPriceItemRepository(session),
+            embeddings=_DisabledCatalogEmbeddings(),
+            vector_search=_DisabledCatalogVectorSearch(),
+            catalog_query_prefix=settings.catalog_query_prefix,
+            catalog_embedding_template_version=(
+                settings.catalog_embedding_template_version
+            ),
+            semantic_search_enabled=False,
+        )
+        return
+
+    qdrant = make_qdrant_client(settings.qdrant_url)
+    try:
+        yield SearchPriceItemsUseCase(
+            items=SqlAlchemyPriceItemRepository(session),
+            embeddings=LMStudioEmbeddings(
+                base_url=settings.lm_studio_url,
+                model=settings.catalog_embedding_model,
+                embedding_dim=settings.catalog_embedding_dim,
+            ),
+            vector_search=QdrantCatalogSearch(
+                qdrant,
+                settings.catalog_qdrant_collection,
+            ),
+            catalog_query_prefix=settings.catalog_query_prefix,
+            catalog_embedding_template_version=(
+                settings.catalog_embedding_template_version
+            ),
+        )
+    finally:
+        await qdrant.close()
 
 
 # ---------------------------------------------------------------------------
@@ -241,13 +286,14 @@ def get_chat_turn_uc(
 ) -> ChatTurnUseCase:
     catalog_search = _CatalogSearchToolAdapter(search)
     item_details = _CatalogItemDetailsToolAdapter(details)
+    llm_router = None
+    if not settings.argus_demo_mode:
+        llm_router = LMStudioAssistantRouterAdapter(
+            base_url=settings.lm_studio_url,
+            model=settings.lm_studio_llm_model,
+        )
     return ChatTurnUseCase(
-        router=HeuristicAssistantRouter(
-            llm_router=LMStudioAssistantRouterAdapter(
-                base_url=settings.lm_studio_url,
-                model=settings.lm_studio_llm_model,
-            ),
-        ),
+        router=HeuristicAssistantRouter(llm_router=llm_router),
         tool_executor=ToolExecutor(
             catalog_search=catalog_search,
             item_details=item_details,

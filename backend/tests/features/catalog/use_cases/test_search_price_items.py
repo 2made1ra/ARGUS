@@ -453,6 +453,42 @@ async def test_keyword_fallback_returns_backend_generated_reason_codes(
 
 
 @pytest.mark.asyncio
+async def test_semantic_disabled_skips_embeddings_and_vector_search() -> None:
+    item = _item(name="Радиомикрофон")
+    repository = FakePriceItemSearchRepository([item])
+    embeddings = FakeEmbeddings()
+    vector_search = FakeCatalogSearch(
+        [CatalogSearchHit(price_item_id=uuid4(), score=0.99, payload={})],
+    )
+    repository.keyword_hits = [(item.id, 0.72, "keyword_name")]
+    uc = SearchPriceItemsUseCase(
+        items=repository,
+        embeddings=embeddings,
+        vector_search=vector_search,
+        catalog_query_prefix="search_query: ",
+        catalog_embedding_template_version="prices_v1",
+        semantic_search_enabled=False,
+    )
+
+    result = await uc.execute(query="радиомикрофон", limit=10)
+
+    assert embeddings.inputs == []
+    assert vector_search.calls == []
+    assert repository.keyword_calls == [
+        {
+            "query": "радиомикрофон",
+            "filters": SearchPriceItemsFilters(),
+            "limit": 10,
+        },
+    ]
+    assert repository.hydrate_calls == [
+        {"item_ids": [item.id], "filters": SearchPriceItemsFilters()},
+    ]
+    assert [found.id for found in result.items] == [item.id]
+    assert result.items[0].match_reason.code == "keyword_name"
+
+
+@pytest.mark.asyncio
 async def test_merges_semantic_and_keyword_results_without_duplicate_rows() -> None:
     semantic_item = _item(name="Аренда звука")
     keyword_item = _item(name="ООО НИКА доставка")
@@ -567,6 +603,70 @@ async def test_keyword_fallback_finds_imported_prices_csv_fields_with_weak_vecto
         item_by_id[found.id].external_id == expected_external_id
         for found in result.items
     )
+
+
+@pytest.mark.asyncio
+async def test_semantic_disabled_finds_imported_prices_csv_row_by_keyword() -> None:
+    imported_items = await _imported_prices_fixture_items()
+    item_by_id = {item.id: item for item in imported_items}
+    repository = ImportedPriceItemSearchRepository(imported_items)
+    embeddings = FakeEmbeddings()
+    vector_search = FakeCatalogSearch([])
+    uc = SearchPriceItemsUseCase(
+        items=repository,
+        embeddings=embeddings,
+        vector_search=vector_search,
+        catalog_query_prefix="search_query: ",
+        catalog_embedding_template_version="prices_v1",
+        semantic_search_enabled=False,
+    )
+
+    result = await uc.execute(query="897", limit=20)
+
+    assert embeddings.inputs == []
+    assert vector_search.calls == []
+    assert repository.keyword_calls[0]["query"] == "897"
+    assert any(item_by_id[found.id].external_id == "897" for found in result.items)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        "радиомикрофон Екатеринбург",
+        "найди радиомикрофон в Екатеринбурге",
+    ],
+)
+async def test_semantic_disabled_retries_clean_query_for_imported_natural_query(
+    query: str,
+) -> None:
+    imported_items = await _imported_prices_fixture_items()
+    item_by_id = {item.id: item for item in imported_items}
+    repository = ImportedPriceItemSearchRepository(imported_items)
+    embeddings = FakeEmbeddings()
+    vector_search = FakeCatalogSearch([])
+    uc = SearchPriceItemsUseCase(
+        items=repository,
+        embeddings=embeddings,
+        vector_search=vector_search,
+        catalog_query_prefix="search_query: ",
+        catalog_embedding_template_version="prices_v1",
+        semantic_search_enabled=False,
+    )
+
+    result = await uc.execute(query=query, limit=20)
+
+    assert embeddings.inputs == []
+    assert vector_search.calls == []
+    assert [call["query"] for call in repository.keyword_calls] == [
+        query,
+        "радиомикрофон",
+    ]
+    assert all(
+        call["filters"].supplier_city_normalized == "екатеринбург"
+        for call in repository.keyword_calls
+    )
+    assert any(item_by_id[found.id].external_id == "244" for found in result.items)
 
 
 @pytest.mark.asyncio
