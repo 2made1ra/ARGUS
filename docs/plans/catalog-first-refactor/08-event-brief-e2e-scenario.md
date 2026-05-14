@@ -2,7 +2,13 @@
 
 **Goal:** Define the product workflow for ARGUS as an event-manager copilot that goes from incoming request to working brief, catalog-backed candidates, supplier verification and final structured brief.
 
-**Relationship to implementation plan:** `docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md` describes the backend implementation. This document describes the target UX, workflow states and acceptance behavior.
+**Relationship to implementation plan:**
+`docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md`
+describes the backend implementation. The phase prompt handoff for that plan is
+`docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`. This
+document describes the target UX, workflow states and acceptance behavior. The
+runtime structured-router prompt implementation referenced by plan 07 lives at
+`backend/app/features/assistant/domain/llm_router/prompt.py`.
 
 ---
 
@@ -229,7 +235,10 @@ search_results_shown
 supplier_verification
 ```
 
-The backend can still return the same `router`, `found_items` and `verification_results` shapes, but the UI chooses layout from `interface_mode`.
+The backend can still return the same `router`, `found_items` and
+`verification_results` shapes, but the UI chooses layout from top-level
+`ui_mode`. Nested `router.interface_mode` and `action_plan.interface_mode` are
+diagnostic/policy mirrors, not a replacement for `ui_mode`.
 
 ### Stage Transition Matrix
 
@@ -571,15 +580,18 @@ Fields that must not be inferred from assistant prose:
 - Final brief evidence; selected candidates and verification summaries must come
   from structured IDs/results, not prose.
 
-Smallest next implementation slice:
+Implemented frontend adapter baseline:
 
-Add a frontend state adapter with focused tests that maps
-`AssistantChatResponse` into explicit UI state:
-`ui_mode`, `brief`, `found_items`, derived `visible_candidates`,
-`candidate_item_ids`, `selected_item_ids`, `verification_results` and
-`rendered_brief`. The adapter should gate the draft brief panel only on
-`ui_mode === "brief_workspace"` and keep direct `chat_search` results inline in
-the chat timeline, without changing backend behavior.
+- `frontend/src/utils/assistantUiState.ts` maps `AssistantChatResponse` into
+  explicit UI state: `ui_mode`, `brief`, `found_items`, derived
+  `visible_candidates`, `candidate_item_ids`, `selected_item_ids`,
+  `verification_results` and `rendered_brief`.
+- The adapter gates the draft brief panel only on
+  `ui_mode === "brief_workspace"` and keeps direct `chat_search` results inline
+  in the chat timeline.
+- `frontend/src/utils/assistantRequest.ts` sends `recent_turns`,
+  `visible_candidates` and `candidate_item_ids` on the next request based on
+  the candidate cards the UI actually renders.
 
 ## Response Contract Examples
 
@@ -755,7 +767,9 @@ Request context:
 
 ```json
 {
-  "selected_item_ids": [],
+  "brief": {
+    "selected_item_ids": []
+  },
   "candidate_item_ids": [],
   "visible_candidates": []
 }
@@ -784,6 +798,71 @@ Expected:
 - if `selected_item_ids` is empty, found candidates are labeled as found but not selected;
 - budget notes do not treat `found_items` as an estimate without selected rows and explicit quantities;
 - unknowns remain open questions.
+
+## Phase UX-8: Documentation And Handoff
+
+Status: documentation handoff complete. This phase documents the implemented UX
+contract and does not add runtime behavior.
+
+Backend references for the next phase:
+
+- Backend orchestrator plan: `docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md`.
+- Plan 07 phase prompts:
+  `docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`.
+- Public API contract: `docs/api/openapi.yaml`.
+- Domain DTOs: `backend/app/features/assistant/dto.py`.
+- Structured router prompt builder from plan 07:
+  `backend/app/features/assistant/domain/llm_router/prompt.py`.
+
+Frontend references for the next phase:
+
+- Client API types: `frontend/src/api.ts`.
+- UI response adapter: `frontend/src/utils/assistantUiState.ts`.
+- Request context builder: `frontend/src/utils/assistantRequest.ts`.
+- Candidate ordinal mapping: `frontend/src/utils/assistantCandidates.ts`.
+
+Implemented UX flow contract:
+
+- `brief_workspace` is for explicit event creation, planning, preparation,
+  organization, continuation of an active event brief, or final brief rendering.
+  It shows chat plus draft brief, catalog candidates, verification and rendered
+  brief surfaces.
+- `chat_search` is for direct contractor, supplier, catalog item, service or
+  price search. It stays a simple chat with search clarifications and inline
+  catalog cards.
+- Chat remains the primary interaction surface in both modes.
+- The brief panel opens only from structured `ui_mode === "brief_workspace"`.
+  Assistant prose must not open the panel by itself.
+
+Request context handoff:
+
+- `visible_candidates` is request-only UI context that maps visible card
+  ordinals to item ids. It is required for references such as `второй вариант`
+  and `первые два`.
+- `candidate_item_ids` is request-only candidate context for references such as
+  `найденных подрядчиков`. The current frontend derives it from rendered
+  candidate cards.
+- `selected_item_ids` lives inside `brief` and is the only explicit selection
+  state. A selected proposal row exists only after the user selects a candidate.
+- The response does not echo `visible_candidates` or `candidate_item_ids`; the
+  frontend must rebuild them from the cards it keeps visible.
+
+Evidence boundaries:
+
+- `message` is status text, grouping guidance and clarification text. It is not
+  the source of catalog facts.
+- Catalog facts must come from `found_items`, opened item details or another
+  structured catalog evidence surface.
+- `found_items` are candidates. They are not selected budget/proposal rows until
+  their ids appear in `brief.selected_item_ids`.
+- `verification_results` are legal/registry evidence. `status=active` means
+  active in the verification source only; it is not event-date availability, a
+  recommendation or proof of an active agency contract.
+- `rendered_brief` is the final structured artifact. It must label unselected
+  found candidates as found but not selected when `selected_item_ids` is empty.
+
+No remaining documentation/API mismatch was found in this phase after updating
+the `ui_mode` wording and the verification-without-context request example.
 
 ## Out Of Scope For The First Implementation
 

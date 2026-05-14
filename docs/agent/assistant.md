@@ -24,6 +24,17 @@ Detailed rollout plans:
 - `docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md`
 - `docs/plans/catalog-first-refactor/08-event-brief-e2e-scenario.md`
 
+Current implementation pointers:
+
+- Public HTTP contract: `docs/api/openapi.yaml`.
+- Backend DTO contract: `backend/app/features/assistant/dto.py`.
+- Plan 07 phase prompt handoff:
+  `docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`.
+- Plan 07 structured-router prompt file:
+  `backend/app/features/assistant/domain/llm_router/prompt.py`.
+- Frontend UI state adapter: `frontend/src/utils/assistantUiState.ts`.
+- Frontend request context builder: `frontend/src/utils/assistantRequest.ts`.
+
 ## UX Modes
 
 The backend returns an explicit `ui_mode`; the frontend must not guess from
@@ -276,6 +287,11 @@ Rules:
   `visible_candidates`, or explicit item ids in the message.
 - If no candidate context exists, return a clarification and no
   `verification_results`.
+- `visible_candidates` and `candidate_item_ids` are request-only context. The
+  response does not echo them; clients must rebuild them from the candidate cards
+  they keep visible.
+- `selected_item_ids` lives inside `BriefState`, not as top-level request
+  context.
 - Persisted chat history can be added later, but current behavior must not
   silently depend on it.
 
