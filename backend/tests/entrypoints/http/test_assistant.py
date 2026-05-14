@@ -6,18 +6,18 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import yaml
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-
 from app.entrypoints.http.dependencies import get_chat_turn_uc
 from app.features.assistant.dto import (
     AssistantChatResponse,
     BriefState,
+    CatalogItemDetail,
     FoundCatalogItem,
     MatchReason,
     RouterDecision,
 )
 from app.main import app as fastapi_app
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 
 async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> None:
@@ -66,6 +66,22 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
                 ),
             ),
         ],
+        item_details=[
+            CatalogItemDetail(
+                id=item_id,
+                name="Аренда акустической системы",
+                category="Аренда",
+                unit="день",
+                unit_price=Decimal("15000.00"),
+                supplier="ООО НИКА",
+                supplier_inn="7701234567",
+                supplier_city="г. Москва",
+                supplier_phone=None,
+                supplier_email=None,
+                supplier_status=None,
+                source_text="Акустика 2 кВт",
+            ),
+        ],
     )
     app.dependency_overrides[get_chat_turn_uc] = lambda: fake_uc
 
@@ -106,6 +122,7 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
         "action_plan",
         "brief",
         "found_items",
+        "item_details",
         "verification_results",
         "rendered_brief",
     }
@@ -132,6 +149,22 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
             "result_group": None,
             "matched_service_category": None,
             "matched_service_categories": [],
+        },
+    ]
+    assert body["item_details"] == [
+        {
+            "id": str(item_id),
+            "name": "Аренда акустической системы",
+            "category": "Аренда",
+            "unit": "день",
+            "unit_price": "15000.00",
+            "supplier": "ООО НИКА",
+            "supplier_inn": "7701234567",
+            "supplier_city": "г. Москва",
+            "supplier_phone": None,
+            "supplier_email": None,
+            "supplier_status": None,
+            "source_text": "Акустика 2 кВт",
         },
     ]
     call_request = fake_uc.execute.await_args.args[0]

@@ -186,6 +186,7 @@ class Interpretation:
     requested_actions: list[ToolIntent] = field(default_factory=list)
     search_requests: list[SearchRequest] = field(default_factory=list)
     verification_targets: list[UUID] = field(default_factory=list)
+    comparison_targets: list[UUID] = field(default_factory=list)
     missing_fields: list[str] = field(default_factory=list)
     clarification_questions: list[str] = field(default_factory=list)
     user_visible_summary: str | None = None
@@ -198,6 +199,7 @@ class ActionPlan:
     tool_intents: list[ToolIntent] = field(default_factory=list)
     search_requests: list[SearchRequest] = field(default_factory=list)
     verification_targets: list[UUID] = field(default_factory=list)
+    comparison_targets: list[UUID] = field(default_factory=list)
     item_detail_ids: list[UUID] = field(default_factory=list)
     render_requested: bool = False
     missing_fields: list[str] = field(default_factory=list)
@@ -306,6 +308,7 @@ class AssistantChatResponse:
     router: RouterDecision
     brief: BriefState
     found_items: list[FoundCatalogItem]
+    item_details: list[CatalogItemDetail] = field(default_factory=list)
     ui_mode: AssistantInterfaceMode = AssistantInterfaceMode.CHAT_SEARCH
     action_plan: ActionPlan | None = None
     verification_results: list[SupplierVerificationResult] = field(

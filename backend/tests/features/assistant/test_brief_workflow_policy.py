@@ -71,6 +71,47 @@ def test_direct_contractor_search_stays_chat_search() -> None:
     assert "venue_status" not in plan.missing_fields
 
 
+def test_direct_contractor_search_with_active_brief_stays_chat_search() -> None:
+    current_brief = BriefState(event_type="корпоратив")
+    interpretation = EventBriefInterpreter().interpret(
+        message="Найди свет в Екатеринбурге",
+        brief=current_brief,
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "supplier_search"
+    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert plan.search_requests[0].service_category == "свет"
+
+
+def test_active_brief_search_with_current_fact_update_uses_workspace() -> None:
+    current_brief = BriefState(event_type="корпоратив", audience_size=120)
+    interpretation = EventBriefInterpreter().interpret(
+        message="Бюджет 2 млн, найди свет в Екатеринбурге",
+        brief=current_brief,
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert interpretation.intent == "mixed"
+    assert interpretation.brief_update.budget_total == 2_000_000
+    assert interpretation.brief_update.city == "Екатеринбург"
+    assert interpretation.requested_actions == ["update_brief", "search_items"]
+    assert plan.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert plan.workflow_stage == EventBriefWorkflowState.SUPPLIER_SEARCHING
+    assert plan.tool_intents == ["update_brief", "search_items"]
+    assert plan.search_requests[0].service_category == "свет"
+
+
 def test_categoryless_contractor_search_asks_for_service_category() -> None:
     plan = _plan_for("найди подрядчика в Екатеринбурге")
 

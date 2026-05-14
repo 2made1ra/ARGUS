@@ -147,7 +147,7 @@ async def test_ux7_direct_search_case_stays_chat_search_with_inline_candidates(
 
 
 @pytest.mark.asyncio
-async def test_ux7_mixed_search_case_uses_active_event_context_for_workspace() -> None:
+async def test_ux7_direct_search_with_active_brief_stays_chat_search() -> None:
     found = _found_item(name="Фуршет на 120 гостей", category="Кейтеринг")
     search = FakeCatalogSearchTool(items=[found])
     use_case = ChatTurnUseCase(
@@ -163,16 +163,18 @@ async def test_ux7_mixed_search_case_uses_active_event_context_for_workspace() -
         ),
     )
 
-    assert response.ui_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
-    assert response.router.intent == "mixed"
+    assert response.ui_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert response.router.intent == "supplier_search"
     assert response.action_plan is not None
     assert response.action_plan.workflow_stage == (
-        EventBriefWorkflowState.SUPPLIER_SEARCHING
+        EventBriefWorkflowState.SEARCHING
     )
-    assert response.action_plan.tool_intents == ["update_brief", "search_items"]
-    assert response.brief.budget_per_guest == 2500
-    assert response.brief.audience_size == 120
-    assert response.brief.required_services == ["кейтеринг"]
+    assert response.action_plan.tool_intents == ["search_items"]
+    assert response.brief.event_type == "корпоратив"
+    assert response.brief.city == "Екатеринбург"
+    assert response.brief.budget_per_guest is None
+    assert response.brief.audience_size is None
+    assert response.brief.required_services == []
     assert response.action_plan.search_requests[0].service_category == "кейтеринг"
     assert response.action_plan.search_requests[0].filters.supplier_city_normalized == (
         "екатеринбург"

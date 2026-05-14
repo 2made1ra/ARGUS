@@ -289,11 +289,27 @@ export interface ActionPlan {
   tool_intents: ToolIntent[];
   search_requests: SearchRequest[];
   verification_targets: string[];
+  comparison_targets: string[];
   item_detail_ids: string[];
   render_requested: boolean;
   missing_fields: string[];
   clarification_questions: string[];
   skipped_actions: string[];
+}
+
+export interface CatalogItemDetail {
+  id: string;
+  name: string;
+  category: string | null;
+  unit: string;
+  unit_price: string;
+  supplier: string | null;
+  supplier_inn: string | null;
+  supplier_city: string | null;
+  supplier_phone: string | null;
+  supplier_email: string | null;
+  supplier_status: string | null;
+  source_text: string | null;
 }
 
 export type SupplierVerificationStatus =
@@ -345,6 +361,7 @@ export interface AssistantChatResponse {
   action_plan: ActionPlan | null;
   brief: BriefState;
   found_items: FoundItem[];
+  item_details: CatalogItemDetail[];
   verification_results: SupplierVerificationResult[];
   rendered_brief: RenderedEventBrief | null;
 }

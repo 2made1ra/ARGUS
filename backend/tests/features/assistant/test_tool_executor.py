@@ -16,6 +16,7 @@ from app.features.assistant.dto import (
     MatchReason,
     RenderedEventBrief,
     SearchRequest,
+    VisibleCandidate,
 )
 
 
@@ -203,3 +204,79 @@ async def test_tool_executor_loads_item_details_only_for_explicit_detail_tool() 
 
     assert details.calls == [item_id]
     assert results.item_details == [detail]
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_handles_compare_items_without_unsupported_tool() -> None:
+    first_id = UUID("33333333-3333-3333-3333-333333333331")
+    second_id = UUID("33333333-3333-3333-3333-333333333332")
+    first = _detail(first_id)
+    second = _detail(second_id)
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: first,
+            second_id: second,
+        },
+    )
+    search = FakeCatalogSearchTool()
+    executor = ToolExecutor(catalog_search=search, item_details=details)
+    plan = ActionPlan(
+        interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+        workflow_stage=EventBriefWorkflowState.SEARCH_RESULTS_SHOWN,
+        tool_intents=["compare_items"],
+    )
+
+    results = await executor.execute(
+        action_plan=plan,
+        brief=BriefState(),
+        brief_update=BriefState(),
+        visible_candidates=[
+            VisibleCandidate(ordinal=1, item_id=first_id, service_category="свет"),
+            VisibleCandidate(ordinal=2, item_id=second_id, service_category="свет"),
+        ],
+    )
+
+    assert details.calls == [first_id, second_id]
+    assert search.calls == []
+    assert results.item_details == [first, second]
+    assert "unsupported_tool:compare_items" not in results.skipped_actions
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_prefers_explicit_comparison_targets() -> None:
+    first_id = UUID("44444444-4444-4444-4444-444444444441")
+    second_id = UUID("44444444-4444-4444-4444-444444444442")
+    third_id = UUID("44444444-4444-4444-4444-444444444443")
+    second = _detail(second_id)
+    third = _detail(third_id)
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: _detail(first_id),
+            second_id: second,
+            third_id: third,
+        },
+    )
+    executor = ToolExecutor(
+        catalog_search=FakeCatalogSearchTool(),
+        item_details=details,
+    )
+    plan = ActionPlan(
+        interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+        workflow_stage=EventBriefWorkflowState.SEARCH_RESULTS_SHOWN,
+        tool_intents=["compare_items"],
+        comparison_targets=[second_id, third_id],
+    )
+
+    results = await executor.execute(
+        action_plan=plan,
+        brief=BriefState(),
+        brief_update=BriefState(),
+        visible_candidates=[
+            VisibleCandidate(ordinal=1, item_id=first_id, service_category="свет"),
+            VisibleCandidate(ordinal=2, item_id=second_id, service_category="свет"),
+            VisibleCandidate(ordinal=3, item_id=third_id, service_category="свет"),
+        ],
+    )
+
+    assert details.calls == [second_id, third_id]
+    assert results.item_details == [second, third]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -96,6 +97,12 @@ def test_price_item_metadata_contains_duplicate_guard_index() -> None:
     index_names = {index.name for index in PriceItemRow.__table__.indexes}
 
     assert "ix_price_items_row_fingerprint_active" in index_names
+
+
+def test_price_item_adapter_does_not_import_catalog_use_case_helpers() -> None:
+    adapter_source = Path("backend/app/adapters/sqlalchemy/price_items.py").read_text()
+
+    assert "app.features.catalog.use_cases.keyword_search" not in adapter_source
 
 
 @pytest.mark.asyncio

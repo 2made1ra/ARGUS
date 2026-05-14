@@ -67,20 +67,27 @@ class ChatTurnUseCase:
             visible_candidates=list(request.visible_candidates),
             candidate_item_ids=list(request.candidate_item_ids),
         )
+        executed_action_plan = replace(
+            action_plan,
+            skipped_actions=list(tool_results.skipped_actions),
+        )
+        response_decision = replace(decision, action_plan=executed_action_plan)
         return AssistantChatResponse(
             session_id=request.session_id or uuid4(),
             message=ResponseComposer().compose_from_decision(
-                decision=decision,
+                decision=response_decision,
                 brief=tool_results.brief,
                 found_items=tool_results.found_items,
                 verification_results=tool_results.verification_results,
+                item_details=tool_results.item_details,
                 rendered_brief=tool_results.rendered_brief,
             ),
-            router=decision,
+            router=response_decision,
             brief=tool_results.brief,
             found_items=tool_results.found_items,
-            ui_mode=decision.interface_mode,
-            action_plan=action_plan,
+            item_details=tool_results.item_details,
+            ui_mode=response_decision.interface_mode,
+            action_plan=executed_action_plan,
             verification_results=tool_results.verification_results,
             rendered_brief=tool_results.rendered_brief,
         )

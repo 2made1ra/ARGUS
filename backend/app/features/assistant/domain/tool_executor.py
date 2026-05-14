@@ -91,6 +91,18 @@ class ToolExecutor:
                 working_brief = merge_brief(working_brief, brief_update)
                 continue
 
+            if intent == "compare_items":
+                if not calls.consume("compare_items", skipped_actions):
+                    continue
+                details = await self._execute_comparison(
+                    action_plan=action_plan,
+                    visible_candidates=visible_candidates or [],
+                    candidate_item_ids=candidate_item_ids or [],
+                    skipped_actions=skipped_actions,
+                )
+                item_details.extend(details)
+                continue
+
             if intent == "verify_supplier_status":
                 if not calls.consume("verify_supplier_status", skipped_actions):
                     continue
@@ -227,6 +239,36 @@ class ToolExecutor:
 
         return await self._verification_results_for_details(details)
 
+    async def _execute_comparison(
+        self,
+        *,
+        action_plan: ActionPlan,
+        visible_candidates: list[VisibleCandidate],
+        candidate_item_ids: list[UUID],
+        skipped_actions: list[str],
+    ) -> list[CatalogItemDetail]:
+        if self._item_details is None:
+            skipped_actions.append("item_details_unavailable")
+            return []
+
+        target_ids = _comparison_target_ids(
+            action_plan=action_plan,
+            visible_candidates=visible_candidates,
+            candidate_item_ids=candidate_item_ids,
+        )
+        if len(target_ids) < 2:
+            skipped_actions.append("comparison_targets_missing")
+            return []
+
+        details: list[CatalogItemDetail] = []
+        for item_id in target_ids[:2]:
+            detail = await self._item_details.get_item_details(item_id=item_id)
+            if detail is None:
+                skipped_actions.append(f"comparison_item_not_found:{item_id}")
+                continue
+            details.append(detail)
+        return details
+
     async def _verification_results_for_details(
         self,
         details: list[CatalogItemDetail],
@@ -335,6 +377,27 @@ def _verification_target_ids(
             *action_plan.verification_targets,
         ],
     )
+
+
+def _comparison_target_ids(
+    *,
+    action_plan: ActionPlan,
+    visible_candidates: list[VisibleCandidate],
+    candidate_item_ids: list[UUID],
+) -> list[UUID]:
+    if action_plan.comparison_targets:
+        return _dedupe_uuid(action_plan.comparison_targets)
+    if len(visible_candidates) >= 2:
+        return _dedupe_uuid(
+            [
+                candidate.item_id
+                for candidate in sorted(
+                    visible_candidates,
+                    key=lambda candidate: candidate.ordinal,
+                )
+            ],
+        )
+    return _dedupe_uuid(candidate_item_ids)
 
 
 def _dedupe_uuid(item_ids: Iterable[UUID]) -> list[UUID]:

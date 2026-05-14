@@ -190,6 +190,264 @@ async def test_direct_search_stays_chat_search_when_llm_opens_workspace() -> Non
 
 
 @pytest.mark.asyncio
+async def test_llm_search_request_is_kept_for_recent_context_follow_up() -> None:
+    llm = FakeLLMStructuredRouter(
+        output="""{
+            "interface_mode": "chat_search",
+            "intent": "supplier_search",
+            "confidence": 0.9,
+            "search_requests": [
+                {
+                    "query": "свет Екатеринбург срочно",
+                    "service_category": "свет",
+                    "filters": {"supplier_city_normalized": "екатеринбург"},
+                    "priority": 1,
+                    "limit": 5
+                }
+            ]
+        }""",
+        calls=[],
+    )
+
+    interpretation = await EventBriefInterpreter(llm_router=llm).interpret_with_llm(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[ChatTurn(role="user", content="Найди подрядчиков по свету")],
+        visible_candidates=[],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.requested_actions == ["search_items"]
+    assert interpretation.search_requests[0].service_category == "свет"
+    assert interpretation.search_requests[0].filters.supplier_city_normalized == (
+        "екатеринбург"
+    )
+    assert interpretation.search_requests[0].limit == 8
+    assert "llm_router_used" in interpretation.reason_codes
+
+
+@pytest.mark.asyncio
+async def test_llm_blocks_assistant_turn_categories_for_recent_context() -> None:
+    llm = FakeLLMStructuredRouter(
+        output="""{
+            "interface_mode": "chat_search",
+            "intent": "supplier_search",
+            "confidence": 0.9,
+            "search_requests": [
+                {
+                    "query": "свет Екатеринбург срочно",
+                    "service_category": "свет",
+                    "filters": {"supplier_city_normalized": "екатеринбург"}
+                },
+                {
+                    "query": "кейтеринг Екатеринбург срочно",
+                    "service_category": "кейтеринг",
+                    "filters": {"supplier_city_normalized": "екатеринбург"}
+                }
+            ]
+        }""",
+        calls=[],
+    )
+
+    interpretation = await EventBriefInterpreter(llm_router=llm).interpret_with_llm(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[
+            ChatTurn(role="user", content="Найди подрядчиков по свету"),
+            ChatTurn(role="assistant", content="Могу еще поискать кейтеринг."),
+        ],
+        visible_candidates=[],
+    )
+
+    assert interpretation.requested_actions == ["search_items"]
+    assert [
+        request.service_category
+        for request in interpretation.search_requests
+    ] == ["свет"]
+    assert interpretation.search_requests[0].filters.supplier_city_normalized == (
+        "екатеринбург"
+    )
+
+
+@pytest.mark.asyncio
+async def test_llm_does_not_create_search_from_assistant_only_recent_context() -> None:
+    llm = FakeLLMStructuredRouter(
+        output="""{
+            "interface_mode": "chat_search",
+            "intent": "supplier_search",
+            "confidence": 0.9,
+            "search_requests": [
+                {
+                    "query": "кейтеринг Екатеринбург срочно",
+                    "service_category": "кейтеринг",
+                    "filters": {"supplier_city_normalized": "екатеринбург"}
+                }
+            ]
+        }""",
+        calls=[],
+    )
+
+    interpretation = await EventBriefInterpreter(llm_router=llm).interpret_with_llm(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[
+            ChatTurn(role="assistant", content="Могу еще поискать кейтеринг."),
+        ],
+        visible_candidates=[],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "clarification"
+    assert interpretation.requested_actions == []
+    assert interpretation.search_requests == []
+    assert "search_items" not in interpretation.requested_actions
+    assert "llm_conflict_resolved" in interpretation.reason_codes
+
+
+@pytest.mark.asyncio
+async def test_llm_does_not_open_workspace_for_ambiguous_clarification() -> None:
+    llm = FakeLLMStructuredRouter(
+        output="""{
+            "interface_mode": "brief_workspace",
+            "intent": "brief_discovery",
+            "confidence": 0.9,
+            "brief_update": {"event_type": "корпоратив"}
+        }""",
+        calls=[],
+    )
+
+    interpretation = await EventBriefInterpreter(llm_router=llm).interpret_with_llm(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[],
+        visible_candidates=[],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "clarification"
+    assert interpretation.requested_actions == []
+    assert interpretation.search_requests == []
+    assert interpretation.brief_update == BriefState()
+    assert "llm_conflict_resolved" in interpretation.reason_codes
+
+
+def test_follow_up_search_uses_recent_service_context() -> None:
+    interpretation = EventBriefInterpreter().interpret(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[
+            ChatTurn(role="user", content="Нужен свет для делового события"),
+            ChatTurn(role="assistant", content="Уточните город и сроки."),
+        ],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "supplier_search"
+    assert interpretation.requested_actions == ["search_items"]
+    assert interpretation.search_requests[0].service_category == "свет"
+    assert "Екате" in interpretation.search_requests[0].query
+    assert "recent_turn_service_context_used" in interpretation.reason_codes
+
+
+def test_follow_up_search_ignores_assistant_service_context() -> None:
+    interpretation = EventBriefInterpreter().interpret(
+        message="в Екате кто сможет быстро?",
+        brief=BriefState(),
+        recent_turns=[
+            ChatTurn(role="user", content="Нужен свет для делового события"),
+            ChatTurn(role="assistant", content="Могу еще поискать кейтеринг."),
+        ],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "supplier_search"
+    assert interpretation.search_requests[0].service_category == "свет"
+
+
+def test_follow_up_search_without_recent_service_context_asks_category() -> None:
+    current_brief = BriefState()
+    interpretation = EventBriefInterpreter().interpret(
+        message="в Екате кто сможет быстро?",
+        brief=current_brief,
+        recent_turns=[],
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "clarification"
+    assert interpretation.search_requests == []
+    assert plan.tool_intents == []
+    assert plan.missing_fields == ["service_category"]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_patch"),
+    [
+        (
+            "Бюджет около 2 млн, город Екатеринбург",
+            {"budget_total": 2_000_000, "city": "Екатеринбург"},
+        ),
+        (
+            "Площадка уже есть, монтаж только ночью",
+            {
+                "venue_status": "площадка есть",
+                "technical_requirements": ["монтаж только ночью"],
+            },
+        ),
+        (
+            "Дата 15 июня, концепция деловой нетворкинг без премиума",
+            {
+                "date_or_period": "15 июня",
+                "concept": "деловой нетворкинг без премиума",
+                "preferences": ["без премиума"],
+            },
+        ),
+    ],
+)
+def test_active_brief_follow_up_facts_update_brief_workspace(
+    message: str,
+    expected_patch: dict[str, object],
+) -> None:
+    interpretation = EventBriefInterpreter().interpret(
+        message=message,
+        brief=BriefState(event_type="конференция", audience_size=180),
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert interpretation.intent == "brief_discovery"
+    assert interpretation.requested_actions == ["update_brief"]
+    for field_name, expected_value in expected_patch.items():
+        assert getattr(interpretation.brief_update, field_name) == expected_value
+    if "Площадка уже есть" in message:
+        assert interpretation.brief_update.service_needs == []
+        assert interpretation.brief_update.required_services == []
+
+
+def test_render_request_with_non_empty_brief_does_not_require_selected_items() -> None:
+    current_brief = BriefState(
+        event_type="конференция",
+        city="Екатеринбург",
+        audience_size=300,
+    )
+    interpretation = EventBriefInterpreter().interpret(
+        message="Сформируй бриф без выбранных подрядчиков",
+        brief=current_brief,
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert interpretation.intent == "render_brief"
+    assert interpretation.requested_actions == ["render_event_brief"]
+    assert plan.tool_intents == ["render_event_brief"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("output", ["not-json", '{"confidence": 0.54}'])
 async def test_invalid_or_low_confidence_llm_output_falls_back_to_deterministic(
     output: str,

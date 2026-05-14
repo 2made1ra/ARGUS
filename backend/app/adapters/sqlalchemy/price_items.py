@@ -9,6 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.sqlalchemy.models import PriceImportRow as PriceImportRowRow
 from app.adapters.sqlalchemy.models import PriceItem as PriceItemRow
 from app.adapters.sqlalchemy.models import PriceItemSource as PriceItemSourceRow
+from app.features.catalog.domain.keyword_search import (
+    CatalogKeywordFields,
+    KeywordQuery,
+    build_keyword_query,
+    keyword_reason_for_fields,
+    keyword_score,
+)
 from app.features.catalog.dto import MatchReasonCode, SearchPriceItemsFilters
 from app.features.catalog.entities.price_item import (
     PriceItem,
@@ -18,13 +25,6 @@ from app.features.catalog.entities.price_item import (
     PriceItemSourceRef,
 )
 from app.features.catalog.ports import PriceItemNotFound
-from app.features.catalog.use_cases.keyword_search import (
-    CatalogKeywordFields,
-    KeywordQuery,
-    build_keyword_query,
-    keyword_reason_for_fields,
-    keyword_score,
-)
 
 
 class SqlAlchemyPriceItemRepository:

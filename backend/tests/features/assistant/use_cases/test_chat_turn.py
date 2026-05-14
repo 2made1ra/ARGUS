@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -178,15 +178,17 @@ def _found_item(
 def _item_detail(
     item_id: UUID,
     *,
+    name: str = "Световой комплект",
+    unit_price: Decimal = Decimal("15000.00"),
     supplier: str = "ООО НИКА",
     supplier_inn: str | None = "7701234567",
 ) -> CatalogItemDetail:
     return CatalogItemDetail(
         id=item_id,
-        name="Световой комплект",
+        name=name,
         category="Свет",
         unit="день",
-        unit_price=Decimal("15000.00"),
+        unit_price=unit_price,
         supplier=supplier,
         supplier_inn=supplier_inn,
         supplier_city="Екатеринбург",
@@ -488,6 +490,49 @@ async def test_chat_turn_executes_policy_action_plan_without_reconstructing() ->
 
 
 @pytest.mark.asyncio
+async def test_chat_turn_returns_skipped_tool_actions_in_action_plan() -> None:
+    policy_plan = ActionPlan(
+        interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+        workflow_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
+        tool_intents=cast(Any, ["unsupported_action"]),
+    )
+    router = FakeRouter(
+        RouterDecision(
+            intent="clarification",
+            confidence=0.9,
+            known_facts={},
+            missing_fields=[],
+            should_search_now=False,
+            search_query=None,
+            brief_update=BriefState(),
+            interface_mode=AssistantInterfaceMode.CHAT_SEARCH,
+            workflow_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
+            tool_intents=cast(Any, ["unsupported_action"]),
+            action_plan=policy_plan,
+        ),
+    )
+    use_case = ChatTurnUseCase(
+        router=router,
+        tool_executor=ToolExecutor(catalog_search=None, item_details=None),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="выполни неизвестное действие",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.action_plan is not None
+    assert response.action_plan.skipped_actions == [
+        "unsupported_tool:unsupported_action",
+    ]
+    assert response.router.action_plan == response.action_plan
+    assert policy_plan.skipped_actions == []
+
+
+@pytest.mark.asyncio
 async def test_chat_turn_executes_grouped_searches_and_dedupes_found_items() -> None:
     shared_id = UUID("33333333-3333-3333-3333-333333333333")
     catering_id = UUID("44444444-4444-4444-4444-444444444444")
@@ -622,6 +667,68 @@ async def test_chat_turn_plans_service_searches_for_catering_and_light_phrase() 
 
 
 @pytest.mark.asyncio
+async def test_chat_turn_uses_recent_service_context_for_follow_up_search() -> None:
+    found = _found_item(name="Световой комплект", category="Свет")
+    search = FakeCatalogSearchTool(items=[found])
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="в Екате кто сможет быстро?",
+            brief=BriefState(event_type="корпоратив"),
+            recent_turns=[
+                ChatTurn(role="user", content="Найди подрядчиков по свету"),
+                ChatTurn(role="assistant", content="Уточните город."),
+            ],
+        ),
+    )
+
+    assert response.ui_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert response.router.intent == "supplier_search"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == ["search_items"]
+    assert response.action_plan.search_requests[0].service_category == "свет"
+    assert len(search.calls) == 1
+    assert "свет" in search.calls[0]["query"]
+    assert "Екатеринбург" in search.calls[0]["query"]
+    assert search.calls[0]["limit"] == 8
+    assert search.calls[0]["filters"] == CatalogSearchFilters(
+        supplier_city_normalized="екатеринбург",
+    )
+    assert [item.id for item in response.found_items] == [found.id]
+    assert response.found_items[0].matched_service_category == "свет"
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_asks_category_for_follow_up_without_recent_context() -> None:
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="в Екате кто сможет быстро?",
+            brief=BriefState(),
+        ),
+    )
+
+    assert response.ui_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert response.router.intent == "clarification"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == []
+    assert response.action_plan.missing_fields == ["service_category"]
+    assert response.found_items == []
+    assert search.calls == []
+
+
+@pytest.mark.asyncio
 async def test_chat_turn_verifies_found_contractors_from_candidate_context() -> None:
     first_id = UUID("66666666-6666-6666-6666-666666666661")
     second_id = UUID("66666666-6666-6666-6666-666666666662")
@@ -739,3 +846,238 @@ async def test_chat_turn_asks_clarification_without_candidate_context() -> None:
     assert details.calls == []
     assert verifier.calls == []
     assert "каких" in response.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_compares_first_two_visible_candidates_without_search() -> None:
+    first_id = UUID("88888888-8888-8888-8888-888888888881")
+    second_id = UUID("88888888-8888-8888-8888-888888888882")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: _item_detail(
+                first_id,
+                name="Фуршет стандарт",
+                unit_price=Decimal("2500.00"),
+                supplier="ООО Кейтеринг",
+            ),
+            second_id: _item_detail(
+                second_id,
+                name="Фуршет премиум",
+                unit_price=Decimal("3900.00"),
+                supplier="ИП Банкет",
+            ),
+        },
+    )
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(catalog_search=search, item_details=details),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="Сравни первые два по цене",
+            brief=BriefState(),
+            visible_candidates=[
+                VisibleCandidate(
+                    ordinal=1,
+                    item_id=first_id,
+                    service_category="кейтеринг",
+                ),
+                VisibleCandidate(
+                    ordinal=2,
+                    item_id=second_id,
+                    service_category="кейтеринг",
+                ),
+            ],
+        ),
+    )
+
+    assert response.router.intent == "comparison"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == ["compare_items"]
+    assert response.action_plan.workflow_stage == (
+        EventBriefWorkflowState.SEARCH_RESULTS_SHOWN
+    )
+    assert details.calls == [first_id, second_id]
+    assert search.calls == []
+    assert response.found_items == []
+    assert [detail.id for detail in response.item_details] == [first_id, second_id]
+    assert "сравнил" in response.message.lower()
+    assert "Фуршет стандарт" in response.message
+    assert "2500.00" in response.message
+    assert "ООО Кейтеринг" in response.message
+    assert "Фуршет премиум" in response.message
+    assert "3900.00" in response.message
+    assert "unsupported_tool" not in response.message
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_compares_candidate_item_ids_without_visible_context() -> None:
+    first_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1")
+    second_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: _item_detail(
+                first_id,
+                name="Пакет стандарт",
+                unit_price=Decimal("120000.00"),
+                supplier="ООО Сцена",
+            ),
+            second_id: _item_detail(
+                second_id,
+                name="Пакет расширенный",
+                unit_price=Decimal("180000.00"),
+                supplier="ООО Техника",
+            ),
+        },
+    )
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(catalog_search=search, item_details=details),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="Сравни первые два по цене",
+            brief=BriefState(),
+            candidate_item_ids=[first_id, second_id],
+        ),
+    )
+
+    assert response.router.intent == "comparison"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == ["compare_items"]
+    assert details.calls == [first_id, second_id]
+    assert search.calls == []
+    assert "Пакет стандарт" in response.message
+    assert "Пакет расширенный" in response.message
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_compares_requested_non_initial_visible_ordinals() -> None:
+    first_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1")
+    second_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2")
+    third_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            first_id: _item_detail(
+                first_id,
+                name="Первый пакет",
+                unit_price=Decimal("100000.00"),
+            ),
+            second_id: _item_detail(
+                second_id,
+                name="Второй пакет",
+                unit_price=Decimal("140000.00"),
+            ),
+            third_id: _item_detail(
+                third_id,
+                name="Третий пакет",
+                unit_price=Decimal("210000.00"),
+            ),
+        },
+    )
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(catalog_search=search, item_details=details),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="сравни вторую и третью позиции",
+            brief=BriefState(),
+            visible_candidates=[
+                VisibleCandidate(ordinal=1, item_id=first_id, service_category="свет"),
+                VisibleCandidate(ordinal=2, item_id=second_id, service_category="свет"),
+                VisibleCandidate(ordinal=3, item_id=third_id, service_category="свет"),
+            ],
+        ),
+    )
+
+    assert response.router.intent == "comparison"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == ["compare_items"]
+    assert response.action_plan.comparison_targets == [second_id, third_id]
+    assert details.calls == [second_id, third_id]
+    assert search.calls == []
+    assert [detail.id for detail in response.item_details] == [second_id, third_id]
+    assert "Первый пакет" not in response.message
+    assert "Второй пакет" in response.message
+    assert "Третий пакет" in response.message
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_comparison_without_context_asks_clarification() -> None:
+    only_id = UUID("99999999-9999-9999-9999-999999999981")
+    details = FakeCatalogItemDetailsTool(details={only_id: _item_detail(only_id)})
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(catalog_search=search, item_details=details),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="Сравни первые два по цене",
+            brief=BriefState(),
+            visible_candidates=[
+                VisibleCandidate(ordinal=1, item_id=only_id, service_category="свет"),
+            ],
+        ),
+    )
+
+    assert response.router.intent == "comparison"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == []
+    assert response.action_plan.missing_fields == ["candidate_context"]
+    assert response.action_plan.search_requests == []
+    assert details.calls == []
+    assert search.calls == []
+    assert "какие две позиции" in response.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_keeps_partial_visible_ordinals_clarifying() -> None:
+    visible_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccc1")
+    fallback_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccc2")
+    details = FakeCatalogItemDetailsTool(
+        details={
+            visible_id: _item_detail(visible_id),
+            fallback_id: _item_detail(fallback_id),
+        },
+    )
+    search = FakeCatalogSearchTool()
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        tool_executor=ToolExecutor(catalog_search=search, item_details=details),
+    )
+
+    response = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="Сравни первые два по цене",
+            brief=BriefState(),
+            visible_candidates=[
+                VisibleCandidate(
+                    ordinal=1,
+                    item_id=visible_id,
+                    service_category="свет",
+                ),
+            ],
+            candidate_item_ids=[visible_id, fallback_id],
+        ),
+    )
+
+    assert response.router.intent == "comparison"
+    assert response.action_plan is not None
+    assert response.action_plan.tool_intents == []
+    assert response.action_plan.missing_fields == ["candidate_context"]
+    assert details.calls == []
+    assert search.calls == []

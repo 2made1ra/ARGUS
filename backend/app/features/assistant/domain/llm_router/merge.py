@@ -35,16 +35,21 @@ def merge_llm_router_suggestion(
         ],
     )
     explicit_mode = _explicit_mode_from_deterministic(deterministic)
+    ambiguous_clarification = _is_ambiguous_clarification(deterministic)
     interface_mode = deterministic.interface_mode
     if suggestion.interface_mode is not None:
-        if explicit_mode is not None and suggestion.interface_mode != explicit_mode:
+        if ambiguous_clarification and suggestion.interface_mode != interface_mode:
+            conflict_resolved = True
+        elif explicit_mode is not None and suggestion.interface_mode != explicit_mode:
             conflict_resolved = True
         elif explicit_mode is None:
             interface_mode = suggestion.interface_mode
 
     intent = deterministic.intent
     if suggestion.intent is not None:
-        if deterministic.intent == "clarification":
+        if ambiguous_clarification and suggestion.intent != deterministic.intent:
+            conflict_resolved = True
+        elif deterministic.intent == "clarification":
             intent = suggestion.intent
         elif suggestion.intent != deterministic.intent:
             conflict_resolved = True
@@ -65,6 +70,10 @@ def merge_llm_router_suggestion(
             search_requests, search_conflict = _merge_search_requests(
                 deterministic.search_requests,
                 suggestion.search_requests,
+                allow_new_categories=(
+                    "recent_turn_service_context_used"
+                    not in deterministic.reason_codes
+                ),
             )
             conflict_resolved = conflict_resolved or search_conflict
         elif deterministic.intent != "clarification":
@@ -83,6 +92,7 @@ def merge_llm_router_suggestion(
         requested_actions=list(deterministic.requested_actions),
         search_requests=search_requests,
         verification_targets=list(deterministic.verification_targets),
+        comparison_targets=list(deterministic.comparison_targets),
         missing_fields=_dedupe(
             [*deterministic.missing_fields, *suggestion.missing_fields],
         ),
@@ -114,6 +124,7 @@ def interpretation_with_reason(
         requested_actions=list(interpretation.requested_actions),
         search_requests=list(interpretation.search_requests),
         verification_targets=list(interpretation.verification_targets),
+        comparison_targets=list(interpretation.comparison_targets),
         missing_fields=list(interpretation.missing_fields),
         clarification_questions=list(interpretation.clarification_questions),
         user_visible_summary=interpretation.user_visible_summary,
@@ -129,6 +140,14 @@ def _explicit_mode_from_deterministic(
     if reason_codes & {"event_creation_intent_detected", "brief_update_detected"}:
         return AssistantInterfaceMode.BRIEF_WORKSPACE
     return None
+
+
+def _is_ambiguous_clarification(deterministic: Interpretation) -> bool:
+    return (
+        deterministic.intent == "clarification"
+        and not deterministic.requested_actions
+        and not deterministic.search_requests
+    )
 
 
 def _brief_has_data(brief: BriefState) -> bool:
@@ -164,6 +183,8 @@ def _brief_suggestion_adds_or_conflicts(
 def _merge_search_requests(
     deterministic: list[SearchRequest],
     llm: list[SearchRequest],
+    *,
+    allow_new_categories: bool = True,
 ) -> tuple[list[SearchRequest], bool]:
     if not deterministic:
         return list(llm), False
@@ -184,6 +205,9 @@ def _merge_search_requests(
                 llm_request,
             )
             conflict = conflict or filter_conflict
+            continue
+        if not allow_new_categories:
+            conflict = True
             continue
         merged.append(llm_request)
     return merged, conflict

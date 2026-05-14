@@ -50,6 +50,13 @@ _SELECTION_QUESTIONS = {
     ),
 }
 
+_COMPARISON_QUESTIONS = {
+    "candidate_context": (
+        "Какие две позиции сравнить? Передайте visible_candidates с ordinal и "
+        "item_id или candidate_item_ids для видимых карточек."
+    ),
+}
+
 _RENDER_QUESTIONS = {
     "brief_context": (
         "Сначала зафиксируйте хотя бы тип мероприятия, город или количество гостей."
@@ -108,6 +115,12 @@ def _brief_workspace_plan(
 
     if interpretation.intent == "selection":
         return _selection_plan(
+            interpretation=interpretation,
+            fallback_stage=EventBriefWorkflowState.CLARIFYING,
+        )
+
+    if interpretation.intent == "comparison":
+        return _comparison_plan(
             interpretation=interpretation,
             fallback_stage=EventBriefWorkflowState.CLARIFYING,
         )
@@ -210,6 +223,12 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
             fallback_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
         )
 
+    if interpretation.intent == "comparison":
+        return _comparison_plan(
+            interpretation=interpretation,
+            fallback_stage=EventBriefWorkflowState.SEARCH_CLARIFYING,
+        )
+
     search_requests = [
         request
         for request in interpretation.search_requests
@@ -301,6 +320,34 @@ def _selection_plan(
         clarification_questions=_dedupe(
             [
                 *_questions_for(missing_fields, _SELECTION_QUESTIONS),
+                *interpretation.clarification_questions,
+            ],
+        )[:3],
+    )
+
+
+def _comparison_plan(
+    *,
+    interpretation: Interpretation,
+    fallback_stage: EventBriefWorkflowState,
+) -> ActionPlan:
+    if "compare_items" in interpretation.requested_actions:
+        return ActionPlan(
+            interface_mode=interpretation.interface_mode,
+            workflow_stage=EventBriefWorkflowState.SEARCH_RESULTS_SHOWN,
+            tool_intents=["compare_items"],
+            comparison_targets=list(interpretation.comparison_targets),
+        )
+
+    missing_fields = _dedupe(["candidate_context", *interpretation.missing_fields])
+    return ActionPlan(
+        interface_mode=interpretation.interface_mode,
+        workflow_stage=fallback_stage,
+        tool_intents=[],
+        missing_fields=missing_fields,
+        clarification_questions=_dedupe(
+            [
+                *_questions_for(missing_fields, _COMPARISON_QUESTIONS),
                 *interpretation.clarification_questions,
             ],
         )[:3],

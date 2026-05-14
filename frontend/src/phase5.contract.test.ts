@@ -89,6 +89,7 @@ const actionPlan: ActionPlan = {
   tool_intents: ["update_brief", "search_items"],
   search_requests: routerDecision.search_requests,
   verification_targets: ["00000000-0000-0000-0000-000000000000"],
+  comparison_targets: [],
   item_detail_ids: [],
   render_requested: false,
   missing_fields: ["date_or_period"],
@@ -147,6 +148,7 @@ const chatSearchResponse: AssistantChatResponse = {
   action_plan: { ...actionPlan, interface_mode: "chat_search" },
   brief,
   found_items: [foundItem],
+  item_details: [],
   verification_results: [verification],
   rendered_brief: renderedBrief,
 };

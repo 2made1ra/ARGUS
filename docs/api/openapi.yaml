@@ -796,6 +796,12 @@ components:
             format: uuid
           type: array
           title: Verification Targets
+        comparison_targets:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Comparison Targets
         item_detail_ids:
           items:
             type: string
@@ -827,6 +833,7 @@ components:
       - tool_intents
       - search_requests
       - verification_targets
+      - comparison_targets
       - item_detail_ids
       - render_requested
       - missing_fields
@@ -896,6 +903,11 @@ components:
             $ref: '#/components/schemas/FoundCatalogItemOut'
           type: array
           title: Found Items
+        item_details:
+          items:
+            $ref: '#/components/schemas/CatalogItemDetailOut'
+          type: array
+          title: Item Details
         verification_results:
           items:
             $ref: '#/components/schemas/SupplierVerificationResultOut'
@@ -914,6 +926,7 @@ components:
       - action_plan
       - brief
       - found_items
+      - item_details
       - verification_results
       - rendered_brief
       title: AssistantChatResponseOut
@@ -1683,6 +1696,76 @@ components:
       - INDEXED
       - FAILED
       title: DocumentStatus
+    CatalogItemDetailOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        unit_price:
+          type: string
+          title: Unit Price
+        supplier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier
+        supplier_inn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Inn
+        supplier_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier City
+        supplier_phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Phone
+        supplier_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Email
+        supplier_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Status
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - unit
+      - unit_price
+      - supplier
+      - supplier_inn
+      - supplier_city
+      - supplier_phone
+      - supplier_email
+      - supplier_status
+      - source_text
+      title: CatalogItemDetailOut
     FoundCatalogItemOut:
       properties:
         id:

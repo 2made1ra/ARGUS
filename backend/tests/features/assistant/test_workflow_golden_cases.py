@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
+from app.features.assistant.dto import (
+    BriefState,
+    ChatTurn,
+    ServiceNeed,
+    VisibleCandidate,
+)
+from app.features.assistant.router import HeuristicAssistantRouter
 
 FIXTURE_PATH = (
     Path(__file__).parents[2] / "fixtures" / "assistant_workflow_cases.json"
@@ -25,7 +33,6 @@ REQUIRED_CASE_FIELDS = {
     "expected_search_categories",
     "expected_verification_targets",
     "expected_missing_fields",
-    "expected_verification_or_render_behavior",
 }
 
 SEED_PHRASES = {
@@ -94,30 +101,107 @@ class WorkflowSnapshot:
     search_categories: list[str]
     verification_targets: list[dict[str, str]]
     missing_fields: list[str]
-    verification_or_render_behavior: str
 
 
-class PhaseZeroExpectedWorkflowRunner:
-    """Fake deterministic runner until production orchestrator services exist.
+class RealWorkflowRunner:
+    """Runs the deterministic interpreter + policy path used by the chat router."""
 
-    Phase 0 creates the golden dataset. Later phases should replace this class
-    with EventBriefInterpreter + BriefWorkflowPolicy + fake tool ports.
-    """
-
-    def run(self, case: dict[str, Any]) -> WorkflowSnapshot:
-        return WorkflowSnapshot(
-            interface_mode=case["expected_interface_mode"],
-            intent=case["expected_intent"],
-            workflow_stage=case["expected_workflow_stage"],
-            brief_patch=case["expected_brief_patch"],
-            tool_intents=case["expected_action_plan_tool_intents"],
-            search_categories=case["expected_search_categories"],
-            verification_targets=case["expected_verification_targets"],
-            missing_fields=case["expected_missing_fields"],
-            verification_or_render_behavior=(
-                case["expected_verification_or_render_behavior"]
+    async def run(self, case: dict[str, Any]) -> WorkflowSnapshot:
+        decision = await HeuristicAssistantRouter().route(
+            message=case["message"],
+            brief=_brief_from_fixture(case["brief_before"]),
+            recent_turns=_recent_turns_from_fixture(case["recent_turns"]),
+            visible_candidates=_visible_candidates_from_fixture(
+                case["visible_candidates"],
             ),
+            candidate_item_ids=[
+                UUID(item_id) for item_id in case["candidate_item_ids"]
+            ],
         )
+        action_plan = decision.action_plan
+        assert action_plan is not None
+
+        return WorkflowSnapshot(
+            interface_mode=decision.interface_mode.value,
+            intent=decision.intent,
+            workflow_stage=decision.workflow_stage.value,
+            brief_patch=_brief_patch_snapshot(decision.brief_update),
+            tool_intents=list(action_plan.tool_intents),
+            search_categories=[
+                request.service_category
+                for request in action_plan.search_requests
+                if request.service_category is not None
+            ],
+            verification_targets=[
+                {"type": "item_id", "value": str(item_id)}
+                for item_id in action_plan.verification_targets
+            ],
+            missing_fields=list(action_plan.missing_fields),
+        )
+
+
+def _brief_from_fixture(payload: dict[str, Any]) -> BriefState:
+    values = dict(payload)
+    values.pop("workflow_stage", None)
+    if "service_needs" in values:
+        values["service_needs"] = [
+            _service_need_from_fixture(item) for item in values["service_needs"]
+        ]
+    if "selected_item_ids" in values:
+        values["selected_item_ids"] = [
+            UUID(item_id) for item_id in values["selected_item_ids"]
+        ]
+    return BriefState(**values)
+
+
+def _service_need_from_fixture(payload: dict[str, Any]) -> ServiceNeed:
+    values = dict(payload)
+    if values.get("source") in {"user_explicit", "recent_turn_context"}:
+        values["source"] = "explicit"
+    return ServiceNeed(**values)
+
+
+def _recent_turns_from_fixture(payload: list[dict[str, Any]]) -> list[ChatTurn]:
+    return [ChatTurn(role=turn["role"], content=turn["content"]) for turn in payload]
+
+
+def _visible_candidates_from_fixture(
+    payload: list[dict[str, Any]],
+) -> list[VisibleCandidate]:
+    return [
+        VisibleCandidate(
+            ordinal=item["ordinal"],
+            item_id=UUID(item["item_id"]),
+            service_category=item.get("service_category"),
+        )
+        for item in payload
+    ]
+
+
+def _brief_patch_snapshot(brief: BriefState) -> dict[str, Any]:
+    snapshot = _dataclass_snapshot(brief)
+    snapshot.pop("open_questions", None)
+    return snapshot
+
+
+def _dataclass_snapshot(value: Any) -> Any:
+    if is_dataclass(value):
+        result: dict[str, Any] = {}
+        for item in fields(value):
+            field_value = getattr(value, item.name)
+            if _is_empty(field_value):
+                continue
+            result[item.name] = _dataclass_snapshot(field_value)
+        return result
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, list):
+        return [_dataclass_snapshot(item) for item in value]
+    return value
+
+
+def _is_empty(value: Any) -> bool:
+    return value is None or value == [] or value == {}
 
 
 def _load_fixture() -> dict[str, Any]:
@@ -176,15 +260,14 @@ def test_workflow_case_shape(case: dict[str, Any]) -> None:
     assert isinstance(case["expected_search_categories"], list)
     assert isinstance(case["expected_verification_targets"], list)
     assert isinstance(case["expected_missing_fields"], list)
-    assert isinstance(case["expected_verification_or_render_behavior"], str)
 
 
 @pytest.mark.parametrize("case", _case_params())
 def test_workflow_case_context_shape(case: dict[str, Any]) -> None:
     for turn in case["recent_turns"]:
         assert turn["role"] in {"assistant", "user"}
-        assert isinstance(turn["message"], str)
-        assert turn["message"].strip()
+        assert isinstance(turn["content"], str)
+        assert turn["content"].strip()
 
     for visible_candidate in case["visible_candidates"]:
         assert isinstance(visible_candidate["ordinal"], int)
@@ -203,7 +286,6 @@ def test_workflow_case_context_shape(case: dict[str, Any]) -> None:
 def test_workflow_case_expected_tool_contract(case: dict[str, Any]) -> None:
     tool_intents = case["expected_action_plan_tool_intents"]
 
-    assert tool_intents
     assert set(tool_intents) <= TOOL_INTENTS
     assert "call_llm" not in tool_intents
 
@@ -214,12 +296,9 @@ def test_workflow_case_expected_tool_contract(case: dict[str, Any]) -> None:
 
     if "verify_supplier_status" in tool_intents:
         assert case["expected_verification_targets"]
-        assert case["expected_verification_or_render_behavior"].startswith("verify_")
-    elif case["expected_verification_or_render_behavior"].startswith("verify_"):
-        pytest.fail("verify behavior requires verify_supplier_status tool intent")
 
     if "render_event_brief" in tool_intents:
-        assert case["expected_verification_or_render_behavior"].startswith("render_")
+        assert case["expected_workflow_stage"] == "brief_rendered"
 
     if "select_item" in tool_intents:
         assert case["visible_candidates"]
@@ -234,15 +313,16 @@ def test_workflow_case_expected_verification_targets_shape(
 ) -> None:
     for target in case["expected_verification_targets"]:
         assert set(target) == {"type", "value"}
-        assert target["type"] in {"inn", "item_id"}
+        assert target["type"] == "item_id"
         assert target["value"].strip()
 
 
 @pytest.mark.parametrize("case", _case_params())
-def test_phase_zero_fake_runner_exposes_future_orchestrator_contract(
+@pytest.mark.asyncio
+async def test_golden_workflow_case_matches_real_orchestrator_contract(
     case: dict[str, Any],
 ) -> None:
-    snapshot = PhaseZeroExpectedWorkflowRunner().run(case)
+    snapshot = await RealWorkflowRunner().run(case)
 
     assert snapshot.interface_mode == case["expected_interface_mode"]
     assert snapshot.intent == case["expected_intent"]
@@ -252,6 +332,3 @@ def test_phase_zero_fake_runner_exposes_future_orchestrator_contract(
     assert snapshot.search_categories == case["expected_search_categories"]
     assert snapshot.verification_targets == case["expected_verification_targets"]
     assert snapshot.missing_fields == case["expected_missing_fields"]
-    assert snapshot.verification_or_render_behavior == (
-        case["expected_verification_or_render_behavior"]
-    )

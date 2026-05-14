@@ -12,6 +12,7 @@ from app.features.assistant.dto import (
     AssistantChatRequest,
     AssistantChatResponse,
     BriefState,
+    CatalogItemDetail,
     CatalogSearchFilters,
     ChatTurn,
     FoundCatalogItem,
@@ -340,6 +341,7 @@ class ActionPlanOut(BaseModel):
     tool_intents: list[str]
     search_requests: list[SearchRequestOut]
     verification_targets: list[UUID]
+    comparison_targets: list[UUID]
     item_detail_ids: list[UUID]
     render_requested: bool
     missing_fields: list[str]
@@ -357,6 +359,7 @@ class ActionPlanOut(BaseModel):
                 for request in action_plan.search_requests
             ],
             verification_targets=list(action_plan.verification_targets),
+            comparison_targets=list(action_plan.comparison_targets),
             item_detail_ids=list(action_plan.item_detail_ids),
             render_requested=action_plan.render_requested,
             missing_fields=list(action_plan.missing_fields),
@@ -414,6 +417,38 @@ class FoundCatalogItemOut(BaseModel):
             result_group=item.result_group,
             matched_service_category=item.matched_service_category,
             matched_service_categories=list(item.matched_service_categories),
+        )
+
+
+class CatalogItemDetailOut(BaseModel):
+    id: UUID
+    name: str
+    category: str | None
+    unit: str
+    unit_price: str
+    supplier: str | None
+    supplier_inn: str | None
+    supplier_city: str | None
+    supplier_phone: str | None
+    supplier_email: str | None
+    supplier_status: str | None
+    source_text: str | None
+
+    @classmethod
+    def from_domain(cls, detail: CatalogItemDetail) -> CatalogItemDetailOut:
+        return cls(
+            id=detail.id,
+            name=detail.name,
+            category=detail.category,
+            unit=detail.unit,
+            unit_price=_decimal_string(detail.unit_price),
+            supplier=detail.supplier,
+            supplier_inn=detail.supplier_inn,
+            supplier_city=detail.supplier_city,
+            supplier_phone=detail.supplier_phone,
+            supplier_email=detail.supplier_email,
+            supplier_status=detail.supplier_status,
+            source_text=detail.source_text,
         )
 
 
@@ -487,6 +522,7 @@ class AssistantChatResponseOut(BaseModel):
     action_plan: ActionPlanOut | None
     brief: BriefStateOut
     found_items: list[FoundCatalogItemOut]
+    item_details: list[CatalogItemDetailOut]
     verification_results: list[SupplierVerificationResultOut]
     rendered_brief: RenderedEventBriefOut | None
 
@@ -506,6 +542,10 @@ class AssistantChatResponseOut(BaseModel):
             found_items=[
                 FoundCatalogItemOut.from_domain(item)
                 for item in response.found_items
+            ],
+            item_details=[
+                CatalogItemDetailOut.from_domain(detail)
+                for detail in response.item_details
             ],
             verification_results=[
                 SupplierVerificationResultOut.from_domain(result)
@@ -527,6 +567,7 @@ __all__ = [
     "AssistantChatRequestIn",
     "AssistantChatResponseOut",
     "ActionPlanOut",
+    "CatalogItemDetailOut",
     "BriefStateIn",
     "BriefStateOut",
     "SearchRequestOut",

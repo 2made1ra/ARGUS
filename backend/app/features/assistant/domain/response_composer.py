@@ -4,6 +4,7 @@ from app.features.assistant.dto import (
     ActionPlan,
     AssistantInterfaceMode,
     BriefState,
+    CatalogItemDetail,
     FoundCatalogItem,
     Interpretation,
     RenderedEventBrief,
@@ -40,6 +41,7 @@ class ResponseComposer:
         brief: BriefState,
         found_items: list[FoundCatalogItem],
         verification_results: list[SupplierVerificationResult] | None = None,
+        item_details: list[CatalogItemDetail] | None = None,
         rendered_brief: RenderedEventBrief | None = None,
     ) -> str:
         if decision.intent == "render_brief":
@@ -54,6 +56,11 @@ class ResponseComposer:
             )
         if decision.intent == "selection":
             return _selection_message_from_decision(decision=decision, brief=brief)
+        if decision.intent == "comparison":
+            return _comparison_message_from_decision(
+                decision=decision,
+                item_details=item_details or [],
+            )
         if decision.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE:
             facts = _brief_fact_sentence(brief)
             questions = _question_sentence(decision.clarification_questions)
@@ -167,6 +174,28 @@ def _selection_message_from_decision(
     )
 
 
+def _comparison_message_from_decision(
+    *,
+    decision: RouterDecision,
+    item_details: list[CatalogItemDetail],
+) -> str:
+    questions = _question_sentence(decision.clarification_questions)
+    if "candidate_context" in decision.missing_fields:
+        return f"Уточните, какие две позиции сравнить. {questions}".strip()
+    if len(item_details) < 2:
+        return (
+            "Не удалось загрузить две позиции для сравнения. Проверьте, что "
+            "видимые карточки есть в каталоге."
+        )
+    first, second = item_details[:2]
+    return (
+        "Сравнил две позиции по полям карточек каталога. "
+        f"1) {_comparison_line(first)}. "
+        f"2) {_comparison_line(second)}. "
+        "Это кандидаты из каталога, не выбранные позиции сметы."
+    )
+
+
 def _render_message_from_decision(
     *,
     decision: RouterDecision,
@@ -202,6 +231,20 @@ def _question_sentence(questions: list[str]) -> str:
     if not questions:
         return ""
     return " ".join(question for question in questions[:3])
+
+
+def _comparison_line(detail: CatalogItemDetail) -> str:
+    parts = [
+        detail.name,
+        f"{detail.unit_price} за {detail.unit}",
+    ]
+    if detail.supplier is not None:
+        parts.append(detail.supplier)
+    if detail.supplier_city is not None:
+        parts.append(detail.supplier_city)
+    if detail.category is not None:
+        parts.append(detail.category)
+    return ", ".join(parts)
 
 
 __all__ = ["ResponseComposer"]

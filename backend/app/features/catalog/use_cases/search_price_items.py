@@ -3,6 +3,10 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
+from app.features.catalog.domain.keyword_search import (
+    infer_search_filters_from_query,
+    merge_search_filters,
+)
 from app.features.catalog.dto import (
     FoundPriceItem,
     MatchReason,
@@ -17,10 +21,6 @@ from app.features.catalog.ports import (
     CatalogSearchHit,
     CatalogVectorSearch,
     PriceItemSearchRepository,
-)
-from app.features.catalog.use_cases.keyword_search import (
-    infer_search_filters_from_query,
-    merge_search_filters,
 )
 
 _SNIPPET_LENGTH = 96

@@ -119,11 +119,24 @@ def _explicit_service_categories(
     venue_constraints: list[str],
 ) -> list[str]:
     categories = service_categories_for(lower)
+    if _has_confirmed_venue_status(lower) and not _requests_venue_search(lower):
+        categories = [category for category in categories if category != "площадка"]
     if "площадка без подвеса" not in venue_constraints:
         return categories
     if _requests_venue_search(lower):
         return categories
     return [category for category in categories if category != "площадка"]
+
+
+def _has_confirmed_venue_status(lower: str) -> bool:
+    return any(
+        phrase in lower
+        for phrase in (
+            "площадка уже есть",
+            "площадка есть",
+            "есть площадка",
+        )
+    )
 
 
 def _requests_venue_search(lower: str) -> bool:

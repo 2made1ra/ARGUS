@@ -9,17 +9,17 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from app.features.catalog.dto import MatchReasonCode, SearchPriceItemsFilters
-from app.features.catalog.entities.price_item import PriceItem
-from app.features.catalog.ports import CatalogSearchFilters, CatalogSearchHit
-from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
-from app.features.catalog.use_cases.keyword_search import (
+from app.features.catalog.domain.keyword_search import (
     build_keyword_query,
     keyword_reason_for_fields,
     keyword_score,
     price_item_keyword_fields,
     price_item_matches_filters,
 )
+from app.features.catalog.dto import MatchReasonCode, SearchPriceItemsFilters
+from app.features.catalog.entities.price_item import PriceItem
+from app.features.catalog.ports import CatalogSearchFilters, CatalogSearchHit
+from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
 
 

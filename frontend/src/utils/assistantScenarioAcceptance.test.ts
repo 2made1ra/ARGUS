@@ -337,6 +337,7 @@ function responseFixture(
     action_plan: actionPlanFixture("chat_search", "searching", ["search_items"]),
     brief: emptyBrief(),
     found_items: [],
+    item_details: [],
     verification_results: [],
     rendered_brief: null,
     ...overrides,
@@ -385,6 +386,7 @@ function actionPlanFixture(
       ? [searchRequest("свет")]
       : [],
     verification_targets: [],
+    comparison_targets: [],
     item_detail_ids: [],
     render_requested: false,
     missing_fields: [],

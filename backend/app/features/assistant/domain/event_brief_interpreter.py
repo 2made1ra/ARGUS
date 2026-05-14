@@ -19,6 +19,10 @@ from app.features.assistant.domain.llm_router import (
     validate_llm_router_json,
 )
 from app.features.assistant.domain.slot_extraction import extract_event_brief_slots
+from app.features.assistant.domain.taxonomy import (
+    canonical_city_for,
+    service_categories_for,
+)
 from app.features.assistant.dto import (
     AssistantInterfaceMode,
     BriefState,
@@ -43,6 +47,7 @@ class EventBriefInterpreter:
         *,
         message: str,
         brief: BriefState,
+        recent_turns: list[ChatTurn] | None = None,
         visible_candidates: list[VisibleCandidate] | None = None,
         candidate_item_ids: list[UUID] | None = None,
     ) -> Interpretation:
@@ -56,8 +61,11 @@ class EventBriefInterpreter:
         search_requests: list[SearchRequest] = []
         brief_update = BriefState()
         verification_targets: list[UUID] = []
+        comparison_targets: list[UUID] = []
 
-        if signals.render_requested:
+        if signals.render_requested and (
+            _has_active_brief(brief) or not signals.event_creation
+        ):
             interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
             intent = "render_brief"
             reason_codes.append("render_brief_requested")
@@ -83,6 +91,24 @@ class EventBriefInterpreter:
                 reason_codes.append("contextual_reference_resolved")
             else:
                 reason_codes.append("context_missing_for_reference")
+        elif signals.comparison_requested:
+            interface_mode = (
+                AssistantInterfaceMode.BRIEF_WORKSPACE
+                if _has_active_brief(brief)
+                else AssistantInterfaceMode.CHAT_SEARCH
+            )
+            intent = "comparison"
+            reason_codes.append("comparison_requested")
+            comparison_targets = _comparison_targets_from_context(
+                message=message,
+                visible_candidates=visible_candidates or [],
+                candidate_item_ids=candidate_item_ids or [],
+            )
+            if len(comparison_targets) >= 2:
+                requested_actions.append("compare_items")
+                reason_codes.append("contextual_reference_resolved")
+            else:
+                reason_codes.append("comparison_context_missing")
         elif signals.verification_requested:
             interface_mode = (
                 AssistantInterfaceMode.BRIEF_WORKSPACE
@@ -100,8 +126,45 @@ class EventBriefInterpreter:
                 requested_actions.append("verify_supplier_status")
             else:
                 reason_codes.append("verification_context_missing")
-        elif signals.direct_catalog_search and (
-            _has_active_brief(brief) or signals.contextual_brief_update
+        elif _is_contextual_search_refinement(message=message, slots=slots) and (
+            recent_categories := _recent_search_categories(recent_turns or [])
+        ):
+            interface_mode = AssistantInterfaceMode.CHAT_SEARCH
+            intent = "supplier_search"
+            requested_actions.append("search_items")
+            reason_codes.append("direct_catalog_search_detected")
+            reason_codes.append("recent_turn_service_context_used")
+            search_requests = _search_requests_for_categories(
+                message=message,
+                slots=slots,
+                categories=recent_categories,
+            )
+        elif (
+            _has_active_brief(brief)
+            and not signals.direct_catalog_search
+            and _has_follow_up_brief_update(slots)
+        ):
+            interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
+            intent = "brief_discovery"
+            requested_actions.append("update_brief")
+            reason_codes.append("brief_update_detected")
+            merged_preview = merge_brief(brief, slots)
+            brief_update = _with_open_questions(
+                slots,
+                missing_event_intake_fields(merged_preview),
+            )
+        elif _has_active_brief(brief) and _is_brief_clarification_request(message):
+            interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
+            intent = "clarification"
+            reason_codes.append("brief_clarification_requested")
+        elif (
+            signals.direct_catalog_search
+            and not signals.event_creation
+            and _has_active_brief(brief)
+            and (
+                signals.contextual_brief_update
+                or _has_brief_update_for_search(slots)
+            )
         ):
             interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
             intent = "mixed"
@@ -150,6 +213,7 @@ class EventBriefInterpreter:
             requested_actions=requested_actions,
             search_requests=search_requests,
             verification_targets=verification_targets,
+            comparison_targets=comparison_targets,
             missing_fields=(
                 ["candidate_context"]
                 if (
@@ -159,6 +223,10 @@ class EventBriefInterpreter:
                 or (
                     signals.selection_requested
                     and "select_item" not in requested_actions
+                )
+                or (
+                    signals.comparison_requested
+                    and "compare_items" not in requested_actions
                 )
                 else []
             ),
@@ -171,6 +239,10 @@ class EventBriefInterpreter:
                 or (
                     signals.selection_requested
                     and "select_item" not in requested_actions
+                )
+                or (
+                    signals.comparison_requested
+                    and "compare_items" not in requested_actions
                 )
                 else []
             ),
@@ -188,6 +260,7 @@ class EventBriefInterpreter:
         deterministic = self.interpret(
             message=message,
             brief=brief,
+            recent_turns=recent_turns,
             visible_candidates=visible_candidates,
             candidate_item_ids=candidate_item_ids or [],
         )
@@ -229,11 +302,17 @@ _SELECTION_CONTEXT_QUESTION = (
     "Какой вариант добавить? Передайте visible_candidates с ordinal и item_id "
     "или выберите позицию в карточках."
 )
+_COMPARISON_CONTEXT_QUESTION = (
+    "Какие две позиции сравнить? Передайте visible_candidates с ordinal и "
+    "item_id или candidate_item_ids для видимых карточек."
+)
 
 
 def _context_question_for(signals: ActionSignals) -> str:
     if signals.selection_requested:
         return _SELECTION_CONTEXT_QUESTION
+    if signals.comparison_requested:
+        return _COMPARISON_CONTEXT_QUESTION
     return _VERIFICATION_CONTEXT_QUESTION
 
 
@@ -277,6 +356,68 @@ def _selection_ordinals_for(message: str) -> list[int]:
         ):
             ordinals.append(ordinal)
     return _dedupe_int(ordinals)
+
+
+def _comparison_targets_from_context(
+    *,
+    message: str,
+    visible_candidates: list[VisibleCandidate],
+    candidate_item_ids: list[UUID],
+) -> list[UUID]:
+    ordinals = _comparison_ordinals_for(message)
+    visible_targets = _targets_for_ordinals(
+        ordinals=ordinals,
+        visible_candidates=visible_candidates,
+    )
+    if ordinals:
+        if len(visible_targets) >= 2:
+            return visible_targets[:2]
+        if not visible_candidates and len(candidate_item_ids) >= 2:
+            return _dedupe_uuid(candidate_item_ids)[:2]
+        return visible_targets[:2]
+    if len(visible_candidates) >= 2:
+        return _dedupe_uuid(
+            [
+                candidate.item_id
+                for candidate in sorted(
+                    visible_candidates,
+                    key=lambda candidate: candidate.ordinal,
+                )
+            ],
+        )[:2]
+    if len(candidate_item_ids) >= 2:
+        return _dedupe_uuid(candidate_item_ids)[:2]
+    return []
+
+
+def _comparison_ordinals_for(message: str) -> list[int]:
+    lower = message.lower()
+    if re.search(r"\bперв(?:ые|ых)\s+(?:два|2)\b", lower):
+        return [1, 2]
+    if re.search(r"\bперв(?:ый|ого|ую)\s+и\s+втор(?:ой|ого|ую)\b", lower):
+        return [1, 2]
+    if re.search(r"\bвтор(?:ой|ого|ую)\s+и\s+трет(?:ий|ьего|ью)\b", lower):
+        return [2, 3]
+    return _selection_ordinals_for(message)
+
+
+def _targets_for_ordinals(
+    *,
+    ordinals: list[int],
+    visible_candidates: list[VisibleCandidate],
+) -> list[UUID]:
+    if not visible_candidates or not ordinals:
+        return []
+    candidates_by_ordinal = {
+        candidate.ordinal: candidate.item_id for candidate in visible_candidates
+    }
+    return _dedupe_uuid(
+        [
+            candidates_by_ordinal[ordinal]
+            for ordinal in ordinals
+            if ordinal in candidates_by_ordinal
+        ],
+    )
 
 
 def _verification_targets_from_context(
@@ -375,8 +516,21 @@ def _search_requests(*, message: str, slots: BriefState) -> list[SearchRequest]:
     if not categories:
         return []
 
+    return _search_requests_for_categories(
+        message=message,
+        slots=slots,
+        categories=categories,
+    )
+
+
+def _search_requests_for_categories(
+    *,
+    message: str,
+    slots: BriefState,
+    categories: list[str],
+) -> list[SearchRequest]:
     requests: list[SearchRequest] = []
-    for index, category in enumerate(categories, start=1):
+    for index, category in enumerate(_dedupe_str(categories), start=1):
         query = _search_query(message=message, category=category, slots=slots)
         requests.append(
             SearchRequest(
@@ -387,6 +541,107 @@ def _search_requests(*, message: str, slots: BriefState) -> list[SearchRequest]:
             )
         )
     return requests
+
+
+def _is_contextual_search_refinement(
+    *,
+    message: str,
+    slots: BriefState,
+) -> bool:
+    if _has_service_category(slots):
+        return False
+    lower = message.lower()
+    return (
+        canonical_city_for(lower) is not None
+        or bool(slots.preferences)
+        or any(
+            marker in lower
+            for marker in (
+                "кто сможет",
+                "быстро",
+                "срочно",
+                "еще",
+                "ещё",
+                "другие",
+                "варианты",
+                "под это",
+            )
+        )
+    )
+
+
+def _has_service_category(slots: BriefState) -> bool:
+    return bool(slots.service_needs or slots.required_services)
+
+
+def _has_follow_up_brief_update(slots: BriefState) -> bool:
+    return any(
+        (
+            slots.event_type,
+            slots.event_goal,
+            slots.concept,
+            slots.format,
+            slots.city,
+            slots.date_or_period,
+            slots.audience_size,
+            slots.venue_status,
+            slots.venue_constraints,
+            slots.duration_or_time_window,
+            slots.event_level,
+            slots.budget_total,
+            slots.budget_per_guest,
+            slots.budget_notes,
+            slots.catering_format,
+            slots.technical_requirements,
+            slots.service_needs,
+            slots.required_services,
+            slots.must_have_services,
+            slots.nice_to_have_services,
+            slots.constraints,
+            slots.preferences,
+        )
+    )
+
+
+def _is_brief_clarification_request(message: str) -> bool:
+    lower = message.lower()
+    return "что еще нужно уточнить" in lower or "что ещё нужно уточнить" in lower
+
+
+def _has_brief_update_for_search(slots: BriefState) -> bool:
+    return any(
+        (
+            slots.venue_status,
+            slots.venue_constraints,
+            slots.budget_total,
+            slots.budget_notes,
+            slots.catering_format,
+            slots.technical_requirements,
+            slots.constraints,
+        )
+    )
+
+
+def _recent_search_categories(recent_turns: list[ChatTurn]) -> list[str]:
+    categories: list[str] = []
+    for turn in reversed(recent_turns[-6:]):
+        if turn.role != "user":
+            continue
+        categories.extend(service_categories_for(turn.content))
+        if categories:
+            break
+    return _dedupe_str(categories)
+
+
+def _dedupe_str(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        result.append(value)
+        seen.add(value)
+    return result
 
 
 def _search_query(

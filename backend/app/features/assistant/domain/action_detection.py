@@ -20,6 +20,7 @@ class ActionSignals:
     direct_catalog_search: bool
     contextual_brief_update: bool
     selection_requested: bool
+    comparison_requested: bool
     verification_requested: bool
     render_requested: bool
 
@@ -37,6 +38,7 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
         phrase in lower for phrase in CONTEXTUAL_BRIEF_PHRASES
     )
     selection_requested = _has_selection_signal(lower)
+    comparison_requested = _has_comparison_signal(lower)
     verification_requested = _has_verification_signal(lower)
     render_requested = _has_render_signal(lower)
 
@@ -45,6 +47,7 @@ def detect_action_signals(message: str, brief: BriefState) -> ActionSignals:
         direct_catalog_search=direct_catalog_search,
         contextual_brief_update=contextual_brief_update,
         selection_requested=selection_requested,
+        comparison_requested=comparison_requested,
         verification_requested=verification_requested,
         render_requested=render_requested,
     )
@@ -75,6 +78,7 @@ def _has_event_creation_signal(lower: str) -> bool:
                 "мероприят",
                 "конференц",
                 "презентац",
+                "выпускн",
                 "вечер",
             )
         )
@@ -85,7 +89,7 @@ def _has_needed_event_phrase(lower: str) -> bool:
     return re.search(
         r"\bнуж(?:ен|на|но|ны)\s+"
         r"(?:корпоратив|корпоративный|конференц\w*|мероприят\w*|"
-        r"презентац\w*|вечер)\b",
+        r"презентац\w*|выпускн\w*|вечер)\b",
         lower,
     ) is not None
 
@@ -150,6 +154,36 @@ def _has_selection_signal(lower: str) -> bool:
     return "вариант" in lower or "подборк" in lower
 
 
+def _has_comparison_signal(lower: str) -> bool:
+    has_compare_action = any(
+        phrase in lower
+        for phrase in (
+            "сравни",
+            "сравнить",
+            "сравнение",
+            "сопоставь",
+            "сопоставить",
+        )
+    )
+    if not has_compare_action:
+        return False
+    return any(
+        marker in lower
+        for marker in (
+            "первые два",
+            "первых два",
+            "первый и второй",
+            "1 и 2",
+            "по цене",
+            "по условиям",
+            "ндс",
+            "вариант",
+            "позици",
+            "карточк",
+        )
+    )
+
+
 def _has_render_signal(lower: str) -> bool:
     has_brief = "бриф" in lower
     if not has_brief:
@@ -157,6 +191,10 @@ def _has_render_signal(lower: str) -> bool:
     return any(
         phrase in lower
         for phrase in (
+            "сформируй бриф",
+            "сформировать бриф",
+            "собери бриф",
+            "собрать бриф",
             "собери итоговый",
             "собрать итоговый",
             "финальный",
