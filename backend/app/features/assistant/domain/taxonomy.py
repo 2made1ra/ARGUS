@@ -68,7 +68,7 @@ SERVICE_ALIASES: tuple[ServiceAlias, ...] = (
         ("мебел", "стойка регистрации", "ресепшен", "стол", "стуль"),
     ),
     ServiceAlias("площадка", ("площадк", "лофт")),
-    ServiceAlias("оборудование", ("оборудован",)),
+    ServiceAlias("оборудование", ("оборудован", "инвентар", "спортинвентар")),
 )
 
 SERVICE_BUNDLES: dict[str, tuple[ServiceNeedTemplate, ...]] = {
@@ -186,6 +186,7 @@ SEARCH_NOUNS: tuple[str, ...] = (
     "цена",
     "стоимость",
     "оборудован",
+    "инвентар",
 )
 
 CONTEXTUAL_BRIEF_PHRASES: tuple[str, ...] = (

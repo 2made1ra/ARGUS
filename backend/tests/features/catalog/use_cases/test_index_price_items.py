@@ -8,7 +8,10 @@ from uuid import UUID, uuid4
 import pytest
 from app.features.catalog.entities.price_item import PriceItem
 from app.features.catalog.ports import CatalogVectorPoint
-from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
+from app.features.catalog.use_cases.index_price_items import (
+    IndexPriceItemsProgress,
+    IndexPriceItemsUseCase,
+)
 
 
 class FakePriceItemIndexRepository:
@@ -18,8 +21,18 @@ class FakePriceItemIndexRepository:
         self.embedding_failed_calls: list[dict[str, Any]] = []
         self.indexing_failed_calls: list[dict[str, Any]] = []
 
-    async def list_active_for_indexing(self, *, limit: int) -> list[PriceItem]:
-        return self.items[:limit]
+    async def list_active_for_indexing(
+        self,
+        *,
+        limit: int | None,
+        import_batch_id: UUID | None = None,
+    ) -> list[PriceItem]:
+        items = self.items
+        if import_batch_id is not None:
+            items = [item for item in items if item.import_batch_id == import_batch_id]
+        if limit is None:
+            return items
+        return items[:limit]
 
     async def mark_indexed(
         self,
@@ -236,6 +249,42 @@ async def test_indexes_active_item_with_prefixed_embedding_text_and_new_vector(
     assert item.indexed_at is not None
     assert repository.indexed_calls[0]["embedding_model"] == "nomic-embed-text-v1.5"
     assert uow.commit_count == 2
+
+
+@pytest.mark.asyncio
+async def test_index_price_items_supports_unlimited_progress_callback() -> None:
+    first = _item()
+    second = _item()
+    uc, _repository, _embeddings, _index, _uow = _use_case(items=[first, second])
+    events: list[IndexPriceItemsProgress] = []
+
+    async def capture(event: IndexPriceItemsProgress) -> None:
+        events.append(event)
+
+    result = await uc.execute(limit=None, progress_callback=capture)
+
+    assert result.total == 2
+    assert result.indexed == 2
+    assert [event.processed for event in events] == [1, 2, 2]
+    assert all(event.total == 2 for event in events)
+    assert events[-1].done is True
+    assert events[-1].indexed == 2
+
+
+@pytest.mark.asyncio
+async def test_index_price_items_can_scope_to_import_batch() -> None:
+    target_batch_id = uuid4()
+    target = _item()
+    target.import_batch_id = target_batch_id
+    other = _item()
+    uc, _repository, embeddings, index, _uow = _use_case(items=[target, other])
+
+    result = await uc.execute(limit=None, import_batch_id=target_batch_id)
+
+    assert result.total == 1
+    assert result.indexed == 1
+    assert len(embeddings.inputs) == 1
+    assert [point.id for point in index.points] == [target.id]
 
 
 @pytest.mark.asyncio

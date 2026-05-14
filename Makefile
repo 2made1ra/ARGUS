@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down infra-logs infra-ps app-up app-down dev worker migrate demo-seed install-ocr uninstall-ocr
+.PHONY: help infra-up infra-down infra-logs infra-ps app-up app-down docker-clean docker-fresh dev worker migrate demo-seed install-ocr uninstall-ocr
 
 help:
 	@echo "Хранилища (postgres, redis, qdrant):"
@@ -16,6 +16,8 @@ help:
 	@echo "Полный стек (docker, профиль app):"
 	@echo "  make app-up        — поднять api + celery-worker в docker"
 	@echo "  make app-down      — остановить api + celery-worker"
+	@echo "  make docker-clean  — удалить контейнеры, volumes и локально собранные образы"
+	@echo "  make docker-fresh  — очистить docker-состояние и поднять полный стек заново"
 	@echo ""
 	@echo "OCR (local Tesseract for the Celery worker):"
 	@echo "  make install-ocr   — install Tesseract + rus/eng language data via Homebrew"
@@ -42,6 +44,12 @@ app-up:
 
 app-down:
 	docker compose --profile app down
+
+docker-clean:
+	docker compose --profile app down -v --rmi local --remove-orphans
+
+docker-fresh: docker-clean
+	docker compose --profile app up -d --build
 
 # --- Локальная разработка ---
 

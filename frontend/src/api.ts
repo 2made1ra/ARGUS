@@ -1,3 +1,5 @@
+import { createCatalogUploadAbortError } from "./utils/catalogImportUpload";
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export interface DocumentOut {
@@ -403,6 +405,7 @@ export interface PriceItemOut {
 export interface PriceItemListOut {
   items: PriceItemOut[];
   total: number;
+  indexed_total: number;
 }
 
 export interface PriceImportSummaryOut {
@@ -429,6 +432,45 @@ export interface IndexPriceItemsSummaryOut {
 export interface CatalogImportIndexedOut {
   import: PriceImportSummaryOut;
   indexing: IndexPriceItemsSummaryOut;
+}
+
+export type CatalogImportJobStatus =
+  | "QUEUED"
+  | "IMPORTING"
+  | "INDEXING"
+  | "COMPLETED"
+  | "FAILED";
+
+export type CatalogImportJobStage =
+  | "upload"
+  | "import"
+  | "indexing"
+  | "completed"
+  | "failed";
+
+export interface CatalogImportJobOut {
+  id: string;
+  filename: string;
+  source_path: string;
+  file_size_bytes: number;
+  status: CatalogImportJobStatus;
+  stage: CatalogImportJobStage;
+  progress_percent: number;
+  stage_progress_percent: number;
+  row_count: number;
+  valid_row_count: number;
+  invalid_row_count: number;
+  index_total: number;
+  indexed: number;
+  embedding_failed: number;
+  indexing_failed: number;
+  skipped: number;
+  import_batch_id: string | null;
+  source_file_id: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  completed_at: string | null;
 }
 
 export interface PriceItemDetailItemOut extends PriceItemOut {
@@ -568,6 +610,79 @@ export async function importAndIndexCatalogCsv(
   );
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json() as Promise<CatalogImportIndexedOut>;
+}
+
+export const getCatalogImportJob = (id: string) =>
+  apiFetch<CatalogImportJobOut>(
+    `/catalog/import-jobs/${encodeURIComponent(id)}`,
+  );
+
+export const getCatalogImportJobStreamUrl = (id: string) =>
+  `${API_URL}/catalog/import-jobs/${encodeURIComponent(id)}/stream`;
+
+export function startCatalogImportJob(
+  file: File,
+  onUploadProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<CatalogImportJobOut> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createCatalogUploadAbortError());
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/catalog/import-jobs`);
+    let settled = false;
+
+    const cleanup = (): void => {
+      signal?.removeEventListener("abort", abortUpload);
+    };
+
+    const resolveOnce = (job: CatalogImportJobOut): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(job);
+    };
+
+    const rejectOnce = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const abortUpload = (): void => {
+      xhr.abort();
+    };
+
+    xhr.upload.onprogress = (event: ProgressEvent<EventTarget>) => {
+      if (!event.lengthComputable || onUploadProgress === undefined) return;
+      onUploadProgress((event.loaded / event.total) * 100);
+    };
+
+    xhr.onerror = () => rejectOnce(new Error("Network error while uploading CSV"));
+    xhr.onabort = () => rejectOnce(createCatalogUploadAbortError());
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        rejectOnce(new Error(`${xhr.status}: ${xhr.responseText}`));
+        return;
+      }
+
+      try {
+        resolveOnce(JSON.parse(xhr.responseText) as CatalogImportJobOut);
+      } catch (error: unknown) {
+        rejectOnce(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    signal?.addEventListener("abort", abortUpload, { once: true });
+    xhr.send(formData);
+  });
 }
 
 export async function patchDocumentFacts(

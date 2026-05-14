@@ -1,19 +1,29 @@
 from __future__ import annotations
 
-from typing import Annotated
+import asyncio
+import json
+import logging
+from collections.abc import AsyncIterator, Callable, Coroutine
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.entrypoints.http.dependencies import (
+    CatalogImportJobFetcher,
+    get_catalog_import_job_fetcher,
+    get_get_catalog_import_job_uc,
     get_get_price_item_uc,
     get_import_prices_csv_uc,
     get_index_price_items_uc,
     get_list_price_items_uc,
     get_search_price_items_uc,
+    get_start_catalog_import_job_uc,
 )
 from app.entrypoints.http.schemas.catalog import (
     CatalogImportIndexedOut,
+    CatalogImportJobOut,
     CatalogSearchRequestIn,
     CatalogSearchResultOut,
     PriceImportSummaryOut,
@@ -23,14 +33,21 @@ from app.entrypoints.http.schemas.catalog import (
     PriceItemOut,
     PriceItemSourceOut,
 )
-from app.features.catalog.ports import PriceItemNotFound
+from app.features.catalog.entities.import_job import CatalogImportJob
+from app.features.catalog.ports import CatalogImportJobNotFound, PriceItemNotFound
+from app.features.catalog.use_cases.get_import_job import GetCatalogImportJobUseCase
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
 from app.features.catalog.use_cases.index_price_items import IndexPriceItemsUseCase
 from app.features.catalog.use_cases.list_price_items import ListPriceItemsUseCase
 from app.features.catalog.use_cases.search_price_items import SearchPriceItemsUseCase
+from app.features.catalog.use_cases.start_import_job import StartCatalogImportJobUseCase
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
+logger = logging.getLogger(__name__)
+
+_JOB_TERMINAL = frozenset({"COMPLETED", "FAILED"})
+type _JobRepo = Callable[[UUID], Coroutine[Any, Any, CatalogImportJob]]
 
 
 @router.post(
@@ -80,10 +97,116 @@ async def import_and_index_catalog_csv(
         filename=file.filename or "prices.csv",
         content=content,
     )
-    indexing_result = await index_uc.execute(limit=index_limit)
+    indexing_result = await index_uc.execute(
+        limit=index_limit,
+        import_batch_id=import_summary.id,
+    )
     return CatalogImportIndexedOut.from_domain(
         import_summary=import_summary,
         indexing_result=indexing_result,
+    )
+
+
+@router.post(
+    "/import-jobs",
+    status_code=202,
+    response_model=CatalogImportJobOut,
+    operation_id="startCatalogImportJob",
+    summary="Start catalog import job",
+    description=(
+        "Stores the uploaded catalog CSV on disk, creates a DB-backed progress "
+        "job and enqueues async import plus indexing."
+    ),
+)
+async def start_catalog_import_job(
+    file: UploadFile,
+    uc: Annotated[
+        StartCatalogImportJobUseCase,
+        Depends(get_start_catalog_import_job_uc),
+    ],
+) -> CatalogImportJobOut:
+    job = await uc.execute(file=file.file, filename=file.filename or "prices.csv")
+    return CatalogImportJobOut.from_domain(job)
+
+
+@router.get(
+    "/import-jobs/{id}",
+    response_model=CatalogImportJobOut,
+    operation_id="getCatalogImportJob",
+    summary="Get catalog import job",
+)
+async def get_catalog_import_job(
+    id: UUID,
+    uc: Annotated[
+        GetCatalogImportJobUseCase,
+        Depends(get_get_catalog_import_job_uc),
+    ],
+) -> CatalogImportJobOut:
+    try:
+        job = await uc.execute(id)
+    except CatalogImportJobNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Catalog import job not found",
+        ) from exc
+    return CatalogImportJobOut.from_domain(job)
+
+
+async def _job_status_stream(
+    job_id: UUID,
+    repo: _JobRepo,
+) -> AsyncIterator[str]:
+    last_payload: dict[str, Any] | None = None
+
+    while True:
+        try:
+            job = await repo(job_id)
+        except CatalogImportJobNotFound:
+            raise
+        except Exception:
+            logger.exception("Catalog import job SSE poll failed for %s", job_id)
+            await asyncio.sleep(1)
+            continue
+
+        payload = CatalogImportJobOut.from_domain(job).model_dump(mode="json")
+        if payload != last_payload:
+            last_payload = payload
+            yield f"data: {json.dumps(payload)}\n\n"
+
+        if job.status in _JOB_TERMINAL:
+            break
+
+        await asyncio.sleep(1)
+
+
+@router.get(
+    "/import-jobs/{id}/stream",
+    response_class=StreamingResponse,
+    operation_id="streamCatalogImportJob",
+    summary="Stream catalog import job progress",
+)
+async def stream_catalog_import_job(
+    id: UUID,
+    fetch_job: Annotated[
+        CatalogImportJobFetcher,
+        Depends(get_catalog_import_job_fetcher),
+    ],
+) -> StreamingResponse:
+    try:
+        await fetch_job(id)
+    except CatalogImportJobNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Catalog import job not found",
+        ) from exc
+
+    return StreamingResponse(
+        _job_status_stream(id, fetch_job),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -103,6 +226,7 @@ async def list_catalog_items(
     return PriceItemListOut(
         items=[PriceItemOut.from_domain(item) for item in result.items],
         total=result.total,
+        indexed_total=result.indexed_total,
     )
 
 

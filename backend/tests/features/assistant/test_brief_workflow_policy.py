@@ -71,6 +71,18 @@ def test_direct_contractor_search_stays_chat_search() -> None:
     assert "venue_status" not in plan.missing_fields
 
 
+def test_direct_inventory_search_stays_chat_search() -> None:
+    plan = _plan_for("найди мне спортивный инвентарь")
+
+    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert plan.should_search_now is True
+    assert plan.search_requests[0].service_category == "оборудование"
+    assert "спортивный инвентарь" in plan.search_requests[0].query
+    assert not plan.search_requests[0].query.startswith("мне ")
+
+
 def test_direct_contractor_search_with_active_brief_stays_chat_search() -> None:
     current_brief = BriefState(event_type="корпоратив")
     interpretation = EventBriefInterpreter().interpret(
