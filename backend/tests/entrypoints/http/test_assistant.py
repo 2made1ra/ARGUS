@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import yaml
 from app.entrypoints.http.dependencies import get_chat_turn_uc
 from app.features.assistant.dto import (
     AssistantChatResponse,
     BriefState,
+    CatalogItemDetail,
     FoundCatalogItem,
     MatchReason,
     RouterDecision,
 )
+from app.main import app as fastapi_app
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
@@ -62,6 +66,22 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
                 ),
             ),
         ],
+        item_details=[
+            CatalogItemDetail(
+                id=item_id,
+                name="Аренда акустической системы",
+                category="Аренда",
+                unit="день",
+                unit_price=Decimal("15000.00"),
+                supplier="ООО НИКА",
+                supplier_inn="7701234567",
+                supplier_city="г. Москва",
+                supplier_phone=None,
+                supplier_email=None,
+                supplier_status=None,
+                source_text="Акустика 2 кВт",
+            ),
+        ],
     )
     app.dependency_overrides[get_chat_turn_uc] = lambda: fake_uc
 
@@ -94,8 +114,21 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
     assert resp.status_code == 200
     body = resp.json()
     assert body["session_id"] == str(session_id)
-    assert set(body) == {"session_id", "message", "router", "brief", "found_items"}
+    assert set(body) == {
+        "session_id",
+        "message",
+        "ui_mode",
+        "router",
+        "action_plan",
+        "brief",
+        "found_items",
+        "item_details",
+        "verification_results",
+        "rendered_brief",
+    }
+    assert body["ui_mode"] == "chat_search"
     assert body["router"]["intent"] == "mixed"
+    assert body["router"]["interface_mode"] == "chat_search"
     assert body["brief"]["event_type"] == "музыкальный вечер"
     assert body["found_items"] == [
         {
@@ -113,9 +146,51 @@ async def test_post_assistant_chat_returns_layered_response(app: FastAPI) -> Non
                 "code": "semantic",
                 "label": "Семантическое совпадение с запросом",
             },
+            "result_group": None,
+            "matched_service_category": None,
+            "matched_service_categories": [],
+        },
+    ]
+    assert body["item_details"] == [
+        {
+            "id": str(item_id),
+            "name": "Аренда акустической системы",
+            "category": "Аренда",
+            "unit": "день",
+            "unit_price": "15000.00",
+            "supplier": "ООО НИКА",
+            "supplier_inn": "7701234567",
+            "supplier_city": "г. Москва",
+            "supplier_phone": None,
+            "supplier_email": None,
+            "supplier_status": None,
+            "source_text": "Акустика 2 кВт",
         },
     ]
     call_request = fake_uc.execute.await_args.args[0]
     assert call_request.session_id is None
     assert call_request.message == "Организовать музыкальный вечер на 100 человек"
     assert call_request.brief == BriefState()
+
+
+def test_documented_assistant_openapi_matches_live_schema() -> None:
+    documented = yaml.safe_load(
+        Path("docs/api/openapi.yaml").read_text(encoding="utf-8"),
+    )
+    live = fastapi_app.openapi()
+
+    documented_schemas = documented["components"]["schemas"]
+    live_schemas = live["components"]["schemas"]
+    for schema_name in (
+        "AssistantChatRequestIn",
+        "AssistantChatResponseOut",
+        "ActionPlanOut",
+        "BriefStateIn",
+        "BriefStateOut",
+        "FoundCatalogItemOut",
+        "RouterDecisionOut",
+        "SupplierVerificationResultOut",
+        "RenderedEventBriefOut",
+        "VisibleCandidateIn",
+    ):
+        assert documented_schemas.get(schema_name) == live_schemas[schema_name]

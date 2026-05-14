@@ -1,14 +1,29 @@
-import type { ChatMessage, RouterDecision } from "../api";
+import type {
+  ChatMessage,
+  FoundItem,
+  RouterDecision,
+  SupplierVerificationResult,
+} from "../api";
 import AssistantContent from "./AssistantContent";
+import FoundItemsPanel from "./FoundItemsPanel";
+import VerificationResultsPanel from "./VerificationResultsPanel";
+
+export interface AssistantTimelineMessage extends ChatMessage {
+  foundItems?: FoundItem[];
+  foundItemsEmptyState?: "pending" | "no-results";
+  verificationResults?: SupplierVerificationResult[];
+}
 
 interface Props {
-  messages: ChatMessage[];
+  messages: AssistantTimelineMessage[];
   input: string;
   loading: boolean;
   error: string | null;
   latestRouter: RouterDecision | null;
+  selectedItemIds: string[];
   onInputChange: (value: string) => void;
   onSend: (message: string) => Promise<void>;
+  onSelectedItemIdsChange: (itemIds: string[]) => void;
 }
 
 const intentLabels: Record<RouterDecision["intent"], string> = {
@@ -16,6 +31,10 @@ const intentLabels: Record<RouterDecision["intent"], string> = {
   supplier_search: "Поиск",
   mixed: "Бриф + поиск",
   clarification: "Уточнение",
+  selection: "Выбор",
+  comparison: "Сравнение",
+  verification: "Проверка",
+  render_brief: "Финал",
 };
 
 export default function AssistantChat({
@@ -24,8 +43,10 @@ export default function AssistantChat({
   loading,
   error,
   latestRouter,
+  selectedItemIds,
   onInputChange,
   onSend,
+  onSelectedItemIdsChange,
 }: Props) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,21 +80,44 @@ export default function AssistantChat({
           </div>
         ) : (
           messages.map((message, index) => (
-            <article
-              className={`assistant-message assistant-message--${message.role}`}
-              key={`${message.role}-${index}`}
-            >
-              <div className="assistant-message__role">
-                {message.role === "user" ? "Вы" : "ARGUS"}
-              </div>
-              <div className="assistant-message__body">
-                {message.role === "assistant" ? (
-                  <AssistantContent content={message.content} />
-                ) : (
-                  <p>{message.content}</p>
+            <div className="assistant-timeline-item" key={`${message.role}-${index}`}>
+              <article
+                className={`assistant-message assistant-message--${message.role}`}
+              >
+                <div className="assistant-message__role">
+                  {message.role === "user" ? "Вы" : "ARGUS"}
+                </div>
+                <div className="assistant-message__body">
+                  {message.role === "assistant" ? (
+                    <AssistantContent content={message.content} />
+                  ) : (
+                    <p>{message.content}</p>
+                  )}
+                </div>
+              </article>
+
+              {message.role === "assistant" &&
+                message.foundItems !== undefined && (
+                  <FoundItemsPanel
+                    items={message.foundItems}
+                    emptyState={message.foundItemsEmptyState}
+                    title="Каталог в чате"
+                    variant="inline"
+                    selectedItemIds={selectedItemIds}
+                    verificationResults={message.verificationResults ?? []}
+                    onSelectedItemIdsChange={onSelectedItemIdsChange}
+                  />
                 )}
-              </div>
-            </article>
+              {message.role === "assistant" &&
+                message.verificationResults !== undefined &&
+                message.verificationResults.length > 0 && (
+                  <VerificationResultsPanel
+                    relatedItems={message.foundItems ?? []}
+                    results={message.verificationResults}
+                    variant="inline"
+                  />
+                )}
+            </div>
           ))
         )}
       </div>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -17,6 +18,7 @@ from app.adapters.sqlalchemy.models import PriceItem as PriceItemRow
 from app.adapters.sqlalchemy.models import PriceItemSource as PriceItemSourceRow
 from app.adapters.sqlalchemy.price_imports import SqlAlchemyPriceImportRepository
 from app.adapters.sqlalchemy.price_items import SqlAlchemyPriceItemRepository
+from app.features.catalog.dto import SearchPriceItemsFilters
 from app.features.catalog.entities.price_item import (
     PriceImport,
     PriceImportRow,
@@ -95,6 +97,12 @@ def test_price_item_metadata_contains_duplicate_guard_index() -> None:
     index_names = {index.name for index in PriceItemRow.__table__.indexes}
 
     assert "ix_price_items_row_fingerprint_active" in index_names
+
+
+def test_price_item_adapter_does_not_import_catalog_use_case_helpers() -> None:
+    adapter_source = Path("backend/app/adapters/sqlalchemy/price_items.py").read_text()
+
+    assert "app.features.catalog.use_cases.keyword_search" not in adapter_source
 
 
 @pytest.mark.asyncio
@@ -283,3 +291,38 @@ async def test_item_repository_adds_item_and_source() -> None:
     await repository.add_source(source)
 
     assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    ["Екат", "Без НДС", "Активен", "Оборудование"],
+)
+async def test_item_repository_keyword_search_matches_metadata_fields(
+    query: str,
+) -> None:
+    row = _item_row()
+    row.name = "Радиомикрофон"
+    row.source_text = None
+    row.category = "Оборудование"
+    row.section = "Оборудование"
+    row.supplier_city = "г. Екатеринбург"
+    row.supplier_city_normalized = "екатеринбург"
+    session = AsyncMock()
+    session.scalars.return_value = [row]
+    repository = SqlAlchemyPriceItemRepository(cast(AsyncSession, session))
+
+    result = await repository.search_active_by_keywords(
+        query=query,
+        filters=SearchPriceItemsFilters(),
+        limit=10,
+    )
+
+    assert result == [(row.id, 0.5, "keyword_source_text")]
+    statement = session.scalars.await_args.args[0]
+    sql = str(statement.compile())
+    assert "price_items.section" in sql
+    assert "price_items.category" in sql
+    assert "price_items.supplier_city" in sql
+    assert "price_items.has_vat" in sql
+    assert "price_items.supplier_status" in sql

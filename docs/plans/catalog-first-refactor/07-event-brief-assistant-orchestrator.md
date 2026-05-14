@@ -524,7 +524,9 @@ The first renderer should be deterministic/template-based. LLM paraphrasing is o
 - `backend/app/features/assistant/domain/tool_executor.py` - bounded execution of approved backend tools.
 - `backend/app/features/assistant/domain/response_composer.py` - safe Russian prose from router decision, brief state, search status, verification status and rendered brief.
 - `backend/app/features/assistant/domain/brief_renderer.py` - deterministic final brief renderer.
-- `backend/app/features/assistant/domain/llm_router.py` - prompt construction, JSON schema, validation, deterministic-first merge and fallback decisions.
+- `backend/app/features/assistant/domain/llm_router/` - structured router
+  prompt, schema allowlists, validation and deterministic-first merge. The
+  current prompt builder is `prompt.py`.
 - `backend/app/adapters/llm/assistant_router.py` - LM Studio/OpenAI-compatible adapter implementing the assistant LLM router port.
 - `backend/app/adapters/supplier_verification/manual.py` - default adapter that returns `not_verified`.
 - `backend/tests/fixtures/assistant_workflow_cases.json` - golden event-manager workflow dataset.

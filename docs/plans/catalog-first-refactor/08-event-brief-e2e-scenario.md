@@ -2,7 +2,13 @@
 
 **Goal:** Define the product workflow for ARGUS as an event-manager copilot that goes from incoming request to working brief, catalog-backed candidates, supplier verification and final structured brief.
 
-**Relationship to implementation plan:** `docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md` describes the backend implementation. This document describes the target UX, workflow states and acceptance behavior.
+**Relationship to implementation plan:**
+`docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md`
+describes the backend implementation. The phase prompt handoff for that plan is
+`docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`. This
+document describes the target UX, workflow states and acceptance behavior. The
+runtime structured-router prompt implementation referenced by plan 07 lives at
+`backend/app/features/assistant/domain/llm_router/prompt.py`.
 
 ---
 
@@ -229,7 +235,10 @@ search_results_shown
 supplier_verification
 ```
 
-The backend can still return the same `router`, `found_items` and `verification_results` shapes, but the UI chooses layout from `interface_mode`.
+The backend can still return the same `router`, `found_items` and
+`verification_results` shapes, but the UI chooses layout from top-level
+`ui_mode`. Nested `router.interface_mode` and `action_plan.interface_mode` are
+diagnostic/policy mirrors, not a replacement for `ui_mode`.
 
 ### Stage Transition Matrix
 
@@ -490,6 +499,100 @@ Unsafe phrasing:
 Подрядчик работает, хотя verification_results нет.
 ```
 
+## Phase UX-0: Response Contract Inventory
+
+Status: contract inventory complete. This phase documents the API surface the
+frontend needs before broader UI work; it does not imply new runtime behavior,
+layout implementation or additional tool execution.
+
+Checked contract surfaces:
+
+- Backend domain DTOs:
+  `backend/app/features/assistant/dto.py`.
+- HTTP schemas:
+  `backend/app/entrypoints/http/schemas/assistant.py`.
+- Checked-in OpenAPI:
+  `docs/api/openapi.yaml`.
+- Frontend API types:
+  `frontend/src/api.ts`.
+
+Already available fields:
+
+- `message`: top-level assistant prose for explanation, status and questions.
+- `ui_mode`: top-level layout mode, with `brief_workspace` and `chat_search`.
+- `router.interface_mode` and `action_plan.interface_mode`: nested diagnostics
+  and policy state that mirror the selected mode.
+- `router`: intent, confidence, known facts, missing fields, legacy
+  `search_query`, `brief_update`, workflow stage, reason codes,
+  `search_requests`, `tool_intents`, clarification questions and optional
+  user-visible summary.
+- `action_plan`: workflow stage, approved tool intents, `search_requests`,
+  verification targets, item detail ids, render flag, missing fields,
+  clarification questions and skipped action reasons.
+- `brief`: v2 brief state, including concept, event goal, venue constraints,
+  separate budget fields, service fields and `selected_item_ids`.
+- `found_items`: checkable catalog candidates with the minimum card fields plus
+  grouping metadata: `result_group`, `matched_service_category` and
+  `matched_service_categories`.
+- `search_requests`: available on both `router` and `action_plan`; clients
+  should prefer `action_plan.search_requests` for planned/executed UI state.
+- `visible_candidates`: accepted in the request as explicit UI context for
+  ordinal references.
+- `candidate_item_ids`: accepted in the request as explicit candidate context
+  for phrases such as `найденных подрядчиков`.
+- `verification_results`: explicit supplier verification evidence.
+- `rendered_brief`: deterministic final brief artifact when rendering runs.
+
+Missing fields or intentionally absent fields:
+
+- There is no top-level `interface_mode` response alias. The public top-level
+  field is `ui_mode`; `interface_mode` exists inside `router` and
+  `action_plan`.
+- There is no response echo of `visible_candidates` or `candidate_item_ids`.
+  The frontend must build next-turn context from the candidate cards it actually
+  renders, or a later phase must add a backward-compatible response projection.
+- There is no separate grouped-results container. Grouping is currently carried
+  by `found_items` metadata plus `search_requests`.
+
+Fields that need backward-compatible aliases during migration:
+
+- Keep `ui_mode` as the top-level layout field. If a top-level
+  `interface_mode` is added later, keep `ui_mode` until existing clients move.
+- Keep `router.search_query` as a legacy compatibility field while clients
+  migrate to `action_plan.search_requests[]`.
+- Keep legacy `brief.budget` compatibility, but UI should read
+  `budget_total`, `budget_per_guest` and `budget_notes` for new brief surfaces.
+- Keep scalar `matched_service_category` while grouped displays adopt
+  `matched_service_categories`.
+
+Fields that must not be inferred from assistant prose:
+
+- `ui_mode` / `interface_mode`; the brief panel opens only from structured mode.
+- Catalog facts such as supplier, price, unit, city, INN, contacts, source text
+  and match reason; they come from `found_items` or item details.
+- Candidate references such as `второй вариант`, `первые два` and
+  `найденных подрядчиков`; they require `visible_candidates`,
+  `candidate_item_ids` or `brief.selected_item_ids`.
+- Selection state; candidates become proposal rows only through
+  `brief.selected_item_ids`.
+- Supplier legal status; it comes only from `verification_results`, and
+  `active` means registry/legal status only.
+- Final brief evidence; selected candidates and verification summaries must come
+  from structured IDs/results, not prose.
+
+Implemented frontend adapter baseline:
+
+- `frontend/src/utils/assistantUiState.ts` maps `AssistantChatResponse` into
+  explicit UI state: `ui_mode`, `brief`, `found_items`, derived
+  `visible_candidates`, `candidate_item_ids`, `selected_item_ids`,
+  `verification_results` and `rendered_brief`.
+- The adapter gates the draft brief panel only on
+  `ui_mode === "brief_workspace"` and keeps direct `chat_search` results inline
+  in the chat timeline.
+- `frontend/src/utils/assistantRequest.ts` sends `recent_turns`,
+  `visible_candidates` and `candidate_item_ids` on the next request based on
+  the candidate cards the UI actually renders.
+
 ## Response Contract Examples
 
 ### Verification With Candidate Context
@@ -664,7 +767,9 @@ Request context:
 
 ```json
 {
-  "selected_item_ids": [],
+  "brief": {
+    "selected_item_ids": []
+  },
   "candidate_item_ids": [],
   "visible_candidates": []
 }
@@ -693,6 +798,71 @@ Expected:
 - if `selected_item_ids` is empty, found candidates are labeled as found but not selected;
 - budget notes do not treat `found_items` as an estimate without selected rows and explicit quantities;
 - unknowns remain open questions.
+
+## Phase UX-8: Documentation And Handoff
+
+Status: documentation handoff complete. This phase documents the implemented UX
+contract and does not add runtime behavior.
+
+Backend references for the next phase:
+
+- Backend orchestrator plan: `docs/plans/catalog-first-refactor/07-event-brief-assistant-orchestrator.md`.
+- Plan 07 phase prompts:
+  `docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`.
+- Public API contract: `docs/api/openapi.yaml`.
+- Domain DTOs: `backend/app/features/assistant/dto.py`.
+- Structured router prompt builder from plan 07:
+  `backend/app/features/assistant/domain/llm_router/prompt.py`.
+
+Frontend references for the next phase:
+
+- Client API types: `frontend/src/api.ts`.
+- UI response adapter: `frontend/src/utils/assistantUiState.ts`.
+- Request context builder: `frontend/src/utils/assistantRequest.ts`.
+- Candidate ordinal mapping: `frontend/src/utils/assistantCandidates.ts`.
+
+Implemented UX flow contract:
+
+- `brief_workspace` is for explicit event creation, planning, preparation,
+  organization, continuation of an active event brief, or final brief rendering.
+  It shows chat plus draft brief, catalog candidates, verification and rendered
+  brief surfaces.
+- `chat_search` is for direct contractor, supplier, catalog item, service or
+  price search. It stays a simple chat with search clarifications and inline
+  catalog cards.
+- Chat remains the primary interaction surface in both modes.
+- The brief panel opens only from structured `ui_mode === "brief_workspace"`.
+  Assistant prose must not open the panel by itself.
+
+Request context handoff:
+
+- `visible_candidates` is request-only UI context that maps visible card
+  ordinals to item ids. It is required for references such as `второй вариант`
+  and `первые два`.
+- `candidate_item_ids` is request-only candidate context for references such as
+  `найденных подрядчиков`. The current frontend derives it from rendered
+  candidate cards.
+- `selected_item_ids` lives inside `brief` and is the only explicit selection
+  state. A selected proposal row exists only after the user selects a candidate.
+- The response does not echo `visible_candidates` or `candidate_item_ids`; the
+  frontend must rebuild them from the cards it keeps visible.
+
+Evidence boundaries:
+
+- `message` is status text, grouping guidance and clarification text. It is not
+  the source of catalog facts.
+- Catalog facts must come from `found_items`, opened item details or another
+  structured catalog evidence surface.
+- `found_items` are candidates. They are not selected budget/proposal rows until
+  their ids appear in `brief.selected_item_ids`.
+- `verification_results` are legal/registry evidence. `status=active` means
+  active in the verification source only; it is not event-date availability, a
+  recommendation or proof of an active agency contract.
+- `rendered_brief` is the final structured artifact. It must label unselected
+  found candidates as found but not selected when `selected_item_ids` is empty.
+
+No remaining documentation/API mismatch was found in this phase after updating
+the `ui_mode` wording and the verification-without-context request example.
 
 ## Out Of Scope For The First Implementation
 

@@ -126,7 +126,9 @@ class CatalogSearchFilters:
     has_vat: str | None = None
     vat_mode: str | None = None
     supplier_city: str | None = None
+    supplier_city_normalized: str | None = None
     supplier_status: str | None = None
+    supplier_status_normalized: str | None = None
     embedding_template_version: str | None = None
 
 

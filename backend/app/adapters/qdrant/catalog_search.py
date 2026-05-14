@@ -46,7 +46,9 @@ def _filter_from_catalog_filters(filters: CatalogSearchFilters | None) -> Filter
         ("has_vat", filters.has_vat),
         ("vat_mode", filters.vat_mode),
         ("supplier_city", filters.supplier_city),
+        ("supplier_city_normalized", filters.supplier_city_normalized),
         ("supplier_status", filters.supplier_status),
+        ("supplier_status_normalized", filters.supplier_status_normalized),
         ("embedding_template_version", filters.embedding_template_version),
     )
     for key, value in exact_values:

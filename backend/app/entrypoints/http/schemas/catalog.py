@@ -160,18 +160,30 @@ class PriceItemDetailOut(BaseModel):
 
 class CatalogSearchFiltersIn(BaseModel):
     supplier_city: str | None = None
+    supplier_city_normalized: str | None = None
     category: str | None = None
+    section: str | None = None
     supplier_status: str | None = None
+    supplier_status_normalized: str | None = None
     has_vat: str | None = None
+    vat_mode: str | None = None
     unit_price: Decimal | None = None
+    unit_price_min: Decimal | None = None
+    unit_price_max: Decimal | None = None
 
     def to_domain(self) -> SearchPriceItemsFilters:
         return SearchPriceItemsFilters(
             supplier_city=self.supplier_city,
+            supplier_city_normalized=self.supplier_city_normalized,
             category=self.category,
+            section=self.section,
             supplier_status=self.supplier_status,
+            supplier_status_normalized=self.supplier_status_normalized,
             has_vat=self.has_vat,
+            vat_mode=self.vat_mode,
             unit_price=self.unit_price,
+            unit_price_min=self.unit_price_min,
+            unit_price_max=self.unit_price_max,
         )
 
 

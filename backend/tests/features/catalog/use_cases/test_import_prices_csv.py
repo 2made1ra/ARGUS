@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 from collections.abc import Sequence
+from pathlib import Path
 from uuid import UUID
 
 from app.features.catalog.entities.price_item import (
@@ -102,6 +105,20 @@ def _csv(rows: Sequence[str]) -> bytes:
     ).encode()
 
 
+def _prices_csv_fixture_rows(external_ids: set[str]) -> bytes:
+    with Path("test_files/prices.csv").open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames
+        assert fieldnames is not None
+        selected = [row for row in reader if row["id"] in external_ids]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(selected)
+    return output.getvalue().encode()
+
+
 def _catalog_row(
     *,
     external_id: str,
@@ -174,6 +191,41 @@ async def test_import_prices_csv_stores_raw_rows_and_normalized_items() -> None:
     assert "Описание / источник: Описание\nстрока" in item.embedding_text
     assert item.source_import_row_id == row.id
     assert uow.commit_count == 1
+
+
+async def test_import_prices_csv_loads_representative_rows_from_fixture() -> None:
+    uc, imports, items, uow = _use_case()
+
+    summary = await uc.execute(
+        filename="prices.csv",
+        content=_prices_csv_fixture_rows({"244", "325", "447", "467", "897", "899"}),
+        source_path="test_files/prices.csv",
+    )
+
+    assert summary.status == "IMPORTED"
+    assert summary.row_count == 6
+    assert summary.valid_row_count == 6
+    assert summary.invalid_row_count == 0
+    assert len(imports.rows) == 6
+    assert len(items.items) == 6
+    assert uow.commit_count == 1
+
+    by_external_id = {item.external_id: item for item in items.items}
+    nika_item = by_external_id["897"]
+    assert nika_item.supplier == "ООО НИКА"
+    assert nika_item.supplier_inn == "7726476100"
+    assert nika_item.has_vat == "Без НДС"
+    assert nika_item.supplier_status == "Активен"
+
+    radio_item = by_external_id["244"]
+    assert "Радиомикрофон" in radio_item.name
+    assert radio_item.section == "Оборудование"
+    assert radio_item.category == "Оборудование"
+    assert radio_item.supplier_city == "г. Екатеринбург"
+
+    source_text_item = by_external_id["899"]
+    assert source_text_item.source_text is not None
+    assert "1.1.2. Оператор ПТС" in source_text_item.source_text
 
 
 async def test_import_prices_csv_returns_existing_summary_for_duplicate_file() -> None:

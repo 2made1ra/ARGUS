@@ -9,6 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.sqlalchemy.models import PriceImportRow as PriceImportRowRow
 from app.adapters.sqlalchemy.models import PriceItem as PriceItemRow
 from app.adapters.sqlalchemy.models import PriceItemSource as PriceItemSourceRow
+from app.features.catalog.domain.keyword_search import (
+    CatalogKeywordFields,
+    KeywordQuery,
+    build_keyword_query,
+    keyword_reason_for_fields,
+    keyword_score,
+)
 from app.features.catalog.dto import MatchReasonCode, SearchPriceItemsFilters
 from app.features.catalog.entities.price_item import (
     PriceItem,
@@ -100,8 +107,8 @@ class SqlAlchemyPriceItemRepository:
         if not query or limit < 1:
             return []
 
-        terms = _keyword_terms(query)
-        keyword_conditions = _keyword_conditions(query, terms)
+        keyword_query = build_keyword_query(query)
+        keyword_conditions = _keyword_conditions(keyword_query)
         if not keyword_conditions:
             return []
 
@@ -120,10 +127,13 @@ class SqlAlchemyPriceItemRepository:
         hits: list[tuple[UUID, float, MatchReasonCode]] = []
         seen: set[UUID] = set()
         for row in rows:
-            reason = _keyword_reason(row, query=query, terms=terms)
+            reason = keyword_reason_for_fields(
+                _keyword_fields_from_row(row),
+                keyword_query,
+            )
             if reason is None or row.id in seen:
                 continue
-            hits.append((row.id, _keyword_score(reason), reason))
+            hits.append((row.id, keyword_score(reason), reason))
             seen.add(row.id)
             if len(hits) >= limit:
                 break
@@ -313,105 +323,97 @@ def _search_filter_conditions(filters: SearchPriceItemsFilters) -> list[object]:
     conditions: list[object] = []
     if filters.supplier_city is not None:
         conditions.append(PriceItemRow.supplier_city == filters.supplier_city)
+    if filters.supplier_city_normalized is not None:
+        conditions.append(
+            PriceItemRow.supplier_city_normalized == filters.supplier_city_normalized,
+        )
     if filters.category is not None:
         conditions.append(PriceItemRow.category == filters.category)
+    if filters.section is not None:
+        conditions.append(PriceItemRow.section == filters.section)
     if filters.supplier_status is not None:
         conditions.append(PriceItemRow.supplier_status == filters.supplier_status)
+    if filters.supplier_status_normalized is not None:
+        conditions.append(
+            PriceItemRow.supplier_status_normalized
+            == filters.supplier_status_normalized,
+        )
     if filters.has_vat is not None:
         conditions.append(PriceItemRow.has_vat == filters.has_vat)
+    if filters.vat_mode is not None:
+        conditions.append(PriceItemRow.vat_mode == filters.vat_mode)
     if filters.unit_price is not None:
         conditions.append(PriceItemRow.unit_price == filters.unit_price)
+    if filters.unit_price_min is not None:
+        conditions.append(PriceItemRow.unit_price >= filters.unit_price_min)
+    if filters.unit_price_max is not None:
+        conditions.append(PriceItemRow.unit_price <= filters.unit_price_max)
     return conditions
 
 
-def _keyword_conditions(query: str, terms: list[str]) -> list[object]:
-    conditions: list[object] = [PriceItemRow.external_id == query]
-    digits = _digits_only(query)
-    if digits:
-        conditions.append(PriceItemRow.supplier_inn == digits)
+def _keyword_conditions(keyword_query: KeywordQuery) -> list[object]:
+    conditions: list[object] = [
+        func.lower(PriceItemRow.external_id) == keyword_query.normalized,
+    ]
+    if keyword_query.digits:
+        conditions.append(PriceItemRow.supplier_inn == keyword_query.digits)
 
-    conditions.append(PriceItemRow.supplier.ilike(_contains_pattern(query)))
-    if terms:
+    if keyword_query.raw:
         conditions.append(
-            and_(
-                *[
-                    PriceItemRow.name.ilike(_contains_pattern(term))
-                    for term in terms
-                ],
-            ),
+            PriceItemRow.supplier.ilike(_contains_pattern(keyword_query.raw)),
         )
-        conditions.append(
-            and_(
-                *[
-                    PriceItemRow.source_text.ilike(_contains_pattern(term))
-                    for term in terms
-                ],
-            ),
-        )
+
+    if keyword_query.term_groups:
+        for column in (
+            PriceItemRow.supplier,
+            PriceItemRow.name,
+            PriceItemRow.source_text,
+            PriceItemRow.section,
+            PriceItemRow.category,
+            PriceItemRow.supplier_city,
+            PriceItemRow.has_vat,
+            PriceItemRow.supplier_status,
+        ):
+            conditions.append(
+                _column_contains_term_groups(column, keyword_query.term_groups),
+            )
     return conditions
 
 
-def _keyword_reason(
-    row: PriceItemRow,
-    *,
-    query: str,
-    terms: list[str],
-) -> MatchReasonCode | None:
-    query_normalized = query.casefold()
-    if row.external_id is not None and row.external_id.casefold() == query_normalized:
-        return "keyword_external_id"
-
-    digits = _digits_only(query)
-    if digits and row.supplier_inn == digits:
-        return "keyword_inn"
-
-    if _contains_text(row.supplier, query):
-        return "keyword_supplier"
-
-    if _contains_terms(row.name, terms):
-        return "keyword_name"
-
-    if _contains_terms(row.source_text, terms):
-        return "keyword_source_text"
-
-    return None
+def _column_contains_term_groups(
+    column: object,
+    term_groups: tuple[tuple[str, ...], ...],
+) -> object:
+    return and_(
+        *[
+            or_(
+                *[
+                    column.ilike(_contains_pattern(variant))  # type: ignore[attr-defined]
+                    for variant in variants
+                ],
+            )
+            for variants in term_groups
+        ],
+    )
 
 
-def _keyword_score(reason: MatchReasonCode) -> float:
-    scores: dict[MatchReasonCode, float] = {
-        "keyword_external_id": 0.72,
-        "keyword_inn": 0.7,
-        "keyword_supplier": 0.62,
-        "keyword_name": 0.58,
-        "keyword_source_text": 0.5,
-        "semantic": 0.0,
-    }
-    return scores[reason]
-
-
-def _keyword_terms(query: str) -> list[str]:
-    return [term for term in query.split() if term]
+def _keyword_fields_from_row(row: PriceItemRow) -> CatalogKeywordFields:
+    return CatalogKeywordFields(
+        external_id=row.external_id,
+        name=row.name,
+        source_text=row.source_text,
+        section=row.section,
+        category=row.category,
+        supplier=row.supplier,
+        supplier_inn=row.supplier_inn,
+        supplier_city=row.supplier_city,
+        has_vat=row.has_vat,
+        supplier_status=row.supplier_status,
+    )
 
 
 def _contains_pattern(value: str) -> str:
     return f"%{value}%"
-
-
-def _digits_only(value: str) -> str:
-    return "".join(char for char in value if char.isdigit())
-
-
-def _contains_text(value: str | None, query: str) -> bool:
-    if value is None:
-        return False
-    return query.casefold() in value.casefold()
-
-
-def _contains_terms(value: str | None, terms: list[str]) -> bool:
-    if value is None or not terms:
-        return False
-    normalized = value.casefold()
-    return all(term.casefold() in normalized for term in terms)
 
 
 __all__ = ["SqlAlchemyPriceItemRepository"]

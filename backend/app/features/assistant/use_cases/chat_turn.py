@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import uuid4
 
 from app.features.assistant.brief import merge_brief
+from app.features.assistant.domain.response_composer import ResponseComposer
+from app.features.assistant.domain.search_planning import SearchPlanner
+from app.features.assistant.domain.tool_executor import ToolExecutor
 from app.features.assistant.dto import (
+    ActionPlan,
     AssistantChatRequest,
     AssistantChatResponse,
     BriefState,
-    FoundCatalogItem,
     RouterDecision,
+    SearchRequest,
 )
 from app.features.assistant.ports import AssistantRouter, CatalogSearchTool
 
@@ -20,88 +25,134 @@ class ChatTurnUseCase:
         self,
         *,
         router: AssistantRouter,
-        catalog_search: CatalogSearchTool,
+        catalog_search: CatalogSearchTool | None = None,
+        tool_executor: ToolExecutor | None = None,
+        search_planner: SearchPlanner | None = None,
     ) -> None:
         self._router = router
-        self._catalog_search = catalog_search
+        self._tool_executor = (
+            tool_executor
+            if tool_executor is not None
+            else ToolExecutor(catalog_search=catalog_search, item_details=None)
+        )
+        self._search_planner = (
+            search_planner if search_planner is not None else SearchPlanner()
+        )
 
     async def execute(self, request: AssistantChatRequest) -> AssistantChatResponse:
         current_brief = request.brief if request.brief is not None else BriefState()
         decision = await self._router.route(
             message=request.message,
             brief=current_brief,
+            recent_turns=list(request.recent_turns),
+            visible_candidates=list(request.visible_candidates),
+            candidate_item_ids=list(request.candidate_item_ids),
         )
-        brief = merge_brief(current_brief, decision.brief_update)
-        found_items = await self._search_if_needed(decision)
+        action_plan = (
+            decision.action_plan
+            if decision.action_plan is not None
+            else _action_plan_from_decision(decision)
+        )
+        action_plan, decision = self._plan_searches(
+            action_plan=action_plan,
+            decision=decision,
+            brief_before=current_brief,
+        )
+        tool_results = await self._tool_executor.execute(
+            action_plan=action_plan,
+            brief=current_brief,
+            brief_update=decision.brief_update,
+            message=request.message,
+            recent_turns=list(request.recent_turns),
+            visible_candidates=list(request.visible_candidates),
+            candidate_item_ids=list(request.candidate_item_ids),
+        )
+        executed_action_plan = replace(
+            action_plan,
+            skipped_actions=list(tool_results.skipped_actions),
+        )
+        response_decision = replace(decision, action_plan=executed_action_plan)
         return AssistantChatResponse(
             session_id=request.session_id or uuid4(),
-            message=_message_for(decision, found_items),
-            router=decision,
-            brief=brief,
-            found_items=found_items,
+            message=ResponseComposer().compose_from_decision(
+                decision=response_decision,
+                brief=tool_results.brief,
+                found_items=tool_results.found_items,
+                verification_results=tool_results.verification_results,
+                item_details=tool_results.item_details,
+                rendered_brief=tool_results.rendered_brief,
+            ),
+            router=response_decision,
+            brief=tool_results.brief,
+            found_items=tool_results.found_items,
+            item_details=tool_results.item_details,
+            ui_mode=response_decision.interface_mode,
+            action_plan=executed_action_plan,
+            verification_results=tool_results.verification_results,
+            rendered_brief=tool_results.rendered_brief,
         )
 
-    async def _search_if_needed(
+    def _plan_searches(
         self,
+        *,
+        action_plan: ActionPlan,
         decision: RouterDecision,
-    ) -> list[FoundCatalogItem]:
-        if not decision.should_search_now or decision.search_query is None:
-            return []
-        return await self._catalog_search.search_items(
-            query=decision.search_query,
-            limit=_DEFAULT_SEARCH_LIMIT,
+        brief_before: BriefState,
+    ) -> tuple[ActionPlan, RouterDecision]:
+        if not action_plan.should_search_now:
+            return action_plan, decision
+        brief_after = merge_brief(brief_before, decision.brief_update)
+        planning_decision = replace(decision, action_plan=action_plan)
+        planned_searches = self._search_planner.plan(
+            decision=planning_decision,
+            brief_before=brief_before,
+            brief_after=brief_after,
+            workflow_stage=action_plan.workflow_stage,
         )
-
-
-def _message_for(
-    decision: RouterDecision,
-    found_items: list[FoundCatalogItem],
-) -> str:
-    if decision.should_search_now and not found_items:
-        return (
-            "В каталоге нет строк по этому запросу. Уточните услугу, категорию, "
-            "город, поставщика или ИНН, и я попробую сузить поиск."
+        planned_action = replace(action_plan, search_requests=planned_searches)
+        planned_decision = replace(
+            decision,
+            search_requests=planned_searches,
+            search_query=planned_searches[0].query if planned_searches else None,
+            action_plan=planned_action,
         )
+        return planned_action, planned_decision
 
-    if decision.intent == "brief_discovery":
-        return (
-            "Собрал черновик брифа по вашему сообщению. Чтобы двигаться точнее, "
-            f"уточните: {_questions_for(decision.missing_fields)}."
-        )
 
-    if decision.intent == "supplier_search":
-        return (
-            "Нашел кандидатов в каталоге. Конкретные строки, цены и поставщики "
-            "остаются в found_items; это кандидаты для проверки, а не выбранные "
-            "позиции сметы. Можно уточнить город, дату, формат площадки или бюджет."
-        )
+def _should_update_brief(decision: RouterDecision) -> bool:
+    if "update_brief" in decision.tool_intents:
+        return True
+    return decision.intent in {"brief_discovery", "mixed"}
 
-    if decision.intent == "mixed":
-        return (
-            "Обновил черновик брифа и запустил поиск по очевидной потребности. "
-            "Проверяемые карточки находятся в found_items; это кандидаты, а не "
-            "готовые строки коммерческого предложения. Следом можно уточнить "
-            "город, площадку и бюджет."
-        )
 
-    return (
-        "Уточните, пожалуйста, что нужно сделать: собрать бриф, найти позиции "
-        "в каталоге или совместить оба шага."
+def _action_plan_from_decision(decision: RouterDecision) -> ActionPlan:
+    search_requests = list(decision.search_requests)
+    if not search_requests and decision.search_query is not None:
+        search_requests = [
+            SearchRequest(
+                query=decision.search_query,
+                limit=_DEFAULT_SEARCH_LIMIT,
+            ),
+        ]
+    return ActionPlan(
+        interface_mode=decision.interface_mode,
+        workflow_stage=decision.workflow_stage,
+        tool_intents=list(decision.tool_intents)
+        if decision.tool_intents
+        else _legacy_tool_intents(decision),
+        search_requests=search_requests,
+        missing_fields=list(decision.missing_fields),
+        clarification_questions=list(decision.clarification_questions),
     )
 
 
-def _questions_for(missing_fields: list[str]) -> str:
-    labels = {
-        "city": "город",
-        "audience_size": "количество гостей",
-        "venue_status": "есть ли площадка",
-        "date_or_period": "дату или период",
-        "budget": "ориентир по бюджету",
-    }
-    fields = [labels.get(field, field) for field in missing_fields[:5]]
-    if not fields:
-        return "какая следующая задача приоритетна"
-    return ", ".join(fields)
+def _legacy_tool_intents(decision: RouterDecision) -> list[str]:
+    intents: list[str] = []
+    if decision.intent in {"brief_discovery", "mixed"}:
+        intents.append("update_brief")
+    if decision.should_search_now:
+        intents.append("search_items")
+    return intents
 
 
 __all__ = ["ChatTurnUseCase"]

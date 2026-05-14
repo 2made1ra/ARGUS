@@ -3,6 +3,10 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
+from app.features.catalog.domain.keyword_search import (
+    infer_search_filters_from_query,
+    merge_search_filters,
+)
 from app.features.catalog.dto import (
     FoundPriceItem,
     MatchReason,
@@ -58,7 +62,10 @@ class SearchPriceItemsUseCase:
         if not query or limit < 1:
             return SearchPriceItemsResult(items=[])
 
-        filters = filters or SearchPriceItemsFilters()
+        filters = merge_search_filters(
+            filters or SearchPriceItemsFilters(),
+            infer_search_filters_from_query(query),
+        )
         semantic_hits = await self._semantic_hits(
             query=query,
             filters=filters,
@@ -127,6 +134,9 @@ def _merge_candidates(
     *,
     limit: int,
 ) -> list[_Candidate]:
+    if limit < 1:
+        return []
+
     candidates: list[_Candidate] = []
     seen: set[UUID] = set()
 
@@ -141,13 +151,12 @@ def _merge_candidates(
             ),
         )
         seen.add(hit.price_item_id)
-        if len(candidates) >= limit:
-            return candidates
 
+    keyword_candidates: list[_Candidate] = []
     for item_id, score, reason_code in keyword_hits:
         if item_id in seen:
             continue
-        candidates.append(
+        keyword_candidates.append(
             _Candidate(
                 item_id=item_id,
                 score=score,
@@ -155,10 +164,17 @@ def _merge_candidates(
             ),
         )
         seen.add(item_id)
-        if len(candidates) >= limit:
-            break
 
-    return candidates
+    if len(candidates) < limit:
+        candidates.extend(keyword_candidates[: limit - len(candidates)])
+        return candidates
+
+    if keyword_candidates:
+        # Weak vectors can otherwise fill the response and hide exact catalog matches.
+        strongest_keyword = max(keyword_candidates, key=lambda item: item.score)
+        return [*candidates[: limit - 1], strongest_keyword]
+
+    return candidates[:limit]
 
 
 def _catalog_filters_from_search_filters(
@@ -168,10 +184,16 @@ def _catalog_filters_from_search_filters(
 ) -> CatalogSearchFilters:
     return CatalogSearchFilters(
         category=filters.category,
+        section=filters.section,
         unit_price=_decimal_to_float(filters.unit_price),
+        unit_price_min=_decimal_to_float(filters.unit_price_min),
+        unit_price_max=_decimal_to_float(filters.unit_price_max),
         has_vat=filters.has_vat,
+        vat_mode=filters.vat_mode,
         supplier_city=filters.supplier_city,
+        supplier_city_normalized=filters.supplier_city_normalized,
         supplier_status=filters.supplier_status,
+        supplier_status_normalized=filters.supplier_status_normalized,
         embedding_template_version=embedding_template_version,
     )
 
