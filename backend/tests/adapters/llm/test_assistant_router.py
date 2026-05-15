@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from app.adapters.llm.assistant_router import LMStudioAssistantRouterAdapter
+from app.features.assistant.domain.llm_router.prompt import llm_router_json_schema
 from app.features.assistant.dto import LLMRouterMessage, LLMStructuredRouterRequest
 
 
@@ -92,3 +93,20 @@ async def test_assistant_router_uses_lm_studio_json_schema_response_format(
         "argus_assistant_router"
     )
     assert payload["response_format"]["json_schema"]["schema"]["type"] == "object"
+
+
+def test_llm_router_schema_constrains_nested_brief_update_fields() -> None:
+    schema = llm_router_json_schema()
+
+    assert schema["required"] == ["interface_mode", "intent", "confidence"]
+    brief_update = schema["properties"]["brief_update"]
+    assert brief_update["additionalProperties"] is False
+    assert set(brief_update["properties"]) >= {
+        "event_type",
+        "city",
+        "budget_total",
+        "service_needs",
+    }
+    service_needs = brief_update["properties"]["service_needs"]
+    assert service_needs["items"]["required"] == ["category"]
+    assert service_needs["items"]["additionalProperties"] is False

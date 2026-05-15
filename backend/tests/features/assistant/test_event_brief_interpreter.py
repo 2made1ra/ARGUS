@@ -362,7 +362,9 @@ def test_inventory_follow_up_search_uses_recent_service_context() -> None:
     assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
     assert interpretation.intent == "supplier_search"
     assert interpretation.requested_actions == ["search_items"]
-    assert interpretation.search_requests[0].service_category == "оборудование"
+    assert interpretation.search_requests[0].service_category == (
+        "спортивный инвентарь"
+    )
     assert "200 человек" in interpretation.search_requests[0].query
     assert "recent_turn_service_context_used" in interpretation.reason_codes
 

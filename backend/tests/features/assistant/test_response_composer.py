@@ -99,7 +99,7 @@ def test_rest_of_missing_fields_stay_in_brief_open_questions() -> None:
     assert plan.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
 
 
-def test_render_message_is_short_and_points_to_structured_brief() -> None:
+def test_render_message_includes_structured_brief_in_chat() -> None:
     rendered = RenderedEventBrief(
         title="Бриф мероприятия",
         sections=[
@@ -129,10 +129,33 @@ def test_render_message_is_short_and_points_to_structured_brief() -> None:
         rendered_brief=rendered,
     )
 
-    assert message == (
-        "Подготовил структурированный бриф. "
-        "Открытые вопросы оставил отдельным разделом."
+    assert "Бриф мероприятия" in message
+    assert "Основная информация" in message
+    assert "Тип: корпоратив" in message
+    assert "Открытые вопросы" in message
+    assert "Дата или период мероприятия" in message
+
+
+def test_workspace_search_without_results_reports_empty_catalog_rows() -> None:
+    message = ResponseComposer().compose_from_decision(
+        decision=RouterDecision(
+            intent="supplier_search",
+            confidence=0.9,
+            known_facts={},
+            missing_fields=[],
+            should_search_now=True,
+            search_query="площадка музыкальный вечер",
+            brief_update=BriefState(),
+            interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+            workflow_stage=EventBriefWorkflowState.SUPPLIER_SEARCHING,
+            tool_intents=["search_items"],
+        ),
+        brief=BriefState(event_type="музыкальный вечер", city="Екатеринбург"),
+        found_items=[],
     )
+
+    assert "нет строк" in message.lower()
+    assert "уточняю бриф" not in message.lower()
 
 
 @pytest.mark.asyncio
@@ -166,7 +189,6 @@ async def test_render_brief_turn_returns_structured_artifact() -> None:
     assert response.rendered_brief is not None
     assert response.rendered_brief.evidence["selected_item_ids"] == [str(selected_id)]
     assert details.calls == [selected_id]
-    assert response.message == (
-        "Подготовил структурированный бриф. "
-        "Открытые вопросы оставил отдельным разделом."
-    )
+    assert "Бриф мероприятия" in response.message
+    assert "Основная информация" in response.message
+    assert "Тип: корпоратив" in response.message

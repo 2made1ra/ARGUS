@@ -24,8 +24,9 @@ _PER_GUEST_BUDGET_RE = re.compile(
     re.I,
 )
 _TOTAL_BUDGET_RE = re.compile(
-    r"бюджет\s*(?:около|примерно|до)?\s*(?P<amount>\d+(?:[,.]\d+)?)\s*"
-    r"(?P<multiplier>млн|миллиона|тыс|тысяч)?",
+    r"бюджет\w*\s*(?:около|примерно|до)?\s*"
+    r"(?P<amount>\d+(?:[\s\u00a0]\d{3})*(?:[,.]\d+)?)\s*"
+    r"(?P<multiplier>млн\.?|миллион(?:а|ов)?|тыс\.?|тысяч[аи]?)?",
     re.I,
 )
 
@@ -63,6 +64,7 @@ def extract_event_brief_slots(message: str) -> BriefState:
         audience_size=_audience_size(lower),
         venue_status=_venue_status(lower),
         venue_constraints=venue_constraints,
+        event_level=_event_level(normalized),
         budget_total=_budget_total(lower),
         budget_per_guest=_budget_per_guest(lower),
         catering_format=_catering_format(lower),
@@ -291,11 +293,18 @@ def _budget_total(lower: str) -> int | None:
     match = _TOTAL_BUDGET_RE.search(lower)
     if match is None:
         return None
-    amount = float(match.group("amount").replace(",", "."))
+    amount = float(
+        match.group("amount")
+        .replace("\u00a0", "")
+        .replace(" ", "")
+        .replace(",", "."),
+    )
     multiplier = match.group("multiplier")
-    if multiplier in {"млн", "миллиона"}:
+    if multiplier is not None:
+        multiplier = multiplier.rstrip(".")
+    if multiplier in {"млн", "миллион", "миллиона", "миллионов"}:
         amount *= 1_000_000
-    elif multiplier in {"тыс", "тысяч"}:
+    elif multiplier in {"тыс", "тысяча", "тысячи", "тысяч"}:
         amount *= 1_000
     return int(amount)
 
@@ -329,7 +338,24 @@ def _event_goal(normalized: str) -> str | None:
     return match.group("goal").strip().lower()
 
 
+def _event_level(normalized: str) -> str | None:
+    match = re.search(
+        r"(?:уровень|уровня)\s*[—\-:]?\s*(?P<level>[^,.;]+)",
+        normalized,
+        re.I,
+    )
+    if match is None:
+        return None
+    return match.group("level").strip().lower()
+
+
 def _concept(normalized: str) -> str | None:
+    if re.search(
+        r"(?:концепци\w*\s+не\s+планируется|концепци\w*\s+нет|без\s+концепци)",
+        normalized,
+        re.I,
+    ):
+        return "не планируется"
     match = re.search(
         r"(?:концепция|концепт|в стиле)\s*[—\-:]?\s*(?P<concept>[^,.;]+)",
         normalized,

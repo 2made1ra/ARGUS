@@ -100,6 +100,33 @@ def test_city_filter_matches_catalog_normalization_for_prefixed_city() -> None:
     assert planned[0].filters.supplier_city_normalized == "екатеринбург"
 
 
+def test_sports_inventory_query_stays_specific() -> None:
+    brief_before = BriefState()
+    interpretation = EventBriefInterpreter().interpret(
+        message="мне нужен спортивный инвентарь",
+        brief=brief_before,
+    )
+    action_plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=brief_before,
+    )
+    brief_after = merge_brief(brief_before, interpretation.brief_update)
+    decision = _decision(
+        search_requests=action_plan.search_requests,
+        workflow_stage=action_plan.workflow_stage,
+    )
+
+    planned = SearchPlanner().plan(
+        decision=decision,
+        brief_before=brief_before,
+        brief_after=brief_after,
+        workflow_stage=action_plan.workflow_stage,
+    )
+
+    assert planned[0].service_category == "спортивный инвентарь"
+    assert planned[0].query == "спортивный инвентарь"
+
+
 def test_limits_planned_searches_to_three_by_priority() -> None:
     decision = _decision(
         search_requests=[
