@@ -54,6 +54,10 @@ def _session() -> AsyncSession:
 def build_process_uc() -> ProcessDocumentUseCase:
     settings = get_settings()
     session = _session()
+    os.environ.setdefault("LLM_BASE_URL", settings.llm_base_url)
+    os.environ.setdefault("CHAT_MODEL", settings.chat_model)
+    if settings.api_key is not None:
+        os.environ.setdefault("API_KEY", settings.api_key)
     os.environ.setdefault("LM_STUDIO_URL", settings.lm_studio_url)
     os.environ.setdefault("LM_STUDIO_LLM_MODEL", settings.lm_studio_llm_model)
     return ProcessDocumentUseCase(
@@ -98,11 +102,6 @@ async def build_catalog_index_uc() -> AsyncIterator[IndexPriceItemsUseCase]:
     try:
         yield IndexPriceItemsUseCase(
             items=SqlAlchemyPriceItemRepository(session),
-            embeddings=LMStudioEmbeddings(
-                base_url=settings.lm_studio_url,
-                model=settings.catalog_embedding_model,
-                embedding_dim=settings.catalog_embedding_dim,
-            ),
             index=QdrantCatalogIndex(qdrant_client, settings.catalog_qdrant_collection),
             uow=SessionUnitOfWork(session),
             catalog_embedding_model=settings.catalog_embedding_model,
@@ -110,7 +109,6 @@ async def build_catalog_index_uc() -> AsyncIterator[IndexPriceItemsUseCase]:
             catalog_embedding_template_version=(
                 settings.catalog_embedding_template_version
             ),
-            catalog_document_prefix=settings.catalog_document_prefix,
         )
     finally:
         await qdrant_client.close()
@@ -131,6 +129,7 @@ async def build_index_uc() -> AsyncIterator[IndexDocumentUseCase]:
             embeddings=LMStudioEmbeddings(
                 base_url=settings.lm_studio_url,
                 model=settings.lm_studio_embedding_model,
+                api_key=settings.api_key,
                 embedding_dim=settings.document_embedding_dim,
             ),
             index=QdrantVectorIndex(

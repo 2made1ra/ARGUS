@@ -15,9 +15,14 @@ DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 ALEMBIC_DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 REDIS_URL=redis://localhost:6379/0
 QDRANT_URL=http://localhost:6333
-LM_STUDIO_URL=http://localhost:1234/v1
-LM_STUDIO_EMBEDDING_MODEL=nomic-embed-text-v1.5
-LM_STUDIO_LLM_MODEL=<your model name>
+LLM_BASE_URL=http://localhost:1234/v1
+API_KEY=
+EMBEDDING_MODEL=nomic-embed-text-v1.5
+CHAT_MODEL=<your model name>
+ASSISTANT_AGENT_MAX_TOOL_CALLS_PER_TURN=3
+ASSISTANT_AGENT_MAX_ITERATIONS=4
+ASSISTANT_AGENT_TIMEOUT_SECONDS=30
+RAG_ANSWER_TIMEOUT_SECONDS=60
 ```
 
 Settings are loaded by `backend/app/config.py` via `pydantic-settings`.
@@ -29,17 +34,17 @@ implemented:
 ```text
 DOCUMENT_QDRANT_COLLECTION=document_chunks
 CATALOG_QDRANT_COLLECTION=price_items_search_v1
-CATALOG_EMBEDDING_MODEL=nomic-embed-text-v1.5
-CATALOG_EMBEDDING_DIM=768
-CATALOG_EMBEDDING_TEMPLATE_VERSION=prices_v1
-CATALOG_DOCUMENT_PREFIX="search_document: "
-CATALOG_QUERY_PREFIX="search_query: "
+CATALOG_EMBEDDING_MODEL=text-embedding-3-small
+CATALOG_EMBEDDING_DIM=1536
+CATALOG_EMBEDDING_TEMPLATE_VERSION=legacy_csv_embedding
+CATALOG_DOCUMENT_PREFIX=""
+CATALOG_QUERY_PREFIX=""
 ```
 
-Do not copy catalog dimension from CSV legacy embeddings. For
-`nomic-embed-text-v1.5`, catalog rows are embedded with `search_document: ` and
-user queries with `search_query: `. A prefix/model/dimension/template change
-requires reindexing `price_items_search_v1`.
+Catalog item vectors come from legacy CSV embeddings. User queries must be
+embedded with a compatible model, currently `text-embedding-3-small`, with no
+catalog query prefix by default. A model/dimension/template change requires
+reindexing `price_items_search_v1` from compatible CSV vectors.
 
 ## uv workspace
 
@@ -167,10 +172,10 @@ Event-brief assistant work should start with deterministic/fake LLM tests and
 only use real LM Studio calls for optional integration checks:
 
 ```bash
-uv run --project backend pytest backend/tests/features/assistant/test_workflow_golden_cases.py -v
-uv run --project backend pytest backend/tests/features/assistant/test_event_brief_interpreter.py -v
-uv run --project backend pytest backend/tests/features/assistant/test_brief_workflow_policy.py -v
-uv run --project backend pytest backend/tests/features/assistant/test_response_composer.py -v
+uv run --project backend pytest backend/tests/features/assistant/test_agent_graph.py -v
+uv run --project backend pytest backend/tests/adapters/llm/test_chat.py -v
+uv run --project backend pytest backend/tests/entrypoints/http/test_assistant.py -v
+uv run --project backend pytest backend/tests/entrypoints/http/test_dependencies.py -v
 ```
 
 Frontend work on the two assistant UX modes should end with:

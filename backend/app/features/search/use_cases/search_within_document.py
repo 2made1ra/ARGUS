@@ -6,6 +6,7 @@ from app.core.domain.ids import DocumentId
 from app.features.ingest.ports import EmbeddingService
 from app.features.search.dto import SearchHit, WithinDocumentResult
 from app.features.search.ports import VectorSearch
+from app.features.search.use_cases.payload_values import optional_int
 
 
 class SearchWithinDocumentUseCase:
@@ -55,18 +56,12 @@ class SearchWithinDocumentUseCase:
 def _result_from_hit(hit: SearchHit) -> WithinDocumentResult:
     return WithinDocumentResult(
         chunk_index=int(hit.payload["chunk_index"]),
-        page_start=_optional_int(hit.payload.get("page_start")),
-        page_end=_optional_int(hit.payload.get("page_end")),
+        page_start=optional_int(hit.payload.get("page_start")),
+        page_end=optional_int(hit.payload.get("page_end")),
         section_type=_optional_str(hit.payload.get("section_type")),
         snippet=str(hit.payload["text"]),
         score=hit.score,
     )
-
-
-def _optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    return int(value)
 
 
 def _optional_str(value: Any) -> str | None:

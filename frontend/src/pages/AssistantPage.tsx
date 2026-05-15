@@ -85,19 +85,8 @@ export default function AssistantPage() {
   }
 
   return (
-    <main className="workspace assistant-workspace">
-      <header className="workspace-header assistant-header">
-        <div>
-          <p className="eyebrow">ARGUS MVP</p>
-          <h1>Ассистент мероприятия</h1>
-        </div>
-        <p className="workspace-header__note">
-          Один рабочий экран: диалог, черновик брифа и проверяемые позиции из
-          каталога.
-        </p>
-      </header>
-
-      <section
+    <div className="assistant-stage">
+      <div
         className={`assistant-layout ${
           interfaceMode === "chat_search" ? "assistant-layout--chat-search" : ""
         }`}
@@ -132,7 +121,7 @@ export default function AssistantPage() {
             {renderedBrief && <RenderedBriefPanel brief={renderedBrief} />}
           </aside>
         )}
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }

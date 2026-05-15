@@ -21,6 +21,7 @@ class SearchPriceItemsFilters:
     supplier_city_normalized: str | None = None
     category: str | None = None
     category_normalized: str | None = None
+    service_category: str | None = None
     section: str | None = None
     section_normalized: str | None = None
     supplier_status: str | None = None
@@ -51,6 +52,7 @@ class FoundPriceItem:
     source_text_snippet: str | None
     source_text_full_available: bool
     match_reason: MatchReason
+    service_category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

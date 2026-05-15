@@ -24,6 +24,7 @@ class LMStudioEmbeddings:
         *,
         base_url: str,
         model: str = "nomic-embed-text-v1.5",
+        api_key: str | None = None,
         batch_size: int = 32,
         timeout: float = 60.0,
         embedding_dim: int = 768,
@@ -33,6 +34,7 @@ class LMStudioEmbeddings:
 
         self._base_url = base_url.rstrip("/")
         self._model = model
+        self._api_key = api_key
         self._batch_size = batch_size
         self._timeout = timeout
         self._embedding_dim = embedding_dim
@@ -47,6 +49,7 @@ class LMStudioEmbeddings:
                 response = await client.post(
                     self._embeddings_url(),
                     json={"model": self._model, "input": batch},
+                    headers=_authorization_headers(self._api_key),
                 )
                 response.raise_for_status()
                 batch_embeddings = self._parse_embeddings(response.json())
@@ -80,6 +83,12 @@ class LMStudioEmbeddings:
 def _batches(texts: list[str], batch_size: int) -> Iterator[list[str]]:
     for start in range(0, len(texts), batch_size):
         yield texts[start : start + batch_size]
+
+
+def _authorization_headers(api_key: str | None) -> dict[str, str] | None:
+    if api_key is None or api_key == "":
+        return None
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 __all__ = [

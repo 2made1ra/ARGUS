@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.entrypoints.http.schemas.formatting import decimal_string
 from app.features.assistant.dto import (
     ActionPlan,
     AssistantChatRequest,
@@ -228,6 +228,7 @@ class BriefStateOut(BaseModel):
 class CatalogSearchFiltersOut(BaseModel):
     supplier_city_normalized: str | None
     category: str | None
+    service_category: str | None
     supplier_status_normalized: str | None
     has_vat: str | None
     vat_mode: str | None
@@ -239,6 +240,7 @@ class CatalogSearchFiltersOut(BaseModel):
         return cls(
             supplier_city_normalized=filters.supplier_city_normalized,
             category=filters.category,
+            service_category=filters.service_category,
             supplier_status_normalized=filters.supplier_status_normalized,
             has_vat=filters.has_vat,
             vat_mode=filters.vat_mode,
@@ -408,7 +410,7 @@ class FoundCatalogItemOut(BaseModel):
             name=item.name,
             category=item.category,
             unit=item.unit,
-            unit_price=_decimal_string(item.unit_price),
+            unit_price=decimal_string(item.unit_price),
             supplier=item.supplier,
             supplier_city=item.supplier_city,
             source_text_snippet=item.source_text_snippet,
@@ -441,7 +443,7 @@ class CatalogItemDetailOut(BaseModel):
             name=detail.name,
             category=detail.category,
             unit=detail.unit,
-            unit_price=_decimal_string(detail.unit_price),
+            unit_price=decimal_string(detail.unit_price),
             supplier=detail.supplier,
             supplier_inn=detail.supplier_inn,
             supplier_city=detail.supplier_city,
@@ -557,10 +559,6 @@ class AssistantChatResponseOut(BaseModel):
                 else None
             ),
         )
-
-
-def _decimal_string(value: Decimal) -> str:
-    return f"{value:.2f}"
 
 
 __all__ = [

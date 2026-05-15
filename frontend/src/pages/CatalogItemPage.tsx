@@ -48,7 +48,8 @@ export default function CatalogItemPage() {
 
           <dl className="catalog-detail-facts">
             <Fact label="Цена" value={`${item.unit_price} / ${item.unit}`} />
-            <Fact label="Категория" value={item.category} />
+            <Fact label="Категория поиска" value={item.service_category} />
+            <Fact label="CSV category" value={item.category} />
             <Fact label="Поставщик" value={item.supplier} />
             <Fact label="Город поставщика" value={item.supplier_city} />
             <Fact label="ИНН" value={item.supplier_inn} />

@@ -7,34 +7,10 @@ from app.features.assistant.dto import (
     BriefState,
     CatalogItemDetail,
     CatalogSearchFilters,
-    ChatTurn,
     FoundCatalogItem,
-    LLMStructuredRouterRequest,
     RenderedEventBrief,
-    RouterDecision,
     SupplierVerificationResult,
-    VisibleCandidate,
 )
-
-
-class AssistantRouter(Protocol):
-    async def route(
-        self,
-        *,
-        message: str,
-        brief: BriefState,
-        recent_turns: list[ChatTurn],
-        visible_candidates: list[VisibleCandidate],
-        candidate_item_ids: list[UUID],
-    ) -> RouterDecision: ...
-
-
-class LLMStructuredRouterPort(Protocol):
-    async def route_structured(
-        self,
-        *,
-        prompt: LLMStructuredRouterRequest,
-    ) -> str: ...
 
 
 class CatalogSearchTool(Protocol):
@@ -55,7 +31,7 @@ class CatalogItemDetailsTool(Protocol):
     ) -> CatalogItemDetail | None: ...
 
 
-class SupplierVerificationPort(Protocol):
+class SupplierVerificationTool(Protocol):
     async def verify_by_inn_or_ogrn(
         self,
         *,
@@ -65,7 +41,7 @@ class SupplierVerificationPort(Protocol):
     ) -> SupplierVerificationResult: ...
 
 
-class BriefRendererTool(Protocol):
+class EventBriefRenderTool(Protocol):
     def render(
         self,
         *,
@@ -77,10 +53,8 @@ class BriefRendererTool(Protocol):
 
 
 __all__ = [
-    "AssistantRouter",
-    "BriefRendererTool",
     "CatalogItemDetailsTool",
     "CatalogSearchTool",
-    "LLMStructuredRouterPort",
-    "SupplierVerificationPort",
+    "EventBriefRenderTool",
+    "SupplierVerificationTool",
 ]

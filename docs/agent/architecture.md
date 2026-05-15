@@ -83,7 +83,7 @@ The MVP product direction is catalog-first for event agency managers:
 prices.csv
   -> catalog import use case
   -> Postgres price_items
-  -> deterministic embedding_text prices_v1
+  -> deterministic embedding_text prices_v2
   -> catalog embedding + Qdrant price_items_search_v1
   -> assistant search_items tool
   -> event-brief assistant UI with message + ui_mode + brief + found_items
@@ -110,30 +110,30 @@ collection. Document search/RAG and catalog search are different product flows.
 
 ## Event-Brief Assistant Architecture
 
-The assistant is a controlled chat orchestrator, not a free-running agent.
+The assistant is a LangGraph-backed chat agent with backend-gated tools. It is
+not allowed to execute arbitrary model-selected side effects.
 
 ```text
 POST /assistant/chat
-  -> ChatTurnUseCase
-      -> EventBriefInterpreter
-      -> BriefWorkflowPolicy
-      -> ToolExecutor
-      -> ResponseComposer
+  -> AssistantGraphRunner
+      -> prepare_input
+      -> agent_plan
+      -> validate_tool_calls
+      -> execute_tools
+      -> compose_response
       -> ChatTurnResponse
 ```
 
 Assistant layer rules:
 
-- `EventBriefInterpreter` extracts facts, service needs, action signals and
-  contextual references from `message`, `BriefState`, recent turns and explicit
-  UI context. It may use LLM structured output, but deterministic extraction and
-  schema validation remain mandatory.
-- `BriefWorkflowPolicy` chooses `ui_mode`, workflow stage, missing fields and
-  allowed tools. LLM output cannot authorize tool calls directly.
-- `ToolExecutor` calls only explicit backend tools such as `update_brief`,
-  `search_items`, `get_item_details`, `select_item`, `verify_supplier_status`
-  and `render_event_brief`.
-- `ResponseComposer` builds safe user-facing prose from structured state and
+- `AssistantGraphRunner` owns one-turn graph execution and returns the public
+  `AssistantChatResponse` DTO.
+- The LangChain planner proposes structured messages and tool calls, but
+  `validate_tool_calls` is the authorization boundary.
+- `execute_tools` calls only explicit backend tools such as `search_items`,
+  `get_item_details`, `select_item`, `verify_supplier_status` and
+  `render_event_brief`.
+- `compose_response` builds safe user-facing prose from structured state and
   tool results. It does not invent catalog or supplier facts.
 
 Target `ui_mode` values:

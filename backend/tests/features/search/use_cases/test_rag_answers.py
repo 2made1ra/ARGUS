@@ -213,6 +213,8 @@ async def test_global_rag_answer_groups_contractors_and_returns_sources() -> Non
         context_top_k=5,
     )
 
+    assert use_case._graph.__class__.__name__ == "CompiledStateGraph"
+
     answer = await use_case.execute(
         message="мне нужны поставщики фруктов",
         history=[],
@@ -240,6 +242,8 @@ async def test_contractor_rag_answer_returns_no_evidence_without_hits() -> None:
         documents=FakeDocumentRepository({}),
         llm=llm,
     )
+
+    assert use_case._graph.__class__.__name__ == "CompiledStateGraph"
 
     answer = await use_case.execute(
         contractor_id=contractor_id,
@@ -274,6 +278,8 @@ async def test_document_rag_answer_uses_document_scope_and_sources() -> None:
         summaries=FakeSummaryRepository(),
         llm=llm,
     )
+
+    assert use_case._graph.__class__.__name__ == "CompiledStateGraph"
 
     answer = await use_case.execute(
         document_id=document_id,

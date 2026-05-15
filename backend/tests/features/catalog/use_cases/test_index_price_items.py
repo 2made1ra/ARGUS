@@ -15,8 +15,15 @@ from app.features.catalog.use_cases.index_price_items import (
 
 
 class FakePriceItemIndexRepository:
-    def __init__(self, items: list[PriceItem]) -> None:
+    def __init__(
+        self,
+        items: list[PriceItem],
+        legacy_vectors: dict[UUID, list[float] | None] | None = None,
+    ) -> None:
         self.items = items
+        self.legacy_vectors = legacy_vectors or {
+            item.id: [0.1, 0.2, 0.3] for item in items
+        }
         self.indexed_calls: list[dict[str, Any]] = []
         self.embedding_failed_calls: list[dict[str, Any]] = []
         self.indexing_failed_calls: list[dict[str, Any]] = []
@@ -33,6 +40,9 @@ class FakePriceItemIndexRepository:
         if limit is None:
             return items
         return items[:limit]
+
+    async def get_legacy_embedding(self, item_id: UUID) -> list[float] | None:
+        return self.legacy_vectors.get(item_id)
 
     async def mark_indexed(
         self,
@@ -77,23 +87,6 @@ class FakePriceItemIndexRepository:
             if item.id == item_id:
                 return item
         raise AssertionError(f"Unknown item {item_id}")
-
-
-class FakeEmbeddings:
-    def __init__(
-        self,
-        vectors: list[list[float]] | None = None,
-        error: Exception | None = None,
-    ) -> None:
-        self.vectors = vectors if vectors is not None else [[0.1, 0.2, 0.3]]
-        self.error = error
-        self.inputs: list[list[str]] = []
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        self.inputs.append(texts)
-        if self.error is not None:
-            raise self.error
-        return self.vectors
 
 
 class FakeCatalogIndex:
@@ -178,59 +171,54 @@ def _item(*, is_active: bool = True) -> PriceItem:
 def _use_case(
     *,
     items: list[PriceItem],
-    embeddings: FakeEmbeddings | None = None,
+    legacy_vectors: dict[UUID, list[float] | None] | None = None,
     index: FakeCatalogIndex | None = None,
 ) -> tuple[
     IndexPriceItemsUseCase,
     FakePriceItemIndexRepository,
-    FakeEmbeddings,
     FakeCatalogIndex,
     FakeUoW,
 ]:
-    repository = FakePriceItemIndexRepository(items)
-    embedding_service = embeddings if embeddings is not None else FakeEmbeddings()
+    repository = FakePriceItemIndexRepository(items, legacy_vectors)
     catalog_index = index if index is not None else FakeCatalogIndex()
     uow = FakeUoW()
     return (
         IndexPriceItemsUseCase(
             items=repository,
-            embeddings=embedding_service,
             index=catalog_index,
             uow=uow,
-            catalog_embedding_model="nomic-embed-text-v1.5",
+            catalog_embedding_model="text-embedding-3-small",
             catalog_embedding_dim=3,
-            catalog_embedding_template_version="prices_v1",
-            catalog_document_prefix="search_document: ",
+            catalog_embedding_template_version="legacy_csv_embedding",
         ),
         repository,
-        embedding_service,
         catalog_index,
         uow,
     )
 
 
 @pytest.mark.asyncio
-async def test_indexes_active_item_with_prefixed_embedding_text_and_new_vector(
-) -> None:
+async def test_indexes_active_item_with_legacy_csv_embedding() -> None:
     item = _item()
-    uc, repository, embeddings, index, uow = _use_case(items=[item])
+    uc, repository, index, uow = _use_case(
+        items=[item],
+        legacy_vectors={item.id: [0.4, 0.5, 0.6]},
+    )
 
     result = await uc.execute(limit=10)
 
     assert result.indexed == 1
-    assert embeddings.inputs == [
-        ["search_document: Название: Аренда света\nКатегория: Аренда"],
-    ]
     assert len(index.points) == 1
     point = index.points[0]
     assert point.id == item.id
-    assert point.vector == [0.1, 0.2, 0.3]
+    assert point.vector == [0.4, 0.5, 0.6]
     assert point.payload == {
         "price_item_id": str(item.id),
         "import_batch_id": str(item.import_batch_id),
         "source_file_id": str(item.source_file_id),
         "category": "Аренда",
         "category_normalized": "аренда",
+        "service_category": None,
         "section": "Свет",
         "section_normalized": "свет",
         "unit": "день",
@@ -242,8 +230,8 @@ async def test_indexes_active_item_with_prefixed_embedding_text_and_new_vector(
         "supplier_city_normalized": "москва",
         "supplier_status": "Активен",
         "supplier_status_normalized": "активен",
-        "embedding_model": "nomic-embed-text-v1.5",
-        "embedding_template_version": "prices_v1",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_template_version": "legacy_csv_embedding",
     }
     assert "legacy_embedding_dim" not in point.payload
     assert "legacy_embedding_present" not in point.payload
@@ -251,7 +239,7 @@ async def test_indexes_active_item_with_prefixed_embedding_text_and_new_vector(
     assert item.embedding_error is None
     assert item.indexing_error is None
     assert item.indexed_at is not None
-    assert repository.indexed_calls[0]["embedding_model"] == "nomic-embed-text-v1.5"
+    assert repository.indexed_calls[0]["embedding_model"] == "text-embedding-3-small"
     assert uow.commit_count == 2
 
 
@@ -259,7 +247,7 @@ async def test_indexes_active_item_with_prefixed_embedding_text_and_new_vector(
 async def test_index_price_items_supports_unlimited_progress_callback() -> None:
     first = _item()
     second = _item()
-    uc, _repository, _embeddings, _index, _uow = _use_case(items=[first, second])
+    uc, _repository, _index, _uow = _use_case(items=[first, second])
     events: list[IndexPriceItemsProgress] = []
 
     async def capture(event: IndexPriceItemsProgress) -> None:
@@ -281,22 +269,21 @@ async def test_index_price_items_can_scope_to_import_batch() -> None:
     target = _item()
     target.import_batch_id = target_batch_id
     other = _item()
-    uc, _repository, embeddings, index, _uow = _use_case(items=[target, other])
+    uc, _repository, index, _uow = _use_case(items=[target, other])
 
     result = await uc.execute(limit=None, import_batch_id=target_batch_id)
 
     assert result.total == 1
     assert result.indexed == 1
-    assert len(embeddings.inputs) == 1
     assert [point.id for point in index.points] == [target.id]
 
 
 @pytest.mark.asyncio
-async def test_marks_embedding_failed_when_embedding_generation_fails() -> None:
+async def test_marks_embedding_failed_when_legacy_embedding_is_missing() -> None:
     item = _item()
-    uc, repository, _embeddings, index, _uow = _use_case(
+    uc, repository, index, _uow = _use_case(
         items=[item],
-        embeddings=FakeEmbeddings(error=RuntimeError("lm studio unavailable")),
+        legacy_vectors={item.id: None},
     )
 
     result = await uc.execute(limit=10)
@@ -304,10 +291,10 @@ async def test_marks_embedding_failed_when_embedding_generation_fails() -> None:
     assert result.embedding_failed == 1
     assert index.points == []
     assert item.catalog_index_status == "embedding_failed"
-    assert item.embedding_error == "lm studio unavailable"
+    assert item.embedding_error == "Legacy CSV embedding is missing"
     assert item.indexing_error is None
     assert repository.embedding_failed_calls == [
-        {"item_id": item.id, "error": "lm studio unavailable"},
+        {"item_id": item.id, "error": "Legacy CSV embedding is missing"},
     ]
 
 
@@ -315,9 +302,9 @@ async def test_marks_embedding_failed_when_embedding_generation_fails() -> None:
 async def test_marks_embedding_failed_when_vector_dimension_is_not_catalog_dim(
 ) -> None:
     item = _item()
-    uc, _repository, _embeddings, index, _uow = _use_case(
+    uc, _repository, index, _uow = _use_case(
         items=[item],
-        embeddings=FakeEmbeddings(vectors=[[0.1, 0.2]]),
+        legacy_vectors={item.id: [0.1, 0.2]},
     )
 
     result = await uc.execute(limit=10)
@@ -332,7 +319,7 @@ async def test_marks_embedding_failed_when_vector_dimension_is_not_catalog_dim(
 @pytest.mark.asyncio
 async def test_marks_indexing_failed_when_qdrant_upsert_fails_after_embedding() -> None:
     item = _item()
-    uc, repository, _embeddings, index, _uow = _use_case(
+    uc, repository, index, _uow = _use_case(
         items=[item],
         index=FakeCatalogIndex(error=RuntimeError("qdrant unavailable")),
     )
@@ -352,12 +339,11 @@ async def test_marks_indexing_failed_when_qdrant_upsert_fails_after_embedding() 
 @pytest.mark.asyncio
 async def test_skips_inactive_rows_without_embedding_or_indexing() -> None:
     item = _item(is_active=False)
-    uc, repository, embeddings, index, _uow = _use_case(items=[item])
+    uc, repository, index, _uow = _use_case(items=[item])
 
     result = await uc.execute(limit=10)
 
     assert result.skipped == 1
-    assert embeddings.inputs == []
     assert index.points == []
     assert repository.indexed_calls == []
     assert item.catalog_index_status == "pending"

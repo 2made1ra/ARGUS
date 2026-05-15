@@ -7,11 +7,12 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
-import type { CatalogImportJobOut, PriceItemOut } from "../api";
+import type { CatalogImportJobOut, FoundItem, PriceItemOut } from "../api";
 import {
   getCatalogImportJob,
   getCatalogImportJobStreamUrl,
   listCatalogItems,
+  searchCatalogItems,
   startCatalogImportJob,
 } from "../api";
 import { catalogImportStatusIsActive } from "../utils/catalogImportProgress";
@@ -71,6 +72,15 @@ export default function CatalogPage() {
   const [indexedTotal, setIndexedTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState("радиомикрофон");
+  const [catalogSearchCity, setCatalogSearchCity] = useState("екатеринбург");
+  const [catalogSearchCategory, setCatalogSearchCategory] = useState("");
+  const [catalogSearchMaxPrice, setCatalogSearchMaxPrice] = useState("");
+  const [catalogSearchResults, setCatalogSearchResults] = useState<FoundItem[]>([]);
+  const [catalogSearchSubmitted, setCatalogSearchSubmitted] = useState(false);
+  const [catalogSearchLoading, setCatalogSearchLoading] = useState(false);
+  const [catalogSearchError, setCatalogSearchError] = useState<string | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isStartingUpload, setIsStartingUpload] = useState(false);
@@ -96,6 +106,18 @@ export default function CatalogPage() {
     setTotal(response.total);
     setIndexedTotal(response.indexed_total);
   }, []);
+
+  const handleRefreshCatalog = async (): Promise<void> => {
+    setIsRefreshingCatalog(true);
+    setError(null);
+    try {
+      await refreshCatalogPage(page);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRefreshingCatalog(false);
+    }
+  };
 
   const closeImportStream = useCallback((expectedStream?: EventSource): void => {
     if (
@@ -439,6 +461,48 @@ export default function CatalogPage() {
     }
   };
 
+  const handleCatalogSearch = async (
+    event?: FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event?.preventDefault();
+    const trimmedQuery = catalogSearchQuery.trim();
+    if (!trimmedQuery) {
+      setCatalogSearchError("Введите запрос для поиска по каталогу.");
+      return;
+    }
+
+    setCatalogSearchSubmitted(true);
+    setCatalogSearchLoading(true);
+    setCatalogSearchError(null);
+    try {
+      const response = await searchCatalogItems({
+        query: trimmedQuery,
+        limit: 8,
+        filters: {
+          supplier_city_normalized: catalogSearchCity.trim() || null,
+          service_category: catalogSearchCategory.trim() || null,
+          unit_price_max: catalogSearchMaxPrice.trim() || null,
+        },
+      });
+      setCatalogSearchResults(response.items);
+    } catch (err: unknown) {
+      setCatalogSearchError(err instanceof Error ? err.message : String(err));
+      setCatalogSearchResults([]);
+    } finally {
+      setCatalogSearchLoading(false);
+    }
+  };
+
+  const handleClearCatalogSearch = (): void => {
+    setCatalogSearchSubmitted(false);
+    setCatalogSearchResults([]);
+    setCatalogSearchError(null);
+    setCatalogSearchQuery("");
+    setCatalogSearchCity("");
+    setCatalogSearchCategory("");
+    setCatalogSearchMaxPrice("");
+  };
+
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
     if (!normalizedQuery) return items;
@@ -447,6 +511,7 @@ export default function CatalogPage() {
       [
         item.name,
         item.category,
+        item.service_category,
         item.supplier,
         item.supplier_city,
         item.supplier_inn,
@@ -507,8 +572,19 @@ export default function CatalogPage() {
             type="button"
             onClick={handleOpenImportModal}
           >
-            Загрузить базу
+            Загрузить CSV и индекс
           </button>
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={() => void handleRefreshCatalog()}
+            disabled={loading || isRefreshingCatalog}
+          >
+            Обновить
+          </button>
+          <Link className="secondary-action" to="/assistant">
+            Открыть бриф
+          </Link>
           <label className="catalog-filter">
             <span>Фильтр на странице</span>
             <input
@@ -521,6 +597,126 @@ export default function CatalogPage() {
         </div>
       </header>
 
+      <section className="catalog-ops-panel" aria-labelledby="catalog-search-title">
+        <div className="catalog-ops-panel__copy">
+          <p className="eyebrow">Проверка поиска</p>
+          <h2 id="catalog-search-title">Поиск по базе и Qdrant</h2>
+          <p className="muted">
+            Запрос использует backend `/catalog/search`; если совпадений нет,
+            интерфейс явно покажет пустую выдачу.
+          </p>
+        </div>
+        <form className="catalog-search-form" onSubmit={handleCatalogSearch}>
+          <label>
+            <span>Что найти</span>
+            <input
+              type="search"
+              value={catalogSearchQuery}
+              onChange={(event) => setCatalogSearchQuery(event.target.value)}
+              placeholder="радиомикрофон, свет, кейтеринг"
+            />
+          </label>
+          <label>
+            <span>Город</span>
+            <input
+              value={catalogSearchCity}
+              onChange={(event) => setCatalogSearchCity(event.target.value)}
+              placeholder="екатеринбург"
+            />
+          </label>
+          <label>
+            <span>Категория</span>
+            <input
+              value={catalogSearchCategory}
+              onChange={(event) => setCatalogSearchCategory(event.target.value)}
+              placeholder="оборудование"
+            />
+          </label>
+          <label>
+            <span>Цена до</span>
+            <input
+              inputMode="decimal"
+              value={catalogSearchMaxPrice}
+              onChange={(event) => setCatalogSearchMaxPrice(event.target.value)}
+              placeholder="2500"
+            />
+          </label>
+          <div className="catalog-search-form__actions">
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={catalogSearchLoading}
+            >
+              Найти
+            </button>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={handleClearCatalogSearch}
+            >
+              Очистить
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {(catalogSearchSubmitted || catalogSearchError) && (
+        <section className="catalog-search-results" aria-live="polite">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Результаты</p>
+              <h2>Совпадения в каталоге</h2>
+            </div>
+            {catalogSearchLoading && <span className="status-pill">searching</span>}
+          </div>
+          {catalogSearchError && (
+            <p className="error">Ошибка поиска: {catalogSearchError}</p>
+          )}
+          {!catalogSearchLoading &&
+            !catalogSearchError &&
+            catalogSearchSubmitted &&
+            catalogSearchResults.length === 0 && (
+              <div className="empty-state empty-state--compact">
+                <p className="eyebrow">Нет строк</p>
+                <h2>Совпадений в базе нет</h2>
+                <p className="muted">
+                  По текущему запросу и фильтрам каталог не вернул найденные
+                  позиции.
+                </p>
+              </div>
+            )}
+          {catalogSearchResults.length > 0 && (
+            <div className="catalog-search-result-grid">
+              {catalogSearchResults.map((item) => (
+                <article className="catalog-search-card" key={item.id}>
+                  <div className="catalog-search-card__top">
+                    <span className="match-badge">{item.match_reason.label}</span>
+                    <strong>{item.unit_price} ₽</strong>
+                  </div>
+                  <h3>
+                    <Link to={`/catalog/items/${item.id}`}>{item.name}</Link>
+                  </h3>
+                  <dl className="found-item-facts">
+                    <div>
+                      <dt>Поставщик</dt>
+                      <dd>{item.supplier ?? "Не указан"}</dd>
+                    </div>
+                    <div>
+                      <dt>Город</dt>
+                      <dd>{item.supplier_city ?? "Не указан"}</dd>
+                    </div>
+                    <div>
+                      <dt>Категория</dt>
+                      <dd>{item.service_category ?? item.category ?? "—"}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {error && <p className="error">Ошибка каталога: {error}</p>}
       {loading && <p className="muted">Загружаю каталог...</p>}
 
@@ -529,8 +725,8 @@ export default function CatalogPage() {
           <p className="eyebrow">Пусто</p>
           <h2>Позиции каталога пока не импортированы</h2>
           <p className="muted">
-            Нажмите «Загрузить базу», чтобы импортировать prices.csv в
-            price_items и индекс price_items_search_v1.
+            Нажмите «Загрузить CSV и индекс», чтобы импортировать prices.csv в
+            price_items и проиндексировать строки в price_items_search_v1.
           </p>
         </section>
       )}
@@ -601,7 +797,14 @@ export default function CatalogPage() {
                         ИНН {item.supplier_inn ?? "—"}
                       </span>
                     </td>
-                    <td>{item.category ?? "—"}</td>
+                    <td>
+                      {item.service_category ?? item.category ?? "—"}
+                      {item.service_category !== null && item.category !== null && (
+                        <span className="catalog-table__meta">
+                          source: {item.category}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <span className="status-pill">{item.catalog_index_status}</span>
                     </td>
@@ -671,7 +874,7 @@ export default function CatalogPage() {
                   type="submit"
                   disabled={selectedFile === null}
                 >
-                  Загрузить
+                  Загрузить и проиндексировать
                 </button>
               </form>
             )}

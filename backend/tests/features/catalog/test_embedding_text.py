@@ -78,3 +78,33 @@ def test_build_embedding_text_removes_tariff_suffix_from_name() -> None:
 
     assert "Название: Акустическая система 600 Вт" in text
     assert "аренда за 1 день" not in text
+
+
+def test_build_embedding_text_removes_tariff_pattern_before_tail() -> None:
+    text = build_embedding_text(
+        name=(
+            "Проживание в гостевом доме (цена за 1 человека в день), "
+            "база отдыха"
+        ),
+        category="Проживание",
+        section=None,
+        source_text=None,
+        unit="чел",
+    )
+
+    assert "Название: Проживание в гостевом доме, база отдыха" in text
+    assert "цена за 1 человека в день" not in text
+
+
+def test_build_embedding_text_prefers_service_category_over_generic_category() -> None:
+    text = build_embedding_text(
+        name="Акустическая система 600 Вт",
+        category="Аренда",
+        service_category="звук",
+        section="Оборудование",
+        source_text=None,
+        unit="день",
+    )
+
+    assert "Категория: звук" in text
+    assert "Категория: Аренда" not in text

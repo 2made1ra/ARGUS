@@ -8,6 +8,7 @@ from app.features.contractors.entities.contractor import Contractor
 from app.features.ingest.entities.document import Document
 from app.features.search.dto import RagContextChunk, SearchHit, SourceRef
 from app.features.search.ports import Reranker
+from app.features.search.use_cases.payload_values import optional_int
 
 NO_EVIDENCE_ANSWER = (
     "В загруженных документах недостаточно данных для ответа. "
@@ -62,8 +63,8 @@ def context_from_hit(
         source=SourceRef(
             document_id=document_id,
             contractor_id=resolved_contractor_id,
-            page_start=_optional_int(hit.payload.get("page_start")),
-            page_end=_optional_int(hit.payload.get("page_end")),
+            page_start=optional_int(hit.payload.get("page_start")),
+            page_end=optional_int(hit.payload.get("page_end")),
             chunk_index=int(hit.payload.get("chunk_index") or 0),
             score=hit.score,
             snippet=text[:_MAX_SOURCE_SNIPPET],
@@ -106,12 +107,6 @@ def _uuid(value: Any) -> UUID | None:
         return value if isinstance(value, UUID) else UUID(str(value))
     except ValueError:
         return None
-
-
-def _optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    return int(value)
 
 
 __all__ = [

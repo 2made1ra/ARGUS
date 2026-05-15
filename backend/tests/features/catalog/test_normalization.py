@@ -55,6 +55,9 @@ def test_normalize_price_row_collapses_text_and_parses_price() -> None:
         ("Включая НДС", "with_vat"),
         ("НДС 20%", "with_vat"),
         ("Без НДС", "without_vat"),
+        ("НДС не облагается", "without_vat"),
+        ("УСН", "without_vat"),
+        ("20%", "unknown"),
         ("", "unknown"),
     ],
 )
@@ -71,6 +74,7 @@ def test_normalize_price_row_derives_vat_mode(raw_vat: str, vat_mode: str) -> No
         ("Санкт-Петербург г", "санкт-петербург"),
         ("Питер", "санкт-петербург"),
         ("Г ОДИНЦОВО", "одинцово"),
+        ("Dubai, United Arab Emirates", "дубай"),
     ],
 )
 def test_normalize_price_row_canonicalizes_city_aliases(

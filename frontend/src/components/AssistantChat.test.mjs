@@ -34,6 +34,15 @@ test("direct search response renders chat timeline without a draft brief panel",
   assert.doesNotMatch(html, /Черновик брифа/);
 });
 
+test("assistant chat uses the front_ex composer rail", () => {
+  const html = renderChat([]);
+
+  assert.match(html, /composer-wrap/);
+  assert.match(html, /mode-bar/);
+  assert.match(html, /Поиск по каталогу/);
+  assert.match(html, /Планирование брифа/);
+});
+
 test("chat-search clarification stays inline without a catalog empty state", () => {
   const uiState = assistantUiStateFromResponse([], clarificationResponseFixture());
 

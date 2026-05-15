@@ -14,6 +14,7 @@ class CatalogKeywordFields:
     source_text: str | None
     section: str | None
     category: str | None
+    service_category: str | None
     supplier: str | None
     supplier_inn: str | None
     supplier_city: str | None
@@ -48,6 +49,7 @@ def price_item_keyword_fields(item: PriceItem) -> CatalogKeywordFields:
         source_text=item.source_text,
         section=item.section,
         category=item.category,
+        service_category=item.service_category,
         supplier=item.supplier,
         supplier_inn=item.supplier_inn,
         supplier_city=item.supplier_city,
@@ -84,6 +86,7 @@ def keyword_reason_for_fields(
         for value in (
             fields.section,
             fields.category,
+            fields.service_category,
             fields.supplier_city,
             fields.has_vat,
             fields.supplier_status,
@@ -144,6 +147,7 @@ def merge_search_filters(
             base.category_normalized,
             inferred.category_normalized,
         ),
+        service_category=_pick(base.service_category, inferred.service_category),
         section=_pick(base.section, inferred.section),
         section_normalized=_pick(
             base.section_normalized,
@@ -183,6 +187,11 @@ def price_item_matches_filters(
     if (
         filters.category_normalized is not None
         and item.category_normalized != filters.category_normalized
+    ):
+        return False
+    if (
+        filters.service_category is not None
+        and item.service_category != filters.service_category
     ):
         return False
     if filters.section is not None and item.section != filters.section:

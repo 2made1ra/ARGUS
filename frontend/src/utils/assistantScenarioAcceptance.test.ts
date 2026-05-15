@@ -402,6 +402,7 @@ function searchRequest(serviceCategory: string) {
     filters: {
       supplier_city_normalized: "екатеринбург",
       category: null,
+      service_category: serviceCategory,
       supplier_status_normalized: null,
       has_vat: null,
       vat_mode: null,

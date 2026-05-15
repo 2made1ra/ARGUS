@@ -198,7 +198,7 @@ async def test_import_prices_csv_stores_raw_rows_and_normalized_items() -> None:
     assert item.source_text == "Описание\nстрока"
     assert item.legacy_embedding_present is True
     assert item.legacy_embedding_dim == 2
-    assert item.embedding_template_version == "prices_v1"
+    assert item.embedding_template_version == "legacy_csv_embedding"
     assert item.catalog_index_status == "pending"
     assert "Описание / источник: Описание\nстрока" in item.embedding_text
     assert item.source_import_row_id == row.id

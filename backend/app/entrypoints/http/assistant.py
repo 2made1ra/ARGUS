@@ -9,7 +9,7 @@ from app.entrypoints.http.schemas.assistant import (
     AssistantChatRequestIn,
     AssistantChatResponseOut,
 )
-from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
+from app.features.assistant.agent_graph import AssistantGraphRunner
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 )
 async def assistant_chat(
     request: AssistantChatRequestIn,
-    uc: Annotated[ChatTurnUseCase, Depends(get_chat_turn_uc)],
+    uc: Annotated[AssistantGraphRunner, Depends(get_chat_turn_uc)],
 ) -> AssistantChatResponseOut:
     response = await uc.execute(request.to_domain())
     return AssistantChatResponseOut.from_domain(response)

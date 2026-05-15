@@ -7,6 +7,7 @@ CATALOG_PAYLOAD_INDEXES: tuple[tuple[str, PayloadSchemaType], ...] = (
     ("source_file_id", PayloadSchemaType.UUID),
     ("category", PayloadSchemaType.KEYWORD),
     ("category_normalized", PayloadSchemaType.KEYWORD),
+    ("service_category", PayloadSchemaType.KEYWORD),
     ("section", PayloadSchemaType.KEYWORD),
     ("section_normalized", PayloadSchemaType.KEYWORD),
     ("unit", PayloadSchemaType.KEYWORD),

@@ -25,8 +25,9 @@ async def process_document(
 ) -> ProcessingResult:
     if llm_client is None:
         client = LMStudioClient(
-            base_url=os.environ["LM_STUDIO_URL"],
-            model=os.environ["LM_STUDIO_LLM_MODEL"],
+            base_url=_required_env("LLM_BASE_URL", "LM_STUDIO_URL"),
+            model=_required_env("CHAT_MODEL", "LM_STUDIO_LLM_MODEL"),
+            api_key=os.environ.get("API_KEY"),
         )
         async with client:
             return await _run_pipeline(client, src, work_dir, detector_config)
@@ -77,3 +78,10 @@ async def _run_pipeline(
 
 def _all_fields_none(fields: ContractFields) -> bool:
     return all(value is None for value in fields.model_dump().values())
+
+
+def _required_env(primary: str, legacy: str) -> str:
+    value = os.environ.get(primary) or os.environ.get(legacy)
+    if value is None:
+        raise KeyError(primary)
+    return value

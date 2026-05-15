@@ -217,6 +217,7 @@ export type ToolIntent =
 export interface CatalogSearchFiltersOut {
   supplier_city_normalized: string | null;
   category: string | null;
+  service_category: string | null;
   supplier_status_normalized: string | null;
   has_vat: string | null;
   vat_mode: string | null;
@@ -267,6 +268,7 @@ export interface FoundItem {
   score: number;
   name: string;
   category: string | null;
+  service_category?: string | null;
   unit: string;
   unit_price: string;
   supplier: string | null;
@@ -370,10 +372,19 @@ export interface AssistantChatResponse {
 
 export interface CatalogSearchFilters {
   supplier_city?: string | null;
+  supplier_city_normalized?: string | null;
   category?: string | null;
+  category_normalized?: string | null;
+  service_category?: string | null;
+  section?: string | null;
+  section_normalized?: string | null;
   supplier_status?: string | null;
+  supplier_status_normalized?: string | null;
   has_vat?: string | null;
+  vat_mode?: string | null;
   unit_price?: string | number | null;
+  unit_price_min?: string | number | null;
+  unit_price_max?: string | number | null;
 }
 
 export interface CatalogSearchRequest {
@@ -390,6 +401,7 @@ export interface PriceItemOut {
   id: string;
   name: string;
   category: string | null;
+  service_category: string | null;
   unit: string;
   unit_price: string;
   supplier: string | null;

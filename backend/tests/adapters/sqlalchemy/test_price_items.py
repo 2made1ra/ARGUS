@@ -209,6 +209,30 @@ async def test_item_repository_lists_active_items() -> None:
 
 
 @pytest.mark.asyncio
+async def test_item_repository_reads_legacy_embedding_from_import_row_raw() -> None:
+    session = AsyncMock()
+    session.scalar.return_value = {"embedding": "[0.1, 2, 3.5]"}
+    repository = SqlAlchemyPriceItemRepository(cast(AsyncSession, session))
+
+    vector = await repository.get_legacy_embedding(uuid4())
+
+    assert vector == [0.1, 2.0, 3.5]
+    statement = session.scalar.await_args.args[0]
+    sql = str(statement.compile())
+    assert "price_import_rows.raw" in sql
+    assert "price_items.source_import_row_id = price_import_rows.id" in sql
+
+
+@pytest.mark.asyncio
+async def test_item_repository_returns_none_for_missing_legacy_embedding() -> None:
+    session = AsyncMock()
+    session.scalar.return_value = {"embedding": ""}
+    repository = SqlAlchemyPriceItemRepository(cast(AsyncSession, session))
+
+    assert await repository.get_legacy_embedding(uuid4()) is None
+
+
+@pytest.mark.asyncio
 async def test_item_repository_gets_item_with_sources() -> None:
     item_row = _item_row()
     source_row = PriceItemSourceRow(

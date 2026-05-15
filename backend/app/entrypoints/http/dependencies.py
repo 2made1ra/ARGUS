@@ -1,5 +1,4 @@
 from collections.abc import AsyncIterator, Callable, Coroutine
-from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
@@ -8,10 +7,14 @@ from fastapi import Depends
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.adapters.assistant.catalog_tools import (
+    CatalogItemDetailsToolAdapter,
+    CatalogSearchToolAdapter,
+)
 from app.adapters.celery.catalog_task_queue import CeleryCatalogImportTaskQueue
 from app.adapters.celery.task_queue import CeleryIngestionTaskQueue
-from app.adapters.llm.assistant_router import LMStudioAssistantRouterAdapter
-from app.adapters.llm.chat import LMStudioChatClient
+from app.adapters.llm.assistant_agent_planner import LangChainAssistantAgentPlanner
+from app.adapters.llm.chat import LangChainChatClient
 from app.adapters.llm.embeddings import LMStudioEmbeddings
 from app.adapters.local_fs.catalog_import_storage import LocalCatalogImportStorage
 from app.adapters.local_fs.file_storage import LocalFileStorage
@@ -38,24 +41,15 @@ from app.adapters.supplier_verification.manual import (
 )
 from app.config import Settings, get_settings
 from app.entrypoints.http.session import _session, get_qdrant_client, get_sessionmaker
-from app.features.assistant.domain.tool_executor import ToolExecutor
-from app.features.assistant.dto import (
-    CatalogItemDetail,
-    CatalogSearchFilters,
-    FoundCatalogItem,
+from app.features.assistant.agent_graph import (
+    AssistantGraphRunner,
+    DemoAssistantAgentPlanner,
 )
-from app.features.assistant.dto import MatchReason as AssistantMatchReason
-from app.features.assistant.router import HeuristicAssistantRouter
-from app.features.assistant.use_cases.chat_turn import ChatTurnUseCase
-from app.features.catalog.dto import FoundPriceItem, SearchPriceItemsFilters
 from app.features.catalog.entities.import_job import CatalogImportJob
 from app.features.catalog.ports import (
     CatalogSearchFilters as CatalogVectorFilters,
 )
-from app.features.catalog.ports import (
-    CatalogSearchHit,
-    PriceItemNotFound,
-)
+from app.features.catalog.ports import CatalogSearchHit
 from app.features.catalog.use_cases.get_import_job import GetCatalogImportJobUseCase
 from app.features.catalog.use_cases.get_price_item import GetPriceItemUseCase
 from app.features.catalog.use_cases.import_prices_csv import ImportPricesCsvUseCase
@@ -163,17 +157,11 @@ def get_index_price_items_uc(
 ) -> IndexPriceItemsUseCase:
     return IndexPriceItemsUseCase(
         items=SqlAlchemyPriceItemRepository(session),
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.catalog_embedding_model,
-            embedding_dim=settings.catalog_embedding_dim,
-        ),
         index=QdrantCatalogIndex(qdrant, settings.catalog_qdrant_collection),
         uow=SessionUnitOfWork(session),
         catalog_embedding_model=settings.catalog_embedding_model,
         catalog_embedding_dim=settings.catalog_embedding_dim,
         catalog_embedding_template_version=settings.catalog_embedding_template_version,
-        catalog_document_prefix=settings.catalog_document_prefix,
     )
 
 
@@ -191,6 +179,33 @@ class _DisabledCatalogVectorSearch:
         limit: int,
     ) -> list[CatalogSearchHit]:
         raise RuntimeError("Catalog semantic search is disabled")
+
+
+def _catalog_embeddings(settings: Settings) -> LMStudioEmbeddings:
+    return LMStudioEmbeddings(
+        base_url=settings.lm_studio_url,
+        model=settings.catalog_embedding_model,
+        api_key=settings.api_key,
+        embedding_dim=settings.catalog_embedding_dim,
+    )
+
+
+def _document_embeddings(settings: Settings) -> LMStudioEmbeddings:
+    return LMStudioEmbeddings(
+        base_url=settings.lm_studio_url,
+        model=settings.lm_studio_embedding_model,
+        api_key=settings.api_key,
+        embedding_dim=settings.document_embedding_dim,
+    )
+
+
+def _rag_llm(settings: Settings) -> LangChainChatClient:
+    return LangChainChatClient(
+        base_url=settings.lm_studio_url,
+        model=settings.lm_studio_llm_model,
+        api_key=settings.api_key or "not-needed",
+        timeout=settings.rag_answer_timeout_seconds,
+    )
 
 
 async def get_search_price_items_uc(
@@ -214,11 +229,7 @@ async def get_search_price_items_uc(
     try:
         yield SearchPriceItemsUseCase(
             items=SqlAlchemyPriceItemRepository(session),
-            embeddings=LMStudioEmbeddings(
-                base_url=settings.lm_studio_url,
-                model=settings.catalog_embedding_model,
-                embedding_dim=settings.catalog_embedding_dim,
-            ),
+            embeddings=_catalog_embeddings(settings),
             vector_search=QdrantCatalogSearch(
                 qdrant,
                 settings.catalog_qdrant_collection,
@@ -237,113 +248,30 @@ async def get_search_price_items_uc(
 # ---------------------------------------------------------------------------
 
 
-class _CatalogSearchToolAdapter:
-    def __init__(self, search: SearchPriceItemsUseCase) -> None:
-        self._search = search
-
-    async def search_items(
-        self,
-        *,
-        query: str,
-        limit: int,
-        filters: CatalogSearchFilters | None = None,
-    ) -> list[FoundCatalogItem]:
-        result = await self._search.search_items(
-            query=query,
-            filters=_catalog_search_filters(filters),
-            limit=limit,
-        )
-        return [_found_catalog_item(item) for item in result.items]
-
-
-class _CatalogItemDetailsToolAdapter:
-    def __init__(self, details: GetPriceItemUseCase) -> None:
-        self._details = details
-
-    async def get_item_details(
-        self,
-        *,
-        item_id: UUID,
-    ) -> CatalogItemDetail | None:
-        try:
-            item, _sources = await self._details.execute(item_id)
-        except PriceItemNotFound:
-            return None
-        return CatalogItemDetail(
-            id=item.id,
-            name=item.name,
-            category=item.category,
-            unit=item.unit,
-            unit_price=item.unit_price,
-            supplier=item.supplier,
-            supplier_inn=item.supplier_inn,
-            supplier_city=item.supplier_city,
-            supplier_phone=item.supplier_phone,
-            supplier_email=item.supplier_email,
-            supplier_status=item.supplier_status,
-            source_text=item.source_text,
-        )
-
-
-def _found_catalog_item(item: FoundPriceItem) -> FoundCatalogItem:
-    return FoundCatalogItem(
-        id=item.id,
-        score=item.score,
-        name=item.name,
-        category=item.category,
-        unit=item.unit,
-        unit_price=item.unit_price,
-        supplier=item.supplier,
-        supplier_city=item.supplier_city,
-        source_text_snippet=item.source_text_snippet,
-        source_text_full_available=item.source_text_full_available,
-        match_reason=AssistantMatchReason(
-            code=item.match_reason.code,
-            label=item.match_reason.label,
-        ),
-    )
-
-
-def _catalog_search_filters(
-    filters: CatalogSearchFilters | None,
-) -> SearchPriceItemsFilters:
-    if filters is None:
-        return SearchPriceItemsFilters()
-    return SearchPriceItemsFilters(
-        supplier_city_normalized=filters.supplier_city_normalized,
-        category=filters.category,
-        supplier_status_normalized=filters.supplier_status_normalized,
-        has_vat=filters.has_vat,
-        vat_mode=filters.vat_mode,
-        unit_price_min=_decimal_or_none(filters.unit_price_min),
-        unit_price_max=_decimal_or_none(filters.unit_price_max),
-    )
-
-
-def _decimal_or_none(value: int | None) -> Decimal | None:
-    return Decimal(value) if value is not None else None
-
-
 def get_chat_turn_uc(
     settings: Annotated[Settings, Depends(get_settings)],
     search: Annotated[SearchPriceItemsUseCase, Depends(get_search_price_items_uc)],
     details: Annotated[GetPriceItemUseCase, Depends(get_get_price_item_uc)],
-) -> ChatTurnUseCase:
-    catalog_search = _CatalogSearchToolAdapter(search)
-    item_details = _CatalogItemDetailsToolAdapter(details)
-    llm_router = None
-    if not settings.argus_demo_mode:
-        llm_router = LMStudioAssistantRouterAdapter(
+) -> AssistantGraphRunner:
+    catalog_search = CatalogSearchToolAdapter(search)
+    item_details = CatalogItemDetailsToolAdapter(details)
+    planner = (
+        DemoAssistantAgentPlanner()
+        if settings.argus_demo_mode
+        else LangChainAssistantAgentPlanner(
             base_url=settings.lm_studio_url,
             model=settings.lm_studio_llm_model,
+            timeout=settings.assistant_agent_timeout_seconds,
+            api_key=settings.api_key or "not-needed",
         )
-    return ChatTurnUseCase(
-        router=HeuristicAssistantRouter(llm_router=llm_router),
-        tool_executor=ToolExecutor(
-            catalog_search=catalog_search,
-            item_details=item_details,
-            supplier_verification=ManualNotVerifiedSupplierVerificationAdapter(),
-        ),
+    )
+    return AssistantGraphRunner(
+        planner=planner,
+        catalog_search=catalog_search,
+        item_details=item_details,
+        supplier_verification=ManualNotVerifiedSupplierVerificationAdapter(),
+        max_tool_calls_per_turn=settings.assistant_agent_max_tool_calls_per_turn,
+        max_iterations=settings.assistant_agent_max_iterations,
     )
 
 
@@ -353,8 +281,8 @@ def get_chat_turn_uc(
 
 
 def get_upload_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> UploadDocumentUseCase:
     return UploadDocumentUseCase(
         storage=LocalFileStorage(Path(settings.upload_dir)),
@@ -370,19 +298,19 @@ def get_upload_uc(
 
 
 def get_get_document_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> GetDocumentUseCase:
     return GetDocumentUseCase(documents=SqlAlchemyDocumentRepository(session))
 
 
 def get_list_documents_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> ListDocumentsUseCase:
     return ListDocumentsUseCase(documents=SqlAlchemyDocumentRepository(session))
 
 
 def get_document_facts_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> GetDocumentFactsUseCase:
     return GetDocumentFactsUseCase(
         documents=SqlAlchemyDocumentRepository(session),
@@ -392,13 +320,13 @@ def get_document_facts_uc(
 
 
 def get_document_preview_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> GetDocumentPreviewUseCase:
     return GetDocumentPreviewUseCase(documents=SqlAlchemyDocumentRepository(session))
 
 
 def get_update_document_facts_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> UpdateDocumentFactsUseCase:
     return UpdateDocumentFactsUseCase(
         fields=SqlAlchemyFieldsRepository(session),
@@ -408,9 +336,9 @@ def get_update_document_facts_uc(
 
 
 def get_delete_document_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> DeleteDocumentUseCase:
     return DeleteDocumentUseCase(
         documents=SqlAlchemyDocumentRepository(session),
@@ -420,15 +348,11 @@ def get_delete_document_uc(
 
 
 def get_search_within_uc(
-    settings: Settings = Depends(get_settings),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> SearchWithinDocumentUseCase:
     return SearchWithinDocumentUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
     )
 
@@ -439,7 +363,7 @@ def get_search_within_uc(
 
 
 def get_contractor_profile_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> GetContractorProfileUseCase:
     return GetContractorProfileUseCase(
         contractors=SqlAlchemyContractorRepository(session),
@@ -448,7 +372,7 @@ def get_contractor_profile_uc(
 
 
 def get_list_contractors_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> ListContractorsUseCase:
     return ListContractorsUseCase(
         contractors=SqlAlchemyContractorRepository(session),
@@ -456,7 +380,7 @@ def get_list_contractors_uc(
 
 
 def get_list_contractor_documents_uc(
-    session: AsyncSession = Depends(_session),
+    session: Annotated[AsyncSession, Depends(_session)],
 ) -> ListContractorDocumentsUseCase:
     return ListContractorDocumentsUseCase(
         contractors=SqlAlchemyContractorRepository(session),
@@ -464,16 +388,12 @@ def get_list_contractor_documents_uc(
 
 
 def get_search_documents_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> SearchDocumentsUseCase:
     return SearchDocumentsUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
         documents=SqlAlchemyDocumentRepository(session),
     )
@@ -485,86 +405,61 @@ def get_search_documents_uc(
 
 
 def get_search_contractors_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> SearchContractorsUseCase:
     return SearchContractorsUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
         contractors=SqlAlchemyContractorRepository(session),
     )
 
 
 def get_global_rag_answer_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> AnswerGlobalSearchUseCase:
     return AnswerGlobalSearchUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
         contractors=SqlAlchemyContractorRepository(session),
         documents=SqlAlchemyDocumentRepository(session),
-        llm=LMStudioChatClient(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_llm_model,
-        ),
+        llm=_rag_llm(settings),
         similarity_top_k=settings.rag_similarity_top_k,
         context_top_k=settings.rag_context_top_k,
     )
 
 
 def get_contractor_rag_answer_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> AnswerContractorUseCase:
     return AnswerContractorUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
         contractors=SqlAlchemyContractorRepository(session),
         documents=SqlAlchemyDocumentRepository(session),
-        llm=LMStudioChatClient(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_llm_model,
-        ),
+        llm=_rag_llm(settings),
         similarity_top_k=settings.rag_similarity_top_k,
         context_top_k=settings.rag_context_top_k,
     )
 
 
 def get_document_rag_answer_uc(
-    settings: Settings = Depends(get_settings),
-    session: AsyncSession = Depends(_session),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant_client),
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(_session)],
+    qdrant: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
 ) -> AnswerDocumentUseCase:
     return AnswerDocumentUseCase(
-        embeddings=LMStudioEmbeddings(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_embedding_model,
-            embedding_dim=settings.document_embedding_dim,
-        ),
+        embeddings=_document_embeddings(settings),
         vectors=QdrantVectorSearch(qdrant, settings.document_qdrant_collection),
         documents=SqlAlchemyDocumentRepository(session),
         fields=SqlAlchemyFieldsRepository(session),
         summaries=SqlAlchemySummaryRepository(session),
-        llm=LMStudioChatClient(
-            base_url=settings.lm_studio_url,
-            model=settings.lm_studio_llm_model,
-        ),
+        llm=_rag_llm(settings),
         similarity_top_k=settings.rag_similarity_top_k,
         context_top_k=settings.rag_context_top_k,
     )

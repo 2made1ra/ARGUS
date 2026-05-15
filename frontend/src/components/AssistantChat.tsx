@@ -4,9 +4,12 @@ import type {
   RouterDecision,
   SupplierVerificationResult,
 } from "../api";
+import { ArgusOrb, Icon, composerModes } from "./ArgusChrome";
 import AssistantContent from "./AssistantContent";
 import FoundItemsPanel from "./FoundItemsPanel";
 import VerificationResultsPanel from "./VerificationResultsPanel";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 export interface AssistantTimelineMessage extends ChatMessage {
   foundItems?: FoundItem[];
@@ -48,56 +51,33 @@ export default function AssistantChat({
   onSend,
   onSelectedItemIdsChange,
 }: Props) {
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextMessage = input.trim();
-    if (!nextMessage || loading) return;
-    await onSend(nextMessage);
-  }
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [messages.length, loading]);
+
+  const hasChat = messages.length > 0 || loading;
 
   return (
-    <section className="assistant-chat panel" aria-label="Диалог с ARGUS">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Assistant</p>
-          <h2>Рабочий диалог</h2>
-        </div>
-        {latestRouter && (
-          <span className="assistant-router-badge">
-            {intentLabels[latestRouter.intent]} ·{" "}
-            {Math.round(latestRouter.confidence * 100)}%
-          </span>
-        )}
-      </div>
-
-      <div className="assistant-thread" aria-live="polite">
-        {messages.length === 0 ? (
-          <div className="assistant-empty">
-            <strong>Опишите событие или потребность.</strong>
-            <span>
-              Например: "Хочу организовать музыкальный вечер на 100 человек".
-            </span>
-          </div>
-        ) : (
-          messages.map((message, index) => (
-            <div className="assistant-timeline-item" key={`${message.role}-${index}`}>
-              <article
-                className={`assistant-message assistant-message--${message.role}`}
-              >
-                <div className="assistant-message__role">
-                  {message.role === "user" ? "Вы" : "ARGUS"}
-                </div>
-                <div className="assistant-message__body">
-                  {message.role === "assistant" ? (
-                    <AssistantContent content={message.content} />
-                  ) : (
-                    <p>{message.content}</p>
-                  )}
-                </div>
-              </article>
-
-              {message.role === "assistant" &&
-                message.foundItems !== undefined && (
+    <section
+      className={hasChat ? "chat-area assistant-chat" : "empty-area assistant-chat"}
+      aria-label="Диалог с ARGUS"
+    >
+      {hasChat ? (
+        <>
+          <div className="chat-thread" ref={threadRef} aria-live="polite">
+            {latestRouter && (
+              <div className="assistant-router-badge">
+                {intentLabels[latestRouter.intent]} ·{" "}
+                {Math.round(latestRouter.confidence * 100)}%
+              </div>
+            )}
+            {messages.map((message, index) => (
+              <div className="assistant-timeline-item" key={`${message.role}-${index}`}>
+                <ChatBubble message={message} />
+                {message.role === "assistant" && message.foundItems !== undefined && (
                   <FoundItemsPanel
                     items={message.foundItems}
                     emptyState={message.foundItemsEmptyState}
@@ -108,34 +88,153 @@ export default function AssistantChat({
                     onSelectedItemIdsChange={onSelectedItemIdsChange}
                   />
                 )}
-              {message.role === "assistant" &&
-                message.verificationResults !== undefined &&
-                message.verificationResults.length > 0 && (
-                  <VerificationResultsPanel
-                    relatedItems={message.foundItems ?? []}
-                    results={message.verificationResults}
-                    variant="inline"
-                  />
-                )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <form className="assistant-composer" onSubmit={handleSubmit}>
-        <textarea
-          value={input}
-          onChange={(event) => onInputChange(event.target.value)}
-          placeholder="Напишите задачу: формат события, площадка, город, аудитория или нужные услуги"
-          rows={4}
-          disabled={loading}
-        />
-        <button type="submit" disabled={loading || !input.trim()}>
-          {loading ? "Отправляю..." : "Отправить"}
-        </button>
-      </form>
-
+                {message.role === "assistant" &&
+                  message.verificationResults !== undefined &&
+                  message.verificationResults.length > 0 && (
+                    <VerificationResultsPanel
+                      relatedItems={message.foundItems ?? []}
+                      results={message.verificationResults}
+                      variant="inline"
+                    />
+                  )}
+              </div>
+            ))}
+            {loading && <TypingIndicator />}
+          </div>
+          <InputComposer
+            input={input}
+            loading={loading}
+            onInputChange={onInputChange}
+            onSend={onSend}
+          />
+        </>
+      ) : (
+        <>
+          <ArgusOrb loading={loading} />
+          <div className="greeting-name">Привет!</div>
+          <div className="greeting-q">Чем могу помочь?</div>
+          <InputComposer
+            input={input}
+            loading={loading}
+            onInputChange={onInputChange}
+            onSend={onSend}
+          />
+        </>
+      )}
       {error && <p className="error">Ошибка ассистента: {error}</p>}
     </section>
+  );
+}
+
+function InputComposer({
+  input,
+  loading,
+  onInputChange,
+  onSend,
+}: {
+  input: string;
+  loading: boolean;
+  onInputChange: (value: string) => void;
+  onSend: (message: string) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<(typeof composerModes)[number]["id"]>("catalog");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const activeMode = composerModes.find((item) => item.id === mode) ?? composerModes[0];
+
+  function resize(): void {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+  }
+
+  async function submit(): Promise<void> {
+    const message = input.trim();
+    if (!message || loading) return;
+    onInputChange("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    await onSend(message);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
+    }
+  }
+
+  return (
+    <div className="composer-wrap">
+      <div className="composer-box composer-row">
+        <textarea
+          ref={textareaRef}
+          className="composer-ta"
+          placeholder={`${activeMode.desc}...`}
+          value={input}
+          rows={1}
+          disabled={loading}
+          onChange={(event) => {
+            onInputChange(event.target.value);
+            resize();
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        <div className="composer-send-wrap">
+          <button
+            className="send-btn"
+            onClick={() => void submit()}
+            disabled={!input.trim() || loading}
+            type="button"
+            aria-label="Отправить"
+          >
+            <Icon d="M12 19V5M5 12l7-7 7 7" size={15} />
+          </button>
+        </div>
+      </div>
+
+      <div className="mode-bar">
+        {composerModes.map((item) => (
+          <button
+            key={item.id}
+            className={`mode-tab${mode === item.id ? " mode-tab-active" : ""}`}
+            onClick={() => setMode(item.id)}
+            type="button"
+          >
+            <span className="mode-tab-icon">
+              <Icon d={item.icon} size={13} />
+            </span>
+            <span className="mode-tab-label">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChatBubble({ message }: { message: AssistantTimelineMessage }) {
+  return (
+    <div className={`msg ${message.role === "user" ? "msg-user" : "msg-asst"}`}>
+      <div className="msg-role">{message.role === "user" ? "Вы" : "ARGUS"}</div>
+      <div className="msg-bubble">
+        {message.role === "assistant" ? (
+          <AssistantContent content={message.content} />
+        ) : (
+          <p>{message.content}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="msg msg-asst">
+      <div className="msg-role">ARGUS</div>
+      <div className="typing">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
   );
 }

@@ -34,15 +34,4 @@ class Reranker(Protocol):
     ) -> list[RagContextChunk]: ...
 
 
-class NoopReranker:
-    async def rerank(
-        self,
-        *,
-        query: str,
-        chunks: list[RagContextChunk],
-        top_k: int,
-    ) -> list[RagContextChunk]:
-        return chunks[:top_k]
-
-
-__all__ = ["ChatLLM", "NoopReranker", "Reranker", "VectorSearch"]
+__all__ = ["ChatLLM", "Reranker", "VectorSearch"]

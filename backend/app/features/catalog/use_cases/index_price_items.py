@@ -8,7 +8,6 @@ from uuid import UUID
 
 from app.features.catalog.entities.price_item import PriceItem
 from app.features.catalog.ports import (
-    CatalogEmbeddingService,
     CatalogVectorIndex,
     CatalogVectorPoint,
     PriceItemIndexRepository,
@@ -47,22 +46,18 @@ class IndexPriceItemsUseCase:
         self,
         *,
         items: PriceItemIndexRepository,
-        embeddings: CatalogEmbeddingService,
         index: CatalogVectorIndex,
         uow: UnitOfWork,
         catalog_embedding_model: str,
         catalog_embedding_dim: int,
         catalog_embedding_template_version: str,
-        catalog_document_prefix: str,
     ) -> None:
         self._items = items
-        self._embeddings = embeddings
         self._index = index
         self._uow = uow
         self._catalog_embedding_model = catalog_embedding_model
         self._catalog_embedding_dim = catalog_embedding_dim
         self._catalog_embedding_template_version = catalog_embedding_template_version
-        self._catalog_document_prefix = catalog_document_prefix
 
     async def execute(
         self,
@@ -87,7 +82,7 @@ class IndexPriceItemsUseCase:
                 await _emit_progress(progress_callback, result, processed)
                 continue
 
-            vector = await self._generate_vector(item)
+            vector = await self._legacy_vector(item)
             if vector is None:
                 result.embedding_failed += 1
                 processed += 1
@@ -120,11 +115,11 @@ class IndexPriceItemsUseCase:
         await _emit_progress(progress_callback, result, processed, done=True)
         return result
 
-    async def _generate_vector(self, item: PriceItem) -> list[float] | None:
-        embedding_input = f"{self._catalog_document_prefix}{item.embedding_text}"
+    async def _legacy_vector(self, item: PriceItem) -> list[float] | None:
         try:
-            vectors = await self._embeddings.embed([embedding_input])
-            vector = _single_vector(vectors)
+            vector = await self._items.get_legacy_embedding(item.id)
+            if vector is None:
+                raise ValueError("Legacy CSV embedding is missing")
             _validate_vector_dimension(vector, self._catalog_embedding_dim)
         except Exception as exc:
             await self._mark_embedding_failed(item, str(exc))
@@ -152,14 +147,6 @@ class IndexPriceItemsUseCase:
             await self._uow.commit()
 
 
-def _single_vector(vectors: list[list[float]]) -> list[float]:
-    if len(vectors) != 1:
-        raise ValueError(
-            f"Embedding response count mismatch: expected 1, got {len(vectors)}",
-        )
-    return vectors[0]
-
-
 def _validate_vector_dimension(vector: list[float], expected_dim: int) -> None:
     actual_dim = len(vector)
     if actual_dim != expected_dim:
@@ -180,6 +167,7 @@ def _payload_from_item(
         "source_file_id": str(item.source_file_id),
         "category": item.category,
         "category_normalized": item.category_normalized,
+        "service_category": item.service_category,
         "section": item.section,
         "section_normalized": item.section_normalized,
         "unit": item.unit,

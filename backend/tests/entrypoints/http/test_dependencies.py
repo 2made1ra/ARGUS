@@ -142,7 +142,7 @@ def test_demo_search_dependency_does_not_create_llm_embeddings_or_qdrant(
     assert response.json() == {"semantic_search_enabled": False}
 
 
-def test_demo_chat_dependency_does_not_create_lm_router_adapter(
+def test_demo_chat_dependency_does_not_create_langchain_agent_planner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = Settings(
@@ -154,17 +154,59 @@ def test_demo_chat_dependency_does_not_create_lm_router_adapter(
         argus_demo_mode=True,
     )
 
-    def fail_lm_router_adapter(*args: object, **kwargs: object) -> object:
-        raise AssertionError("LM router adapter should not be created in demo mode")
+    def fail_agent_planner(*args: object, **kwargs: object) -> object:
+        raise AssertionError(
+            "LangChain agent planner should not be created in demo mode",
+        )
 
     monkeypatch.setattr(
         dependencies,
-        "LMStudioAssistantRouterAdapter",
-        fail_lm_router_adapter,
+        "LangChainAssistantAgentPlanner",
+        fail_agent_planner,
     )
 
-    dependencies.get_chat_turn_uc(
+    runner = dependencies.get_chat_turn_uc(
         settings=settings,
         search=cast(Any, object()),
         details=cast(Any, object()),
     )
+
+    assert runner._planner.__class__.__name__ == "DemoAssistantAgentPlanner"
+
+def test_chat_dependency_uses_langgraph_runner_with_langchain_planner() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://test:test@localhost/test",
+        redis_url="redis://localhost:6379/0",
+        qdrant_url="http://localhost:6333",
+        lm_studio_url="http://localhost:1234/v1",
+        lm_studio_llm_model="test-model",
+    )
+
+    runner = dependencies.get_chat_turn_uc(
+        settings=settings,
+        search=cast(Any, object()),
+        details=cast(Any, object()),
+    )
+
+    assert runner.__class__.__name__ == "AssistantGraphRunner"
+    assert runner._planner.__class__.__name__ == "LangChainAssistantAgentPlanner"
+
+
+def test_global_rag_dependency_uses_langchain_chat_client() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://test:test@localhost/test",
+        redis_url="redis://localhost:6379/0",
+        qdrant_url="http://localhost:6333",
+        lm_studio_url="http://localhost:1234/v1",
+        lm_studio_llm_model="test-model",
+        rag_answer_timeout_seconds=12.5,
+    )
+
+    use_case = dependencies.get_global_rag_answer_uc(
+        settings=settings,
+        session=cast(Any, object()),
+        qdrant=cast(Any, object()),
+    )
+
+    assert use_case._llm.__class__.__name__ == "LangChainChatClient"
+    assert use_case._llm._chat.request_timeout == 12.5

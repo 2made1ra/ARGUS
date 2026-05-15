@@ -93,6 +93,8 @@ class PriceItemIndexRepository(Protocol):
         import_batch_id: UUID | None = None,
     ) -> list[PriceItem]: ...
 
+    async def get_legacy_embedding(self, item_id: UUID) -> list[float] | None: ...
+
     async def mark_indexed(
         self,
         item_id: UUID,
@@ -138,6 +140,7 @@ class CatalogSearchFilters:
     source_file_id: UUID | None = None
     category: str | None = None
     category_normalized: str | None = None
+    service_category: str | None = None
     section: str | None = None
     section_normalized: str | None = None
     unit: str | None = None
@@ -160,6 +163,14 @@ class CatalogSearchHit:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogCategoryClassification:
+    item_id: UUID
+    service_category: str
+    confidence: float
+    reason: str | None = None
+
+
 class CatalogEmbeddingService(Protocol):
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
@@ -176,6 +187,43 @@ class CatalogVectorSearch(Protocol):
         filters: CatalogSearchFilters | None,
         limit: int,
     ) -> list[CatalogSearchHit]: ...
+
+
+class CatalogCategoryClassifier(Protocol):
+    async def classify(
+        self,
+        items: list[PriceItem],
+    ) -> list[CatalogCategoryClassification]: ...
+
+
+class PriceItemCategoryEnrichmentRepository(Protocol):
+    async def list_active_for_category_enrichment(
+        self,
+        *,
+        limit: int,
+    ) -> list[PriceItem]: ...
+
+    async def mark_category_enriched(
+        self,
+        item_id: UUID,
+        *,
+        service_category: str,
+        confidence: float,
+        reason: str | None,
+        enriched_at: datetime,
+        model: str,
+        prompt_version: str,
+        embedding_text: str,
+    ) -> None: ...
+
+    async def mark_category_enrichment_failed(
+        self,
+        item_id: UUID,
+        *,
+        error: str,
+        model: str,
+        prompt_version: str,
+    ) -> None: ...
 
 
 class SearchItemsService(Protocol):
@@ -215,6 +263,8 @@ __all__ = [
     "CatalogImportFileStorage",
     "CatalogImportJobRepository",
     "CatalogImportTaskQueue",
+    "CatalogCategoryClassification",
+    "CatalogCategoryClassifier",
     "CatalogEmbeddingService",
     "CatalogSearchFilters",
     "CatalogSearchHit",
@@ -222,6 +272,7 @@ __all__ = [
     "CatalogVectorPoint",
     "CatalogVectorSearch",
     "PriceImportRepository",
+    "PriceItemCategoryEnrichmentRepository",
     "PriceItemDuplicateFingerprint",
     "PriceItemNotFound",
     "PriceItemIndexRepository",

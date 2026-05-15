@@ -42,6 +42,7 @@ def _filter_from_catalog_filters(filters: CatalogSearchFilters | None) -> Filter
         ("source_file_id", _optional_uuid(filters.source_file_id)),
         ("category", filters.category),
         ("category_normalized", filters.category_normalized),
+        ("service_category", filters.service_category),
         ("section", filters.section),
         ("section_normalized", filters.section_normalized),
         ("unit", filters.unit),

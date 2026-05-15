@@ -246,6 +246,11 @@ class PriceItem(Base):
             postgresql_where=text("is_active = true"),
         ),
         Index("ix_price_items_catalog_index_status", "catalog_index_status"),
+        Index("ix_price_items_service_category", "service_category"),
+        Index(
+            "ix_price_items_category_enrichment_status",
+            "category_enrichment_status",
+        ),
         Index("ix_price_items_supplier_city_normalized", "supplier_city_normalized"),
         Index("ix_price_items_category_normalized", "category_normalized"),
         Index(
@@ -260,6 +265,20 @@ class PriceItem(Base):
     name: Mapped[str] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(Text)
     category_normalized: Mapped[str | None] = mapped_column(Text)
+    service_category: Mapped[str | None] = mapped_column(Text)
+    service_category_confidence: Mapped[float | None] = mapped_column(Float)
+    service_category_source: Mapped[str | None] = mapped_column(Text)
+    service_category_reason: Mapped[str | None] = mapped_column(Text)
+    category_enrichment_status: Mapped[str] = mapped_column(
+        Text,
+        server_default=text("'pending'"),
+    )
+    category_enrichment_error: Mapped[str | None] = mapped_column(Text)
+    category_enriched_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+    )
+    category_enrichment_model: Mapped[str | None] = mapped_column(Text)
+    category_enrichment_prompt_version: Mapped[str | None] = mapped_column(Text)
     unit: Mapped[str] = mapped_column(Text)
     unit_normalized: Mapped[str | None] = mapped_column(Text)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))

@@ -35,8 +35,14 @@ class RecordingAsyncClient:
     async def __aexit__(self, *args: object) -> None:
         return None
 
-    async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
-        self.calls.append({"url": url, "json": json})
+    async def post(
+        self,
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> FakeResponse:
+        self.calls.append({"url": url, "json": json, "headers": headers})
         embeddings = [
             {"embedding": _embedding_for_text(text)}
             for text in json["input"]
@@ -55,7 +61,13 @@ class MismatchedDimensionAsyncClient:
     async def __aexit__(self, *args: object) -> None:
         return None
 
-    async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
+    async def post(
+        self,
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> FakeResponse:
         return FakeResponse({"data": [{"embedding": [0.0] * 384}]})
 
 
@@ -70,7 +82,13 @@ class MissingDataAsyncClient:
     async def __aexit__(self, *args: object) -> None:
         return None
 
-    async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
+    async def post(
+        self,
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> FakeResponse:
         return FakeResponse({"error": "Unexpected endpoint or method"})
 
 
@@ -85,7 +103,13 @@ class FailingAsyncClient:
     async def __aexit__(self, *args: object) -> None:
         return None
 
-    async def post(self, url: str, *, json: dict[str, Any]) -> FakeResponse:
+    async def post(
+        self,
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> FakeResponse:
         raise httpx.ConnectError("connection refused")
 
 
@@ -132,6 +156,7 @@ async def test_embed_batches_texts_by_32_and_preserves_order(
     assert {call["json"]["model"] for call in RecordingAsyncClient.calls} == {
         "nomic-embed-text-v1.5",
     }
+    assert {call["headers"] for call in RecordingAsyncClient.calls} == {None}
     assert RecordingAsyncClient.calls[0]["json"]["input"] == texts[:32]
     assert RecordingAsyncClient.calls[-1]["json"]["input"] == texts[96:]
     assert RecordingAsyncClient.timeouts == [12.0]
@@ -154,6 +179,28 @@ async def test_embed_disables_environment_proxy_settings(
     await embeddings.embed(["text-1"])
 
     assert RecordingAsyncClient.trust_envs == [False]
+
+
+@pytest.mark.asyncio
+async def test_embed_sends_bearer_token_when_api_key_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.adapters.llm.embeddings.httpx.AsyncClient",
+        RecordingAsyncClient,
+    )
+    embeddings = LMStudioEmbeddings(
+        base_url="https://api.vsellm.ru/v1",
+        model="openai/text-embedding-3-small",
+        api_key="secret-token",
+        embedding_dim=3,
+    )
+
+    await embeddings.embed(["text-1"])
+
+    assert RecordingAsyncClient.calls[0]["headers"] == {
+        "Authorization": "Bearer secret-token",
+    }
 
 
 @pytest.mark.asyncio

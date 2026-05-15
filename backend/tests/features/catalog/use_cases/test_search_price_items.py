@@ -106,6 +106,12 @@ class FakeEmbeddings:
         return self.vectors
 
 
+class FailingEmbeddings(FakeEmbeddings):
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.inputs.append(texts)
+        raise RuntimeError("LM Studio embeddings unavailable")
+
+
 class FakeCatalogSearch:
     def __init__(self, hits: list[CatalogSearchHit] | None = None) -> None:
         self.hits = hits if hits is not None else []
@@ -229,6 +235,7 @@ def _item(
         "Аренда акустической системы 2 кВт для концертного зала, доставка отдельно"
     ),
     category: str | None = "Аренда",
+    service_category: str | None = None,
     unit: str = "день",
     unit_price: Decimal = Decimal("15000.00"),
     supplier: str | None = "ООО НИКА",
@@ -245,6 +252,15 @@ def _item(
         name=name,
         category=category,
         category_normalized=category.lower() if category else None,
+        service_category=service_category,
+        service_category_confidence=None,
+        service_category_source=None,
+        service_category_reason=None,
+        category_enrichment_status="pending",
+        category_enrichment_error=None,
+        category_enriched_at=None,
+        category_enrichment_model=None,
+        category_enrichment_prompt_version=None,
         unit=unit,
         unit_normalized=unit.lower(),
         unit_price=unit_price,
@@ -386,7 +402,7 @@ async def test_semantic_search_uses_query_prefix_hydrates_rows_and_preserves_ran
             "filters": CatalogSearchFilters(
                 embedding_template_version="prices_v1",
             ),
-            "limit": 30,
+            "limit": 50,
         },
     ]
     assert repository.hydrate_calls[0]["item_ids"] == [first.id, second.id]
@@ -397,10 +413,11 @@ async def test_semantic_search_uses_query_prefix_hydrates_rows_and_preserves_ran
 
 @pytest.mark.asyncio
 async def test_applies_simple_filters_to_semantic_keyword_and_hydration() -> None:
-    item = _item()
+    item = _item(service_category="звук")
     filters = SearchPriceItemsFilters(
         supplier_city="г. Москва",
         category="Аренда",
+        service_category="звук",
         supplier_status="Активен",
         has_vat="Без НДС",
         unit_price=Decimal("15000.00"),
@@ -414,6 +431,7 @@ async def test_applies_simple_filters_to_semantic_keyword_and_hydration() -> Non
 
     assert vector_search.calls[0]["filters"] == CatalogSearchFilters(
         category="Аренда",
+        service_category=None,
         unit_price=15000.0,
         has_vat="Без НДС",
         supplier_city="г. Москва",
@@ -421,7 +439,7 @@ async def test_applies_simple_filters_to_semantic_keyword_and_hydration() -> Non
         embedding_template_version="prices_v1",
     )
     assert repository.keyword_calls == [
-        {"query": "звук", "filters": filters, "limit": 15},
+        {"query": "звук", "filters": filters, "limit": 50},
     ]
     assert repository.hydrate_calls == [
         {"item_ids": [item.id], "filters": filters},
@@ -456,6 +474,56 @@ async def test_keyword_fallback_returns_backend_generated_reason_codes(
 
 
 @pytest.mark.asyncio
+async def test_semantic_failure_falls_back_to_keyword_results() -> None:
+    item = _item(name="Радиомикрофон", supplier_city="г. Екатеринбург")
+    repository = FakePriceItemSearchRepository([item])
+    embeddings = FailingEmbeddings()
+    vector_search = FakeCatalogSearch([])
+    repository.keyword_hits = [(item.id, 0.58, "keyword_name")]
+    uc = SearchPriceItemsUseCase(
+        items=repository,
+        embeddings=embeddings,
+        vector_search=vector_search,
+        catalog_query_prefix="search_query: ",
+        catalog_embedding_template_version="prices_v1",
+    )
+
+    result = await uc.execute(query="радиомикрофон Екатеринбург", limit=8)
+
+    assert embeddings.inputs == [["search_query: радиомикрофон Екатеринбург"]]
+    assert vector_search.calls == []
+    assert repository.keyword_calls[0]["query"] == "радиомикрофон Екатеринбург"
+    assert repository.hydrate_calls == [
+        {"item_ids": [item.id], "filters": repository.keyword_calls[0]["filters"]},
+    ]
+    assert [found.id for found in result.items] == [item.id]
+    assert result.items[0].match_reason.code == "keyword_name"
+
+
+@pytest.mark.asyncio
+async def test_service_category_filter_finds_item_with_generic_raw_category() -> None:
+    item = _item(
+        name="Акустическая система 600 Вт",
+        category="Аренда",
+        service_category="звук",
+    )
+    filters = SearchPriceItemsFilters(service_category="звук")
+    uc, repository, _embeddings, vector_search = _use_case(
+        items=[item],
+        semantic_hits=[CatalogSearchHit(price_item_id=item.id, score=0.84, payload={})],
+    )
+    repository.keyword_hits = [(item.id, 0.58, "keyword_name")]
+
+    result = await uc.execute(query="акустическая система", filters=filters, limit=5)
+
+    assert vector_search.calls[0]["filters"].service_category is None
+    assert repository.keyword_calls[0]["filters"].service_category == "звук"
+    assert result.items[0].id == item.id
+    assert result.items[0].service_category == "звук"
+    assert result.items[0].category == "Аренда"
+
+
+@pytest.mark.asyncio
 async def test_semantic_disabled_skips_embeddings_and_vector_search() -> None:
     item = _item(name="Радиомикрофон")
     repository = FakePriceItemSearchRepository([item])
@@ -481,7 +549,7 @@ async def test_semantic_disabled_skips_embeddings_and_vector_search() -> None:
         {
             "query": "радиомикрофон",
             "filters": SearchPriceItemsFilters(),
-            "limit": 30,
+            "limit": 50,
         },
     ]
     assert repository.hydrate_calls == [
@@ -509,7 +577,7 @@ async def test_merges_semantic_and_keyword_results_without_duplicate_rows() -> N
     result = await uc.execute(query="ника звук", limit=10)
 
     assert [item.id for item in result.items] == [semantic_item.id, keyword_item.id]
-    assert result.items[0].match_reason.code == "semantic"
+    assert result.items[0].match_reason.code == "keyword_name"
     assert result.items[1].match_reason.code == "keyword_supplier"
     assert repository.hydrate_calls[0]["item_ids"] == [
         semantic_item.id,
@@ -537,6 +605,28 @@ async def test_keyword_fallback_is_not_starved_by_full_semantic_limit() -> None:
 
     assert keyword_item.id in [found.id for found in result.items]
     assert len(result.items) == 2
+
+
+@pytest.mark.asyncio
+async def test_keyword_exact_match_ranks_above_dense_noise() -> None:
+    first_semantic = _item(name="Нерелевантная позиция 1", external_id="S-1")
+    second_semantic = _item(name="Нерелевантная позиция 2", external_id="S-2")
+    keyword_item = _item(name="Радиомикрофон", external_id="244")
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[first_semantic, second_semantic, keyword_item],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=first_semantic.id, score=0.99, payload={}),
+            CatalogSearchHit(price_item_id=second_semantic.id, score=0.98, payload={}),
+        ],
+    )
+    repository.keyword_hits = [
+        (keyword_item.id, 0.58, "keyword_name"),
+    ]
+
+    result = await uc.execute(query="радиомикрофон Екатеринбург", limit=2)
+
+    assert [found.id for found in result.items][0] == keyword_item.id
+    assert result.items[0].match_reason.code == "keyword_name"
 
 
 @pytest.mark.asyncio

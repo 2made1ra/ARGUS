@@ -116,6 +116,7 @@ class BriefState:
 class CatalogSearchFilters:
     supplier_city_normalized: str | None = None
     category: str | None = None
+    service_category: str | None = None
     supplier_status_normalized: str | None = None
     has_vat: str | None = None
     vat_mode: str | None = None
@@ -146,17 +147,6 @@ class ChatTurn:
 
 
 @dataclass(frozen=True, slots=True)
-class LLMRouterMessage:
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
-@dataclass(frozen=True, slots=True)
-class LLMStructuredRouterRequest:
-    messages: list[LLMRouterMessage]
-
-
-@dataclass(frozen=True, slots=True)
 class RouterDecision:
     intent: RouterIntent
     confidence: float
@@ -173,23 +163,6 @@ class RouterDecision:
     clarification_questions: list[str] = field(default_factory=list)
     user_visible_summary: str | None = None
     action_plan: ActionPlan | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Interpretation:
-    interface_mode: AssistantInterfaceMode
-    intent: RouterIntent
-    confidence: float
-    reason_codes: list[str]
-    brief_update: BriefState
-    service_needs: list[ServiceNeed] = field(default_factory=list)
-    requested_actions: list[ToolIntent] = field(default_factory=list)
-    search_requests: list[SearchRequest] = field(default_factory=list)
-    verification_targets: list[UUID] = field(default_factory=list)
-    comparison_targets: list[UUID] = field(default_factory=list)
-    missing_fields: list[str] = field(default_factory=list)
-    clarification_questions: list[str] = field(default_factory=list)
-    user_visible_summary: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,18 +253,6 @@ class RenderedEventBrief:
 
 
 @dataclass(frozen=True, slots=True)
-class ToolResults:
-    brief: BriefState
-    found_items: list[FoundCatalogItem] = field(default_factory=list)
-    item_details: list[CatalogItemDetail] = field(default_factory=list)
-    verification_results: list[SupplierVerificationResult] = field(
-        default_factory=list,
-    )
-    rendered_brief: RenderedEventBrief | None = None
-    skipped_actions: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
 class AssistantChatRequest:
     session_id: UUID | None
     message: str
@@ -328,9 +289,6 @@ __all__ = [
     "ChatTurn",
     "EventBriefWorkflowState",
     "FoundCatalogItem",
-    "Interpretation",
-    "LLMRouterMessage",
-    "LLMStructuredRouterRequest",
     "MatchReason",
     "MatchReasonCode",
     "RenderedBriefSection",
@@ -342,6 +300,5 @@ __all__ = [
     "SupplierVerificationResult",
     "SupplierVerificationStatus",
     "ToolIntent",
-    "ToolResults",
     "VisibleCandidate",
 ]

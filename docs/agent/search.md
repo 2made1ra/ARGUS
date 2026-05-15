@@ -45,11 +45,11 @@ Primary backend path:
 
 ```text
 POST /assistant/chat
-  -> ChatTurnUseCase
-      -> EventBriefInterpreter
-      -> BriefWorkflowPolicy
-      -> ToolExecutor
-      -> ResponseComposer
+  -> AssistantGraphRunner
+      -> agent_plan
+      -> validate_tool_calls
+      -> execute_tools
+      -> compose_response
   -> response:
       message + ui_mode + router + action_plan + brief
       + found_items + verification_results + rendered_brief
@@ -240,9 +240,10 @@ Assistant implementation boundaries:
 Catalog search tool behavior:
 
 ```text
-1. Embed user query as catalog_query_prefix + query.
-   Default catalog_query_prefix is "search_query: ".
-2. Search Qdrant collection price_items_search_v1 with simple payload filters.
+1. Embed user query with the configured catalog query embedding model.
+   The default is `text-embedding-3-small` with no query prefix.
+2. Search Qdrant collection price_items_search_v1 with simple payload filters,
+   including canonical `service_category` when the planner knows the service.
 3. Run minimal Postgres keyword fallback for exact supplier/name/INN/source text
    and external_id style searches.
 4. Merge and dedupe candidate price_item_id values, preserving semantic ranking
@@ -251,8 +252,9 @@ Catalog search tool behavior:
 6. Return item cards with source_text_snippet and backend match_reason.
 ```
 
-The catalog item embedding indexed in Qdrant is generated from
-`"search_document: " + price_items.embedding_text`.
+The catalog item embedding indexed in Qdrant is the legacy CSV `embedding`
+vector stored on the source import row. `embedding_text` remains useful for
+debugging/enrichment text, but it is not used to generate catalog item vectors.
 
 `POST /catalog/search` exposes the same tool-friendly contract for debugging,
 admin use and future assistant orchestration:
@@ -263,7 +265,7 @@ admin use and future assistant orchestration:
   "limit": 10,
   "filters": {
     "supplier_city": "г. Москва",
-    "category": "Аренда",
+    "service_category": "звук",
     "supplier_status": "Активен",
     "has_vat": "Без НДС",
     "unit_price": "15000.00"
@@ -281,6 +283,7 @@ Response:
       "score": 0.82,
       "name": "Аренда акустической системы",
       "category": "Аренда",
+      "service_category": "звук",
       "unit": "день",
       "unit_price": "15000.00",
       "supplier": "ООО Пример",
@@ -310,7 +313,8 @@ Search result evidence rules:
   refined query or missing filters.
 - Empty backend search returns `"items": []`; it must not fabricate catalog
   cards or prose-only substitutes.
-- Do not use CSV legacy embeddings for user query search.
+- Do not regenerate catalog item vectors from `embedding_text`; use the legacy
+  CSV vectors and embed user queries with a compatible model.
 - Do not search document chunks as catalog evidence for prices/suppliers.
 
 ## Brief State

@@ -7,6 +7,7 @@ from typing import Literal
 from uuid import UUID
 
 PriceImportStatus = Literal["QUEUED", "PROCESSING", "IMPORTED", "FAILED"]
+CategoryEnrichmentStatus = Literal["pending", "enriched", "failed", "skipped"]
 CatalogIndexStatus = Literal[
     "pending",
     "indexed",
@@ -90,6 +91,15 @@ class PriceItem:
     legacy_embedding_dim: int | None
     created_at: datetime | None
     updated_at: datetime | None
+    service_category: str | None = None
+    service_category_confidence: float | None = None
+    service_category_source: str | None = None
+    service_category_reason: str | None = None
+    category_enrichment_status: CategoryEnrichmentStatus = "pending"
+    category_enrichment_error: str | None = None
+    category_enriched_at: datetime | None = None
+    category_enrichment_model: str | None = None
+    category_enrichment_prompt_version: str | None = None
 
 
 @dataclass(slots=True)
@@ -129,6 +139,7 @@ class PriceItemList:
 
 __all__ = [
     "CatalogIndexStatus",
+    "CategoryEnrichmentStatus",
     "PriceImport",
     "PriceImportRow",
     "PriceImportStatus",

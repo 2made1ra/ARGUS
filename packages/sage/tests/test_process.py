@@ -196,9 +196,15 @@ async def test_process_document_creates_default_lm_studio_client(
     created: dict[str, str] = {}
 
     class FakeLMStudioClient:
-        def __init__(self, base_url: str, model: str) -> None:
+        def __init__(
+            self,
+            base_url: str,
+            model: str,
+            api_key: str | None = None,
+        ) -> None:
             created["base_url"] = base_url
             created["model"] = model
+            created["api_key"] = api_key
 
         async def __aenter__(self) -> "FakeLMStudioClient":
             return self
@@ -219,8 +225,9 @@ async def test_process_document_creates_default_lm_studio_client(
     async def fake_summarize(client: FakeLMStudioClient, pages: list[Page]) -> str:
         return ""
 
-    monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
-    monkeypatch.setenv("LM_STUDIO_LLM_MODEL", "local-model")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.vsellm.ru/v1")
+    monkeypatch.setenv("CHAT_MODEL", "openai/gpt-oss-120b")
+    monkeypatch.setenv("API_KEY", "secret-token")
     monkeypatch.setattr("sage.process.LMStudioClient", FakeLMStudioClient)
     monkeypatch.setattr("sage.process.ensure_pdf", fake_ensure_pdf)
     monkeypatch.setattr("sage.process.detect_kind", lambda pdf_path: "text")
@@ -232,8 +239,9 @@ async def test_process_document_creates_default_lm_studio_client(
     result = await process_document(tmp_path / "source.pdf", tmp_path)
 
     assert created == {
-        "base_url": "http://localhost:1234/v1",
-        "model": "local-model",
+        "base_url": "https://api.vsellm.ru/v1",
+        "model": "openai/gpt-oss-120b",
+        "api_key": "secret-token",
     }
     assert result == ProcessingResult(
         chunks=[],

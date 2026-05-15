@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from app.core.domain.ids import ContractorEntityId, DocumentId
 from app.features.ingest.ports import DocumentRepository, EmbeddingService
 from app.features.search.dto import ChunkSnippet, DocumentSearchResult, SearchGroup
 from app.features.search.ports import VectorSearch
+from app.features.search.use_cases.payload_values import optional_int
 
 _QDRANT_GROUP_LIMIT = 100
 _QDRANT_GROUP_SIZE = 3
@@ -67,7 +67,7 @@ class SearchDocumentsUseCase:
 
             snippets = [
                 ChunkSnippet(
-                    page=_optional_int(hit.payload.get("page_start")),
+                    page=optional_int(hit.payload.get("page_start")),
                     snippet=str(hit.payload["text"]),
                     score=hit.score,
                 )
@@ -92,12 +92,6 @@ class SearchDocumentsUseCase:
 
 def _document_id_from_group(group: SearchGroup) -> DocumentId:
     return DocumentId(UUID(group.group_key))
-
-
-def _optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    return int(value)
 
 
 __all__ = ["SearchDocumentsUseCase"]

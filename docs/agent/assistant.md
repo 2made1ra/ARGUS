@@ -28,10 +28,11 @@ Current implementation pointers:
 
 - Public HTTP contract: `docs/api/openapi.yaml`.
 - Backend DTO contract: `backend/app/features/assistant/dto.py`.
+- LangGraph runtime: `backend/app/features/assistant/agent_graph.py`.
+- LangChain planner adapter:
+  `backend/app/adapters/llm/assistant_agent_planner.py`.
 - Plan 07 phase prompt handoff:
   `docs/plans/prompts/07-event-brief-assistant-orchestrator-prompts.md`.
-- Plan 07 structured-router prompt file:
-  `backend/app/features/assistant/domain/llm_router/prompt.py`.
 - Frontend UI state adapter: `frontend/src/utils/assistantUiState.ts`.
 - Frontend request context builder: `frontend/src/utils/assistantRequest.ts`.
 
@@ -88,62 +89,65 @@ wants to start an event brief.
 
 ## One-Turn Orchestrator
 
-One user message runs one bounded chat turn:
+One user message runs one bounded LangGraph chat turn:
 
 ```text
 POST /assistant/chat
-  -> ChatTurnUseCase
-      -> EventBriefInterpreter
-      -> BriefWorkflowPolicy
-      -> ToolExecutor
-      -> ResponseComposer
+  -> AssistantGraphRunner
+      -> prepare_input
+      -> agent_plan
+      -> validate_tool_calls
+      -> execute_tools
+      -> compose_final_response
       -> ChatTurnResponse
 ```
 
-No autonomous loop is allowed. Initial defaults should be:
+The assistant uses a LangGraph loop, but tool execution is backend-gated.
+The LLM planner may propose tool calls; backend validation still controls tool
+names, arguments, request context and call budget. Initial defaults should be:
 
 ```text
 max_tool_calls_per_turn = 3
 max_llm_retries = 1
 ```
 
-LLM assistance is allowed only for structured interpretation behind validated
-DTOs. The LLM must not:
+LLM assistance is allowed only through structured LangChain/LangGraph planner
+output behind validated DTOs. The LLM must not:
 
-- call tools directly;
+- execute tools directly without backend validation;
 - generate SQL or arbitrary HTTP requests;
 - write final user prose for catalog facts;
 - invent prices, suppliers, contacts, INNs, cities, statuses or availability;
 - decide tool execution without backend policy validation.
 
-## DTO Flow
+## Graph State Flow
 
-Do not put facts, policy and tool authorization into one router object.
+Do not put facts, policy and tool authorization into one legacy router object.
+The LangGraph runtime keeps planner output, backend validation, tool results
+and response projection as separate graph state updates.
 
 ```text
-EventBriefInterpreter
-  -> Interpretation
-     extracted facts, raw intent, brief_update, service needs,
-     candidate references, confidence and reason codes
+LangChainAssistantAgentPlanner
+  -> AssistantAgentPlan
+     message, interface_mode, workflow_stage, brief_update,
+     proposed tool_calls and clarification questions
 
-BriefWorkflowPolicy
+AssistantGraphRunner.validate_tool_calls
   -> ActionPlan
-     ui_mode, workflow_stage, approved tool_intents, search_requests,
-     verification_targets, render request and clarification questions
+     backend-approved tool_intents, search_requests and skipped tool reasons
 
-ToolExecutor
-  -> ToolResults
-     found_items, item details, verification_results, rendered_brief
-     and skipped tool reasons
+AssistantGraphRunner.execute_tools
+  -> graph state
+     found_items, merged brief and skipped tool reasons
 
-ResponseComposer
-  -> ChatTurnResponse
+AssistantGraphRunner.compose_response
+  -> AssistantChatResponse
      safe message, ui_mode, router/action diagnostics, brief and evidence
 ```
 
 `RouterDecision` can remain as a public compatibility/debug payload, but it is
-assembled from `Interpretation + ActionPlan`. It is not the object that
-authorizes tool execution.
+assembled from graph state. It is not the object that authorizes tool
+execution.
 
 Derived compatibility fields:
 
@@ -310,8 +314,8 @@ verify_supplier_status
 render_event_brief
 ```
 
-`ToolExecutor` runs only tool intents approved by `BriefWorkflowPolicy`. LLM
-output can suggest actions but cannot authorize them.
+`AssistantGraphRunner` executes only tool calls approved by backend validation.
+LLM output can suggest actions but cannot authorize them.
 
 Tool execution rules:
 

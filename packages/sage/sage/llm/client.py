@@ -23,11 +23,13 @@ class LMStudioClient:
         base_url: str,
         model: str,
         *,
+        api_key: str | None = None,
         timeout: float = 60.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.api_key = api_key
         self.timeout = timeout
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
@@ -92,7 +94,11 @@ class LMStudioClient:
                 "LMStudioClient must be used as an async context manager"
             )
         try:
-            return await self._http.post(self._chat_completions_url(), json=payload)
+            return await self._http.post(
+                self._chat_completions_url(),
+                json=payload,
+                headers=_authorization_headers(self.api_key),
+            )
         except httpx.HTTPError as exc:
             raise LLMError(f"LM Studio request failed: {exc}") from exc
 
@@ -137,3 +143,9 @@ def parse_json_loose(raw: str) -> dict[str, Any]:
             return parsed
 
     raise LLMError(f"Could not parse JSON from LLM response: {raw[:300]}")
+
+
+def _authorization_headers(api_key: str | None) -> dict[str, str] | None:
+    if api_key is None or api_key == "":
+        return None
+    return {"Authorization": f"Bearer {api_key}"}

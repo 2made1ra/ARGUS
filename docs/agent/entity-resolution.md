@@ -34,8 +34,8 @@ Rules:
 
 - CSV import must not call `resolve_contractor`.
 - Catalog search must not depend on contractor matching quality.
-- `verify_supplier_status` must work through an explicit
-  `SupplierVerificationPort`.
+- `verify_supplier_status` must work through an explicit backend adapter
+  contract owned outside the LLM planner.
 - The default MVP adapter may return `not_verified` with a risk flag such as
   `verification_adapter_not_configured`.
 - Future FNS EGRUL/EGRIP or DaData adapters must live in `adapters/`, behind

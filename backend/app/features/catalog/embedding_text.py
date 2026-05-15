@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-_TARIFF_SUFFIX_RE = re.compile(
-    r"\s*\((?:аренда|цена|услуга|стоимость)\s+за\s+[^)]*\)\s*$",
+_TARIFF_PATTERN_RE = re.compile(
+    r"\s*\((?:аренда|цена|услуга|стоимость)\s+за\s+[^)]*\)\s*",
     re.IGNORECASE,
 )
 
@@ -15,10 +15,11 @@ def build_embedding_text(
     section: str | None,
     source_text: str | None,
     unit: str,
+    service_category: str | None = None,
 ) -> str:
     lines = [
         ("Название", _clean_name_for_embedding(name)),
-        ("Категория", _clean_line_value(category)),
+        ("Категория", _clean_line_value(service_category or category)),
         ("Раздел", _clean_line_value(section)),
         (
             "Описание / источник",
@@ -53,7 +54,7 @@ def _clean_line_value(value: str | None) -> str | None:
 
 
 def _clean_name_for_embedding(name: str) -> str | None:
-    return _clean_line_value(_TARIFF_SUFFIX_RE.sub("", name))
+    return _clean_line_value(_TARIFF_PATTERN_RE.sub("", name))
 
 
 def _normalize_for_compare(value: str) -> str:

@@ -20,25 +20,24 @@ Catalog import is not part of the document Celery chain:
 POST /catalog/imports
   -> store price_imports + price_import_rows
   -> normalize CSV-compatible fields
-  -> build deterministic embedding_text prices_v1
+  -> preserve legacy CSV embedding
   -> upsert active price_items in Postgres
   -> IndexPriceItemsUseCase:
-       embed "search_document: " + embedding_text
-       validate configured catalog dimension
+       read and validate legacy CSV embedding
        upsert Qdrant price_items_search_v1
        set catalog_index_status = indexed | embedding_failed | indexing_failed
 ```
 
 Guidance:
 
-- Prefer generate+index as one MVP flow unless generated vectors are explicitly
-  persisted in a separate storage contract.
+- Prefer import+index as one MVP flow; item vectors come from the CSV legacy
+  `embedding` column.
 - `embedding_failed` and `indexing_failed` are different states and should keep
   separate error messages.
 - Use `file_sha256` and/or `row_fingerprint` to prevent accidental duplicate
   active rows on repeated CSV imports.
-- CSV legacy `embedding` is audit-only and never a catalog query search vector.
-- Do not infer catalog embedding dimension from legacy CSV vectors.
+- CSV legacy `embedding` is the catalog item vector source for Qdrant indexing.
+- Validate legacy vector dimension against the configured catalog dimension.
 
 ## 14-step ingestion workflow
 
@@ -125,7 +124,7 @@ PDF upload
   -> optional PriceItemExtraction[]
   -> catalog normalization
   -> price_items
-  -> embedding_text prices_v1
+  -> compatible legacy CSV embedding
   -> price_items_search_v1
   -> assistant found_items cards
 ```
@@ -141,10 +140,10 @@ document/page/chunk provenance.
 bounded chat turn:
 
 ```text
-ChatTurnUseCase
-  -> EventBriefInterpreter
-  -> BriefWorkflowPolicy
-  -> ToolExecutor
+AssistantGraphRunner
+  -> agent_plan
+  -> validate_tool_calls
+  -> execute_tools
        -> update_brief
        -> search_items
        -> get_item_details

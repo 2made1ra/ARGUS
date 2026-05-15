@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -191,6 +192,91 @@ class SqlAlchemyPriceItemRepository:
         rows = await self._session.scalars(statement)
         return [_item_to_entity(row) for row in rows]
 
+    async def get_legacy_embedding(self, item_id: UUID) -> list[float] | None:
+        statement = (
+            select(PriceImportRowRow.raw)
+            .select_from(PriceItemRow)
+            .join(
+                PriceImportRowRow,
+                PriceItemRow.source_import_row_id == PriceImportRowRow.id,
+            )
+            .where(PriceItemRow.id == item_id)
+        )
+        raw = await self._session.scalar(statement)
+        if not isinstance(raw, dict):
+            return None
+        return _legacy_embedding_from_raw(raw)
+
+    async def list_active_for_category_enrichment(
+        self,
+        *,
+        limit: int,
+    ) -> list[PriceItem]:
+        statement = (
+            select(PriceItemRow)
+            .where(
+                PriceItemRow.is_active.is_(True),
+                PriceItemRow.category_enrichment_status == "pending",
+            )
+            .order_by(PriceItemRow.created_at.asc(), PriceItemRow.id.asc())
+            .limit(limit)
+        )
+        rows = await self._session.scalars(statement)
+        return [_item_to_entity(row) for row in rows]
+
+    async def mark_category_enriched(
+        self,
+        item_id: UUID,
+        *,
+        service_category: str,
+        confidence: float,
+        reason: str | None,
+        enriched_at: datetime,
+        model: str,
+        prompt_version: str,
+        embedding_text: str,
+    ) -> None:
+        statement = (
+            update(PriceItemRow)
+            .where(PriceItemRow.id == item_id)
+            .values(
+                service_category=service_category,
+                service_category_confidence=confidence,
+                service_category_source="llm",
+                service_category_reason=reason,
+                category_enrichment_status="enriched",
+                category_enrichment_error=None,
+                category_enriched_at=enriched_at,
+                category_enrichment_model=model,
+                category_enrichment_prompt_version=prompt_version,
+                embedding_text=embedding_text,
+                updated_at=enriched_at,
+            )
+        )
+        await self._session.execute(statement)
+
+    async def mark_category_enrichment_failed(
+        self,
+        item_id: UUID,
+        *,
+        error: str,
+        model: str,
+        prompt_version: str,
+    ) -> None:
+        now = datetime.now(UTC)
+        statement = (
+            update(PriceItemRow)
+            .where(PriceItemRow.id == item_id)
+            .values(
+                category_enrichment_status="failed",
+                category_enrichment_error=error,
+                category_enrichment_model=model,
+                category_enrichment_prompt_version=prompt_version,
+                updated_at=now,
+            )
+        )
+        await self._session.execute(statement)
+
     async def mark_indexed(
         self,
         item_id: UUID,
@@ -279,6 +365,15 @@ def _item_values(item: PriceItem) -> dict[str, object]:
         "name": item.name,
         "category": item.category,
         "category_normalized": item.category_normalized,
+        "service_category": item.service_category,
+        "service_category_confidence": item.service_category_confidence,
+        "service_category_source": item.service_category_source,
+        "service_category_reason": item.service_category_reason,
+        "category_enrichment_status": item.category_enrichment_status,
+        "category_enrichment_error": item.category_enrichment_error,
+        "category_enriched_at": item.category_enriched_at,
+        "category_enrichment_model": item.category_enrichment_model,
+        "category_enrichment_prompt_version": item.category_enrichment_prompt_version,
         "unit": item.unit,
         "unit_normalized": item.unit_normalized,
         "unit_price": item.unit_price,
@@ -322,6 +417,15 @@ def _item_to_entity(row: PriceItemRow) -> PriceItem:
         name=row.name,
         category=row.category,
         category_normalized=row.category_normalized,
+        service_category=row.service_category,
+        service_category_confidence=row.service_category_confidence,
+        service_category_source=row.service_category_source,
+        service_category_reason=row.service_category_reason,
+        category_enrichment_status=row.category_enrichment_status,  # type: ignore[arg-type]
+        category_enrichment_error=row.category_enrichment_error,
+        category_enriched_at=row.category_enriched_at,
+        category_enrichment_model=row.category_enrichment_model,
+        category_enrichment_prompt_version=row.category_enrichment_prompt_version,
         unit=row.unit,
         unit_normalized=row.unit_normalized,
         unit_price=row.unit_price,
@@ -358,6 +462,27 @@ def _item_to_entity(row: PriceItemRow) -> PriceItem:
     )
 
 
+def _legacy_embedding_from_raw(raw: dict[str, object]) -> list[float] | None:
+    value = raw.get("embedding")
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Legacy CSV embedding is not valid JSON") from exc
+
+    if not isinstance(parsed, list):
+        raise ValueError("Legacy CSV embedding must be a JSON array")
+
+    vector: list[float] = []
+    for element in parsed:
+        if isinstance(element, bool) or not isinstance(element, int | float):
+            raise ValueError("Legacy CSV embedding contains a non-numeric value")
+        vector.append(float(element))
+    return vector
+
+
 def _is_active_fingerprint_integrity_error(exc: IntegrityError) -> bool:
     constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
     if constraint_name == "ix_price_items_row_fingerprint_active":
@@ -379,6 +504,8 @@ def _search_filter_conditions(filters: SearchPriceItemsFilters) -> list[object]:
         conditions.append(
             PriceItemRow.category_normalized == filters.category_normalized,
         )
+    if filters.service_category is not None:
+        conditions.append(PriceItemRow.service_category == filters.service_category)
     if filters.section is not None:
         conditions.append(PriceItemRow.section == filters.section)
     if filters.section_normalized is not None:
@@ -424,6 +551,7 @@ def _keyword_conditions(keyword_query: KeywordQuery) -> list[object]:
             PriceItemRow.source_text,
             PriceItemRow.section,
             PriceItemRow.category,
+            PriceItemRow.service_category,
             PriceItemRow.supplier_city,
             PriceItemRow.has_vat,
             PriceItemRow.supplier_status,
@@ -458,6 +586,7 @@ def _keyword_fields_from_row(row: PriceItemRow) -> CatalogKeywordFields:
         source_text=row.source_text,
         section=row.section,
         category=row.category,
+        service_category=row.service_category,
         supplier=row.supplier,
         supplier_inn=row.supplier_inn,
         supplier_city=row.supplier_city,

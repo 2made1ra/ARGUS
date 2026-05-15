@@ -5,9 +5,9 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.features.contractors.use_cases.list_contractors import ContractorCatalogItem
 from app.features.contractors.use_cases.get_contractor_profile import ContractorProfile
-from app.features.search.dto import ChunkSnippet, DocumentSearchResult
+from app.features.contractors.use_cases.list_contractors import ContractorCatalogItem
+from app.features.search.dto import DocumentSearchResult
 
 
 class ContractorOut(BaseModel):

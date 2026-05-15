@@ -445,9 +445,10 @@ async def test_search_catalog_items_returns_found_item_cards(app: FastAPI) -> No
         {
             "id": str(item.id),
             "score": 0.82,
-            "name": "Аренда света",
-            "category": "Аренда",
-            "unit": "шт.",
+                "name": "Аренда света",
+                "category": "Аренда",
+                "service_category": None,
+                "unit": "шт.",
             "unit_price": "1200.00",
             "supplier": "ООО Ромашка",
             "supplier_city": "г. Москва",
@@ -466,5 +467,6 @@ async def test_search_catalog_items_returns_found_item_cards(app: FastAPI) -> No
     assert call["filters"].supplier_city_normalized == "москва"
     assert call["filters"].category == "Аренда"
     assert call["filters"].category_normalized == "аренда"
+    assert call["filters"].service_category is None
     assert call["filters"].section_normalized == "оборудование"
     assert call["filters"].unit_price == Decimal("1200.00")

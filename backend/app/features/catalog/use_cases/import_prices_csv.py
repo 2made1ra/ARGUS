@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.core.domain.service_taxonomy import infer_service_category, is_generic_category
 from app.features.catalog.csv_parser import ParsedPriceCsvRow, parse_price_csv
 from app.features.catalog.embedding_text import build_embedding_text
 from app.features.catalog.entities.price_item import (
@@ -28,8 +29,8 @@ from app.features.catalog.ports import (
 )
 
 SCHEMA_VERSION = "prices_csv_v1"
-EMBEDDING_TEMPLATE_VERSION = "prices_v1"
-DEFAULT_EMBEDDING_MODEL = "nomic-embed-text-v1.5"
+EMBEDDING_TEMPLATE_VERSION = "legacy_csv_embedding"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 
 
 @dataclass(slots=True)
@@ -200,6 +201,17 @@ class ImportPricesCsvUseCase:
         existing = await self._items.find_active_by_row_fingerprint(fingerprint)
         if existing is not None:
             return existing
+        service_category = infer_service_category(normalized.category)
+        category_enrichment_status = (
+            "enriched"
+            if service_category is not None
+            else "pending"
+            if is_generic_category(normalized.category)
+            else "skipped"
+        )
+        service_category_source = (
+            "deterministic" if service_category is not None else None
+        )
 
         item = PriceItem(
             id=uuid4(),
@@ -207,6 +219,19 @@ class ImportPricesCsvUseCase:
             name=normalized.name,
             category=normalized.category,
             category_normalized=normalized.category_normalized,
+            service_category=service_category,
+            service_category_confidence=1.0 if service_category is not None else None,
+            service_category_source=service_category_source,
+            service_category_reason=(
+                "source_category_alias" if service_category is not None else None
+            ),
+            category_enrichment_status=category_enrichment_status,
+            category_enrichment_error=None,
+            category_enriched_at=datetime.now(UTC)
+            if service_category is not None
+            else None,
+            category_enrichment_model=None,
+            category_enrichment_prompt_version=None,
             unit=normalized.unit,
             unit_normalized=normalized.unit_normalized,
             unit_price=normalized.unit_price,
@@ -232,6 +257,7 @@ class ImportPricesCsvUseCase:
             embedding_text=build_embedding_text(
                 name=normalized.name,
                 category=normalized.category,
+                service_category=service_category,
                 section=normalized.section,
                 source_text=normalized.source_text,
                 unit=normalized.unit,

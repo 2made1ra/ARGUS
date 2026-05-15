@@ -148,6 +148,8 @@ def _vat_mode(value: str | None) -> str:
     text = _normalize_key(value)
     if not text:
         return "unknown"
+    if "усн" in text or ("ндс" in text and "не облага" in text):
+        return "without_vat"
     if "без" in text and "ндс" in text:
         return "without_vat"
     if "ндс" in text or "vat" in text:
@@ -169,6 +171,8 @@ def _normalize_city(value: str | None) -> str | None:
     text = re.sub(r"\s+г$", "", text)
     if text in {"санкт-петербург", "питер", "спб", "санкт петербург"}:
         return "санкт-петербург"
+    if text in {"dubai, united arab emirates", "dubai, uae", "dubai"}:
+        return "дубай"
     return text or None
 
 

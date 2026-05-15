@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.entrypoints.http.schemas.formatting import decimal_string
 from app.features.catalog.dto import (
     FoundPriceItem,
     MatchReason,
@@ -140,6 +141,7 @@ class PriceItemOut(BaseModel):
     id: UUID
     name: str
     category: str | None
+    service_category: str | None
     unit: str
     unit_price: str
     supplier: str | None
@@ -157,8 +159,9 @@ class PriceItemOut(BaseModel):
             id=item.id,
             name=item.name,
             category=item.category,
+            service_category=item.service_category,
             unit=item.unit,
-            unit_price=_decimal_string(item.unit_price),
+            unit_price=decimal_string(item.unit_price),
             supplier=item.supplier,
             supplier_inn=item.supplier_inn,
             supplier_city=item.supplier_city,
@@ -181,6 +184,7 @@ class PriceItemDetailItemOut(BaseModel):
     external_id: str | None
     name: str
     category: str | None
+    service_category: str | None
     unit: str
     unit_price: str
     source_text: str | None
@@ -206,8 +210,9 @@ class PriceItemDetailItemOut(BaseModel):
             external_id=item.external_id,
             name=item.name,
             category=item.category,
+            service_category=item.service_category,
             unit=item.unit,
-            unit_price=_decimal_string(item.unit_price),
+            unit_price=decimal_string(item.unit_price),
             source_text=item.source_text,
             section=item.section,
             supplier=item.supplier,
@@ -256,6 +261,7 @@ class CatalogSearchFiltersIn(BaseModel):
     supplier_city_normalized: str | None = None
     category: str | None = None
     category_normalized: str | None = None
+    service_category: str | None = None
     section: str | None = None
     section_normalized: str | None = None
     supplier_status: str | None = None
@@ -272,6 +278,7 @@ class CatalogSearchFiltersIn(BaseModel):
             supplier_city_normalized=self.supplier_city_normalized,
             category=self.category,
             category_normalized=self.category_normalized,
+            service_category=self.service_category,
             section=self.section,
             section_normalized=self.section_normalized,
             supplier_status=self.supplier_status,
@@ -316,6 +323,7 @@ class FoundPriceItemOut(BaseModel):
     score: float
     name: str
     category: str | None
+    service_category: str | None
     unit: str
     unit_price: str
     supplier: str | None
@@ -331,8 +339,9 @@ class FoundPriceItemOut(BaseModel):
             score=item.score,
             name=item.name,
             category=item.category,
+            service_category=item.service_category,
             unit=item.unit,
-            unit_price=_decimal_string(item.unit_price),
+            unit_price=decimal_string(item.unit_price),
             supplier=item.supplier,
             supplier_city=item.supplier_city,
             source_text_snippet=item.source_text_snippet,
@@ -349,10 +358,6 @@ class CatalogSearchResultOut(BaseModel):
         return cls(
             items=[FoundPriceItemOut.from_domain(item) for item in result.items],
         )
-
-
-def _decimal_string(value: Decimal) -> str:
-    return f"{value:.2f}"
 
 
 __all__ = [

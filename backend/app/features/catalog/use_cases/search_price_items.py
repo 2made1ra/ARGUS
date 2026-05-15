@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from decimal import Decimal
 from uuid import UUID
@@ -47,6 +48,11 @@ _CATALOG_QUERY_STOP_WORDS = frozenset(
 )
 _EKATERINBURG_ALIASES = ("екат", "екб", "екатеринбург")
 _SEMANTIC_CANDIDATE_MULTIPLIER = 3
+_MIN_CANDIDATE_LIMIT = 50
+_RRF_K = 60.0
+_KEYWORD_RRF_WEIGHT = 2.0
+_SEMANTIC_RRF_WEIGHT = 1.0
+_logger = logging.getLogger(__name__)
 
 
 class SearchPriceItemsUseCase:
@@ -91,15 +97,20 @@ class SearchPriceItemsUseCase:
             filters or SearchPriceItemsFilters(),
             infer_search_filters_from_query(query),
         )
-        semantic_hits = (
-            await self._semantic_hits(
-                query=query,
-                filters=filters,
-                limit=_candidate_limit(limit),
-            )
-            if self._semantic_search_enabled
-            else []
-        )
+        semantic_hits: list[CatalogSearchHit] = []
+        if self._semantic_search_enabled:
+            try:
+                semantic_hits = await self._semantic_hits(
+                    query=query,
+                    filters=filters,
+                    limit=_candidate_limit(limit),
+                )
+            except Exception:
+                _logger.warning(
+                    "Catalog semantic search failed; falling back to keyword search",
+                    exc_info=True,
+                )
+                semantic_hits = []
         keyword_hits = await self._items.search_active_by_keywords(
             query=query,
             filters=filters,
@@ -179,6 +190,19 @@ class _Candidate:
         self.reason_code = reason_code
 
 
+class _FusedCandidate:
+    def __init__(
+        self,
+        *,
+        fused_score: float,
+        raw_score: float,
+        reason_code: MatchReasonCode,
+    ) -> None:
+        self.fused_score = fused_score
+        self.raw_score = raw_score
+        self.reason_code = reason_code
+
+
 def _merge_candidates(
     semantic_hits: list[CatalogSearchHit],
     keyword_hits: list[tuple[UUID, float, MatchReasonCode]],
@@ -189,67 +213,61 @@ def _merge_candidates(
     if limit < 1:
         return []
 
-    candidates: list[_Candidate] = []
-    seen: set[UUID] = set()
+    fused: dict[UUID, _FusedCandidate] = {}
 
-    for hit in semantic_hits:
-        if hit.price_item_id in seen:
-            continue
-        candidates.append(
-            _Candidate(
-                item_id=hit.price_item_id,
-                score=hit.score,
-                reason_code="semantic",
-            ),
+    for rank, (item_id, score, reason_code) in enumerate(keyword_hits, start=1):
+        _add_fused_candidate(
+            fused,
+            item_id=item_id,
+            fused_score=_KEYWORD_RRF_WEIGHT / (_RRF_K + rank),
+            raw_score=score,
+            reason_code=reason_code,
         )
-        seen.add(hit.price_item_id)
 
-    keyword_candidates: list[_Candidate] = []
-    for item_id, score, reason_code in keyword_hits:
-        if item_id in seen:
-            continue
-        keyword_candidates.append(
-            _Candidate(
-                item_id=item_id,
-                score=score,
-                reason_code=reason_code,
-            ),
+    for rank, hit in enumerate(semantic_hits, start=1):
+        _add_fused_candidate(
+            fused,
+            item_id=hit.price_item_id,
+            fused_score=_SEMANTIC_RRF_WEIGHT / (_RRF_K + rank),
+            raw_score=hit.score,
+            reason_code="semantic",
         )
-        seen.add(item_id)
 
-    if len(candidates) < limit:
-        candidates.extend(keyword_candidates[: limit - len(candidates)])
-        _promote_keyword_candidate(candidates, result_limit=result_limit)
-        return candidates
-
-    if keyword_candidates:
-        # Weak vectors can otherwise fill the response and hide exact catalog matches.
-        strongest_keyword = max(keyword_candidates, key=lambda item: item.score)
-        return [*candidates[: result_limit - 1], strongest_keyword]
-
-    return candidates[:limit]
-
-
-def _promote_keyword_candidate(
-    candidates: list[_Candidate],
-    *,
-    result_limit: int,
-) -> None:
-    if result_limit < 1 or len(candidates) <= result_limit:
-        return
-    first_page = candidates[:result_limit]
-    if any(candidate.reason_code != "semantic" for candidate in first_page):
-        return
-    keyword_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate.reason_code != "semantic"
+    ranked = sorted(
+        fused.items(),
+        key=lambda pair: (pair[1].fused_score, pair[1].raw_score),
+        reverse=True,
+    )
+    return [
+        _Candidate(
+            item_id=item_id,
+            score=entry.raw_score,
+            reason_code=entry.reason_code,
+        )
+        for item_id, entry in ranked[: min(limit, result_limit)]
     ]
-    if not keyword_candidates:
+
+
+def _add_fused_candidate(
+    fused: dict[UUID, _FusedCandidate],
+    *,
+    item_id: UUID,
+    fused_score: float,
+    raw_score: float,
+    reason_code: MatchReasonCode,
+) -> None:
+    current = fused.get(item_id)
+    if current is None:
+        fused[item_id] = _FusedCandidate(
+            fused_score=fused_score,
+            raw_score=raw_score,
+            reason_code=reason_code,
+        )
         return
-    strongest_keyword = max(keyword_candidates, key=lambda item: item.score)
-    candidates.remove(strongest_keyword)
-    candidates[result_limit - 1] = strongest_keyword
+    current.fused_score += fused_score
+    current.raw_score = max(current.raw_score, raw_score)
+    if current.reason_code == "semantic" and reason_code != "semantic":
+        current.reason_code = reason_code
 
 
 def _catalog_filters_from_search_filters(
@@ -259,6 +277,7 @@ def _catalog_filters_from_search_filters(
 ) -> CatalogSearchFilters:
     return CatalogSearchFilters(
         category=filters.category,
+        service_category=None,
         section=filters.section,
         unit_price=_decimal_to_float(filters.unit_price),
         unit_price_min=_decimal_to_float(filters.unit_price_min),
@@ -276,7 +295,7 @@ def _catalog_filters_from_search_filters(
 
 
 def _candidate_limit(limit: int) -> int:
-    return max(limit, limit * _SEMANTIC_CANDIDATE_MULTIPLIER)
+    return max(limit, limit * _SEMANTIC_CANDIDATE_MULTIPLIER, _MIN_CANDIDATE_LIMIT)
 
 
 def _found_item(item: PriceItem, candidate: _Candidate) -> FoundPriceItem:
@@ -285,6 +304,7 @@ def _found_item(item: PriceItem, candidate: _Candidate) -> FoundPriceItem:
         score=candidate.score,
         name=item.name,
         category=item.category,
+        service_category=item.service_category,
         unit=item.unit,
         unit_price=item.unit_price,
         supplier=item.supplier,
@@ -347,6 +367,7 @@ def _has_catalog_lexical_evidence(item: PriceItem, evidence_terms: list[str]) ->
         for value in (
             item.name,
             item.category,
+            item.service_category,
             item.section,
             item.source_text,
             item.embedding_text,

@@ -325,3 +325,27 @@ async def test_lmstudio_client_chat_json_uses_loose_parser() -> None:
     assert content == {"document_number": "42"}
     assert len(requests) == 1
     assert "response_format" not in requests[0]
+
+
+async def test_lmstudio_client_sends_bearer_token_when_api_key_is_configured() -> None:
+    headers: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        headers.append(request.headers.get("authorization"))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+
+    async with LMStudioClient(
+        "https://api.vsellm.ru/v1",
+        "openai/gpt-oss-120b",
+        api_key="secret-token",
+        transport=transport,
+    ) as client:
+        content = await client.chat([{"role": "user", "content": "Привет!"}])
+
+    assert content == "ok"
+    assert headers == ["Bearer secret-token"]
