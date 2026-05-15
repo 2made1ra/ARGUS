@@ -537,6 +537,38 @@ async def test_keyword_fallback_is_not_starved_by_full_semantic_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sports_inventory_search_drops_semantic_hits_without_lexical_evidence(
+) -> None:
+    training = _item(
+        name=(
+            "Обучение по общим вопросам охраны труда и функционирования "
+            "системы управления охраной труда"
+        ),
+        source_text="Обучение по охране труда",
+        category="Образовательные услуги",
+        external_id="S-TRAIN",
+    )
+    light = _item(
+        name="Комплект светового оборудования",
+        source_text="Комплект светового оборудования 48 000,00р.",
+        category="Оборудование",
+        external_id="S-LIGHT",
+    )
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[training, light],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=training.id, score=0.82, payload={}),
+            CatalogSearchHit(price_item_id=light.id, score=0.81, payload={}),
+        ],
+    )
+    repository.keyword_hits = []
+
+    result = await uc.execute(query="спортивный инвентарь", limit=8)
+
+    assert result.items == []
+
+
+@pytest.mark.asyncio
 async def test_returns_source_text_snippet_and_full_available_flag() -> None:
     item = _item(
         source_text=(

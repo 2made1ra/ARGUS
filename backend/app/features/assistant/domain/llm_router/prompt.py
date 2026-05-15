@@ -10,6 +10,8 @@ from app.features.assistant.domain.llm_router.contract import (
     ALLOWED_INTERFACE_MODES,
     ALLOWED_REASON_CODES,
     ALLOWED_TOOL_INTENTS,
+    BRIEF_LIST_FIELDS,
+    BRIEF_SCALAR_FIELDS,
     FILTER_FIELDS,
 )
 from app.features.assistant.dto import (
@@ -141,6 +143,7 @@ def _serialize_value(value: object) -> object:
 def llm_router_json_schema() -> dict[str, Any]:
     return {
         "type": "object",
+        "required": ["interface_mode", "intent", "confidence"],
         "additionalProperties": False,
         "properties": {
             "interface_mode": {"enum": sorted(ALLOWED_INTERFACE_MODES)},
@@ -150,7 +153,7 @@ def llm_router_json_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {"enum": sorted(ALLOWED_REASON_CODES)},
             },
-            "brief_update": {"type": "object"},
+            "brief_update": _brief_update_schema(),
             "search_requests": {
                 "type": "array",
                 "items": {
@@ -162,10 +165,7 @@ def llm_router_json_schema() -> dict[str, Any]:
                         "filters": {
                             "type": "object",
                             "additionalProperties": False,
-                            "properties": {
-                                field: {}
-                                for field in sorted(FILTER_FIELDS)
-                            },
+                            "properties": _filter_schema_properties(),
                         },
                         "priority": {"type": "integer"},
                         "limit": {"type": "integer"},
@@ -184,6 +184,64 @@ def llm_router_json_schema() -> dict[str, Any]:
             },
             "user_visible_summary": {"type": ["string", "null"]},
         },
+    }
+
+
+def _brief_update_schema() -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    for field_name in sorted(BRIEF_SCALAR_FIELDS):
+        if field_name in {"audience_size", "budget_total", "budget_per_guest"}:
+            properties[field_name] = {"type": ["integer", "null"]}
+        else:
+            properties[field_name] = {"type": ["string", "null"]}
+
+    for field_name in sorted(BRIEF_LIST_FIELDS):
+        properties[field_name] = {
+            "type": "array",
+            "items": {"type": "string"},
+        }
+
+    properties["service_needs"] = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "required": ["category"],
+            "additionalProperties": False,
+            "properties": {
+                "category": {"type": "string"},
+                "priority": {
+                    "type": "string",
+                    "enum": ["required", "must_have", "nice_to_have"],
+                },
+                "source": {
+                    "type": "string",
+                    "enum": ["explicit", "policy_inferred"],
+                },
+                "reason": {"type": ["string", "null"]},
+                "notes": {"type": ["string", "null"]},
+            },
+        },
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+    }
+
+
+def _filter_schema_properties() -> dict[str, Any]:
+    schemas: dict[str, dict[str, Any]] = {
+        "supplier_city_normalized": {"type": ["string", "null"]},
+        "category": {"type": ["string", "null"]},
+        "supplier_status_normalized": {"type": ["string", "null"]},
+        "has_vat": {"type": ["string", "null"]},
+        "vat_mode": {"type": ["string", "null"]},
+        "unit_price_min": {"type": ["integer", "null"]},
+        "unit_price_max": {"type": ["integer", "null"]},
+    }
+    return {
+        field: schemas[field]
+        for field in sorted(FILTER_FIELDS)
     }
 
 

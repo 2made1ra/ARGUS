@@ -124,9 +124,18 @@ class SearchPriceItemsUseCase:
         items_by_id = {item.id: item for item in hydrated}
 
         found_items: list[FoundPriceItem] = []
+        drop_semantic_without_lexical_evidence = (
+            _requires_sports_inventory_lexical_evidence(query)
+        )
         for candidate in candidates:
             item = items_by_id.get(candidate.item_id)
             if item is None:
+                continue
+            if (
+                candidate.reason_code == "semantic"
+                and drop_semantic_without_lexical_evidence
+                and not _has_sports_inventory_lexical_evidence(item)
+            ):
                 continue
             found_items.append(_found_item(item, candidate))
 
@@ -295,6 +304,31 @@ def _clean_catalog_keyword_query(
 def _catalog_query_terms(query: str) -> list[str]:
     normalized = query.replace("ё", "е").replace("Ё", "е").casefold()
     return re.findall(r"[0-9a-zа-я]+", normalized)
+
+
+def _requires_sports_inventory_lexical_evidence(query: str) -> bool:
+    normalized = " ".join(_catalog_query_terms(query))
+    return "спортинвентар" in normalized or (
+        "спортив" in normalized and "инвентар" in normalized
+    )
+
+
+def _has_sports_inventory_lexical_evidence(item: PriceItem) -> bool:
+    text = " ".join(
+        value
+        for value in (
+            item.name,
+            item.category,
+            item.section,
+            item.source_text,
+            item.embedding_text,
+        )
+        if value is not None
+    )
+    normalized = " ".join(_catalog_query_terms(text))
+    return "спортинвентар" in normalized or (
+        "спортив" in normalized and "инвентар" in normalized
+    )
 
 
 def _is_catalog_query_context_term(

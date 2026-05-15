@@ -78,7 +78,7 @@ def test_direct_inventory_search_stays_chat_search() -> None:
     assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
     assert plan.tool_intents == ["search_items"]
     assert plan.should_search_now is True
-    assert plan.search_requests[0].service_category == "оборудование"
+    assert plan.search_requests[0].service_category == "спортивный инвентарь"
     assert "спортивный инвентарь" in plan.search_requests[0].query
     assert not plan.search_requests[0].query.startswith("мне ")
 
@@ -122,6 +122,58 @@ def test_active_brief_search_with_current_fact_update_uses_workspace() -> None:
     assert plan.workflow_stage == EventBriefWorkflowState.SUPPLIER_SEARCHING
     assert plan.tool_intents == ["update_brief", "search_items"]
     assert plan.search_requests[0].service_category == "свет"
+
+
+def test_generic_contractor_search_uses_completed_brief_context() -> None:
+    current_brief = BriefState(
+        event_type="музыкальный вечер",
+        city="Екатеринбург",
+        date_or_period="23 мая",
+        audience_size=50,
+        venue_status="площадки нет",
+        budget_total=1_000_000,
+        concept="классическая музыка",
+    )
+    interpretation = EventBriefInterpreter().interpret(
+        message="покажи подходящих подрядчиков",
+        brief=current_brief,
+    )
+    plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=current_brief,
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert interpretation.intent == "supplier_search"
+    assert interpretation.requested_actions == ["search_items"]
+    assert plan.workflow_stage == EventBriefWorkflowState.SUPPLIER_SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert [
+        request.service_category
+        for request in plan.search_requests
+    ] == ["площадка", "звук", "свет"]
+    assert "service_category" not in plan.missing_fields
+    assert "required_services" not in plan.missing_fields
+
+
+def test_event_level_satisfies_concept_or_level_question() -> None:
+    plan = _plan_for(
+        "уровень светский",
+        BriefState(
+            event_type="музыкальный вечер",
+            city="Екатеринбург",
+            date_or_period="23 мая",
+            audience_size=50,
+            venue_status="площадки нет",
+            budget_total=1_000_000,
+        ),
+    )
+
+    assert "concept" not in plan.missing_fields
+    assert all(
+        "концепц" not in question.lower()
+        for question in plan.clarification_questions
+    )
 
 
 def test_categoryless_contractor_search_asks_for_service_category() -> None:

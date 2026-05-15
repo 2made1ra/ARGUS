@@ -82,6 +82,10 @@ def missing_event_intake_fields(brief: BriefState) -> list[str]:
             ):
                 missing.append(field_name)
             continue
+        if field_name == "concept":
+            if brief.concept is None and brief.event_level is None:
+                missing.append(field_name)
+            continue
         if field_name == "required_services":
             if not _has_explicit_service_planning(brief):
                 missing.append(field_name)
@@ -144,6 +148,11 @@ def _brief_workspace_plan(
     search_requests = list(interpretation.search_requests)
     if search_requests and "search_items" in interpretation.requested_actions:
         tool_intents.append("search_items")
+        missing_fields = [
+            field_name
+            for field_name in missing_fields
+            if field_name != "required_services"
+        ]
 
     workflow_stage = (
         EventBriefWorkflowState.SUPPLIER_SEARCHING
@@ -374,6 +383,8 @@ def _field_is_missing(field_name: str, brief: BriefState) -> bool:
             and brief.budget_per_guest is None
             and brief.budget_notes is None
         )
+    if field_name == "concept":
+        return brief.concept is None and brief.event_level is None
     value = getattr(brief, field_name)
     return value is None or value == []
 

@@ -68,6 +68,10 @@ SERVICE_ALIASES: tuple[ServiceAlias, ...] = (
         ("мебел", "стойка регистрации", "ресепшен", "стол", "стуль"),
     ),
     ServiceAlias("площадка", ("площадк", "лофт")),
+    ServiceAlias(
+        "спортивный инвентарь",
+        ("спортивный инвентарь", "спортивного инвентаря", "спортинвентар"),
+    ),
     ServiceAlias("оборудование", ("оборудован", "инвентар", "спортинвентар")),
 )
 
@@ -204,7 +208,19 @@ def service_categories_for(lower: str) -> list[str]:
     for service_alias in SERVICE_ALIASES:
         if any(alias in lower for alias in service_alias.aliases):
             categories.append(service_alias.category)
+    if _mentions_sports_inventory(lower):
+        categories = [
+            category
+            for category in categories
+            if category != "оборудование"
+        ]
     return _unique(categories)
+
+
+def _mentions_sports_inventory(lower: str) -> bool:
+    return "спортинвентар" in lower or (
+        "спортив" in lower and "инвентар" in lower
+    )
 
 
 def service_bundle_templates_for(category: str) -> tuple[ServiceNeedTemplate, ...]:

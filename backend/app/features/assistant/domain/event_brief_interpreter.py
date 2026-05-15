@@ -161,6 +161,25 @@ class EventBriefInterpreter:
             signals.direct_catalog_search
             and not signals.event_creation
             and _has_active_brief(brief)
+            and not _has_service_category(slots)
+            and (
+                brief_context_requests := _search_requests_from_brief_context(
+                    message=message,
+                    brief=brief,
+                    slots=slots,
+                )
+            )
+        ):
+            interface_mode = AssistantInterfaceMode.BRIEF_WORKSPACE
+            intent = "supplier_search"
+            requested_actions.append("search_items")
+            reason_codes.append("brief_context_search_requested")
+            reason_codes.append("service_need_inferred_from_brief")
+            search_requests = brief_context_requests
+        elif (
+            signals.direct_catalog_search
+            and not signals.event_creation
+            and _has_active_brief(brief)
             and (
                 signals.contextual_brief_update
                 or _has_brief_update_for_search(slots)
@@ -523,6 +542,41 @@ def _search_requests(*, message: str, slots: BriefState) -> list[SearchRequest]:
     )
 
 
+def _search_requests_from_brief_context(
+    *,
+    message: str,
+    brief: BriefState,
+    slots: BriefState,
+) -> list[SearchRequest]:
+    categories = _brief_context_categories(brief)
+    if not categories:
+        return []
+    return _search_requests_for_categories(
+        message=message,
+        slots=merge_brief(brief, slots),
+        categories=categories,
+    )
+
+
+def _brief_context_categories(brief: BriefState) -> list[str]:
+    categories: list[str] = []
+    categories.extend(
+        need.category for need in brief.service_needs if need.source == "explicit"
+    )
+    categories.extend(brief.required_services)
+    categories.extend(brief.must_have_services)
+
+    venue_needs_search = brief.venue_status in {
+        "площадки нет",
+        "площадку нужно подобрать",
+    }
+    if venue_needs_search:
+        categories.append("площадка")
+    if brief.event_type == "музыкальный вечер":
+        categories.extend(["звук", "свет"])
+    return _dedupe_str(categories)
+
+
 def _search_requests_for_categories(
     *,
     message: str,
@@ -676,7 +730,10 @@ def _strip_search_prefix(message: str) -> str:
         "подбери ",
         "покажи ",
         "посмотри ",
+        "мне нужен ",
+        "мне нужна ",
         "мне нужно ",
+        "мне нужны ",
         "нужно ",
         "нужен ",
         "нужна ",

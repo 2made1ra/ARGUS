@@ -704,6 +704,65 @@ async def test_chat_turn_uses_recent_service_context_for_follow_up_search() -> N
 
 
 @pytest.mark.asyncio
+async def test_brief_dialog_accepts_words_and_searches_when_brief_is_ready() -> None:
+    found = _found_item(name="Камерный зал для концерта", category="Площадка")
+    search = FakeCatalogSearchTool(items=[found])
+    use_case = ChatTurnUseCase(
+        router=HeuristicAssistantRouter(),
+        catalog_search=search,
+    )
+
+    first = await use_case.execute(
+        AssistantChatRequest(
+            session_id=None,
+            message="хочу организовать музыкальный вечер",
+            brief=BriefState(),
+        ),
+    )
+    second = await use_case.execute(
+        AssistantChatRequest(
+            session_id=first.session_id,
+            message="23 мая, екатеринбург, 50 человек",
+            brief=first.brief,
+        ),
+    )
+    third = await use_case.execute(
+        AssistantChatRequest(
+            session_id=first.session_id,
+            message=(
+                "площадки нет, по бюджету 1 миллион, уровень светский, "
+                "концепции не планируется"
+            ),
+            brief=second.brief,
+        ),
+    )
+    fourth = await use_case.execute(
+        AssistantChatRequest(
+            session_id=first.session_id,
+            message="покажи подходящих подрядчиков",
+            brief=third.brief,
+        ),
+    )
+
+    assert not second.message.startswith("Начинаю собирать")
+    assert third.brief.budget_total == 1_000_000
+    assert third.brief.event_level == "светский"
+    assert third.brief.concept == "не планируется"
+    assert third.brief.venue_status == "площадки нет"
+    assert fourth.ui_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert fourth.action_plan is not None
+    assert fourth.action_plan.tool_intents == ["search_items"]
+    assert fourth.action_plan.missing_fields == []
+    assert len(search.calls) == 3
+    assert [
+        call["filters"].supplier_city_normalized
+        for call in search.calls
+    ] == ["екатеринбург", "екатеринбург", "екатеринбург"]
+    assert [item.id for item in fourth.found_items] == [found.id]
+    assert "Уточните параметры поиска" not in fourth.message
+
+
+@pytest.mark.asyncio
 async def test_chat_turn_asks_category_for_follow_up_without_recent_context() -> None:
     search = FakeCatalogSearchTool()
     use_case = ChatTurnUseCase(

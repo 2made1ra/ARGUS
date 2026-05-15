@@ -27,6 +27,27 @@ def test_extracts_budget_venue_constraints_and_technical_requirements() -> None:
     assert slots.technical_requirements == ["монтаж только ночью"]
 
 
+def test_extracts_budget_words_event_level_and_negative_concept() -> None:
+    slots = extract_event_brief_slots(
+        "Площадки нет, по бюджету 1 миллион, уровень светский, "
+        "концепции не планируется"
+    )
+
+    assert slots.venue_status == "площадки нет"
+    assert slots.budget_total == 1_000_000
+    assert slots.event_level == "светский"
+    assert slots.concept == "не планируется"
+
+
+def test_extracts_sports_inventory_as_specific_service_need() -> None:
+    slots = extract_event_brief_slots("мне нужен спортивный инвентарь")
+
+    assert [need.category for need in slots.service_needs] == [
+        "спортивный инвентарь",
+    ]
+    assert slots.required_services == ["спортивный инвентарь"]
+
+
 def test_extracts_per_guest_budget_catering_format_and_service_need() -> None:
     slots = extract_event_brief_slots(
         "На 120 человек в Екатеринбурге нужен кейтеринг фуршет до 2500 на гостя"
