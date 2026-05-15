@@ -236,7 +236,7 @@ async def test_ux7_brief_workflow_searches_candidates_and_preserves_brief_state(
 
 
 @pytest.mark.asyncio
-async def test_ux7_direct_search_with_active_brief_stays_chat_search() -> None:
+async def test_ux7_direct_search_with_active_brief_is_locked_to_workspace() -> None:
     found = _found_item(name="Фуршет на 120 гостей", category="Кейтеринг")
     search = FakeCatalogSearchTool(items=[found])
     use_case = ChatTurnUseCase(
@@ -252,25 +252,15 @@ async def test_ux7_direct_search_with_active_brief_stays_chat_search() -> None:
         ),
     )
 
-    assert response.ui_mode == AssistantInterfaceMode.CHAT_SEARCH
+    # active brief → policy locks chat_search, redirects to brief_workspace
+    assert response.ui_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
     assert response.router.intent == "supplier_search"
     assert response.action_plan is not None
-    assert response.action_plan.workflow_stage == (
-        EventBriefWorkflowState.SEARCHING
-    )
-    assert response.action_plan.tool_intents == ["search_items"]
-    assert response.brief.event_type == "корпоратив"
-    assert response.brief.city == "Екатеринбург"
-    assert response.brief.budget_per_guest is None
-    assert response.brief.audience_size is None
-    assert response.brief.required_services == []
-    assert response.action_plan.search_requests[0].service_category == "кейтеринг"
-    assert response.action_plan.search_requests[0].filters.supplier_city_normalized == (
-        "екатеринбург"
-    )
-    assert response.action_plan.search_requests[0].filters.unit_price_max == 2500
-    assert [item.id for item in response.found_items] == [found.id]
-    assert response.found_items[0].matched_service_categories == ["кейтеринг"]
+    assert response.action_plan.workflow_stage == EventBriefWorkflowState.CLARIFYING
+    assert response.action_plan.tool_intents == []
+    assert response.found_items == []
+    assert len(response.action_plan.clarification_questions) == 1
+    assert search.calls == []
 
 
 @pytest.mark.asyncio

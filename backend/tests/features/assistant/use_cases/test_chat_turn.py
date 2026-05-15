@@ -592,8 +592,8 @@ async def test_chat_turn_executes_grouped_searches_and_dedupes_found_items() -> 
     )
     search = FakeCatalogSearchTool(
         items_by_query={
-            "кейтеринг 120 человек Екатеринбург": [shared, catering],
-            "свет 120 человек Екатеринбург": [shared, light],
+            "кейтеринг": [shared, catering],
+            "свет": [shared, light],
         },
     )
     use_case = ChatTurnUseCase(router=router, catalog_search=search)
@@ -608,12 +608,12 @@ async def test_chat_turn_executes_grouped_searches_and_dedupes_found_items() -> 
 
     assert search.calls == [
         {
-            "query": "кейтеринг 120 человек Екатеринбург",
+            "query": "кейтеринг",
             "limit": 8,
             "filters": CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
         },
         {
-            "query": "свет 120 человек Екатеринбург",
+            "query": "свет",
             "limit": 8,
             "filters": CatalogSearchFilters(supplier_city_normalized="екатеринбург"),
         },
@@ -679,7 +679,7 @@ async def test_chat_turn_uses_recent_service_context_for_follow_up_search() -> N
         AssistantChatRequest(
             session_id=None,
             message="в Екате кто сможет быстро?",
-            brief=BriefState(event_type="корпоратив"),
+            brief=BriefState(),  # empty brief — no active session, follow-up search allowed
             recent_turns=[
                 ChatTurn(role="user", content="Найди подрядчиков по свету"),
                 ChatTurn(role="assistant", content="Уточните город."),
@@ -693,8 +693,7 @@ async def test_chat_turn_uses_recent_service_context_for_follow_up_search() -> N
     assert response.action_plan.tool_intents == ["search_items"]
     assert response.action_plan.search_requests[0].service_category == "свет"
     assert len(search.calls) == 1
-    assert "свет" in search.calls[0]["query"]
-    assert "Екатеринбург" in search.calls[0]["query"]
+    assert search.calls[0]["query"] == "свет"
     assert search.calls[0]["limit"] == 8
     assert search.calls[0]["filters"] == CatalogSearchFilters(
         supplier_city_normalized="екатеринбург",

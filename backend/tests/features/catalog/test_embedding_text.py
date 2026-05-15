@@ -65,3 +65,16 @@ def test_build_embedding_text_omits_empty_lines_and_excluded_fields() -> None:
     assert "unit_price" not in text
     assert "supplier_inn" not in text
     assert "embedding" not in text
+
+
+def test_build_embedding_text_removes_tariff_suffix_from_name() -> None:
+    text = build_embedding_text(
+        name="Акустическая система 600 Вт (аренда за 1 день)",
+        category="Аренда",
+        section="Оборудование",
+        source_text="Акустическая система 600 Вт",
+        unit="день",
+    )
+
+    assert "Название: Акустическая система 600 Вт" in text
+    assert "аренда за 1 день" not in text

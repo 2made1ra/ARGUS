@@ -83,7 +83,10 @@ async def test_search_converts_catalog_filters_to_qdrant_filter() -> None:
         query_vector=[0.1, 0.2, 0.3],
         filters=CatalogSearchFilters(
             category="Аренда",
+            category_normalized="аренда",
+            section_normalized="оборудование",
             supplier_city="г. Москва",
+            supplier_city_normalized="москва",
             unit_price_min=1000.0,
             unit_price_max=5000.0,
             embedding_template_version="prices_v1",
@@ -98,8 +101,20 @@ async def test_search_converts_catalog_filters_to_qdrant_filter() -> None:
                 match=MatchValue(value="Аренда"),
             ),
             FieldCondition(
+                key="category_normalized",
+                match=MatchValue(value="аренда"),
+            ),
+            FieldCondition(
+                key="section_normalized",
+                match=MatchValue(value="оборудование"),
+            ),
+            FieldCondition(
                 key="supplier_city",
                 match=MatchValue(value="г. Москва"),
+            ),
+            FieldCondition(
+                key="supplier_city_normalized",
+                match=MatchValue(value="москва"),
             ),
             FieldCondition(
                 key="embedding_template_version",

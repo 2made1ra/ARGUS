@@ -267,7 +267,7 @@ def _item(
         row_fingerprint="fingerprint",
         is_active=True,
         superseded_at=None,
-        embedding_text="Название: Аренда акустической системы",
+        embedding_text=f"Название: {name}",
         embedding_model="nomic-embed-text-v1.5",
         embedding_template_version="prices_v1",
         catalog_index_status="indexed",
@@ -365,7 +365,10 @@ def _imported_use_case(
 async def test_semantic_search_uses_query_prefix_hydrates_rows_and_preserves_ranking(
 ) -> None:
     first = _item(name="Аренда акустической системы")
-    second = _item(name="Прокат сценического света")
+    second = _item(
+        name="Прокат сценического света",
+        source_text="Прокат сценического света",
+    )
     uc, repository, embeddings, vector_search = _use_case(
         items=[first, second],
         semantic_hits=[
@@ -383,11 +386,11 @@ async def test_semantic_search_uses_query_prefix_hydrates_rows_and_preserves_ran
             "filters": CatalogSearchFilters(
                 embedding_template_version="prices_v1",
             ),
-            "limit": 10,
+            "limit": 30,
         },
     ]
     assert repository.hydrate_calls[0]["item_ids"] == [first.id, second.id]
-    assert [item.id for item in result.items] == [first.id, second.id]
+    assert [item.id for item in result.items] == [first.id]
     assert result.items[0].score == 0.91
     assert result.items[0].match_reason.code == "semantic"
 
@@ -418,7 +421,7 @@ async def test_applies_simple_filters_to_semantic_keyword_and_hydration() -> Non
         embedding_template_version="prices_v1",
     )
     assert repository.keyword_calls == [
-        {"query": "звук", "filters": filters, "limit": 5},
+        {"query": "звук", "filters": filters, "limit": 15},
     ]
     assert repository.hydrate_calls == [
         {"item_ids": [item.id], "filters": filters},
@@ -478,7 +481,7 @@ async def test_semantic_disabled_skips_embeddings_and_vector_search() -> None:
         {
             "query": "радиомикрофон",
             "filters": SearchPriceItemsFilters(),
-            "limit": 10,
+            "limit": 30,
         },
     ]
     assert repository.hydrate_calls == [
@@ -537,6 +540,34 @@ async def test_keyword_fallback_is_not_starved_by_full_semantic_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_keyword_fallback_is_not_starved_by_expanded_semantic_pool() -> None:
+    semantic_items = [
+        _item(name=f"Нерелевантная позиция {index}", external_id=f"S-{index}")
+        for index in range(24)
+    ]
+    keyword_item = _item(name="Радиомикрофон", external_id="897")
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[*semantic_items, keyword_item],
+        semantic_hits=[
+            CatalogSearchHit(
+                price_item_id=item.id,
+                score=0.99 - index / 100,
+                payload={},
+            )
+            for index, item in enumerate(semantic_items)
+        ],
+    )
+    repository.keyword_hits = [
+        (keyword_item.id, 0.72, "keyword_external_id"),
+    ]
+
+    result = await uc.execute(query="897", limit=8)
+
+    assert keyword_item.id in [found.id for found in result.items]
+    assert len(result.items) == 8
+
+
+@pytest.mark.asyncio
 async def test_sports_inventory_search_drops_semantic_hits_without_lexical_evidence(
 ) -> None:
     training = _item(
@@ -566,6 +597,72 @@ async def test_sports_inventory_search_drops_semantic_hits_without_lexical_evide
     result = await uc.execute(query="спортивный инвентарь", limit=8)
 
     assert result.items == []
+
+
+@pytest.mark.asyncio
+async def test_catalog_query_drops_semantic_hits_without_catalog_evidence() -> None:
+    training = _item(
+        name="Обучение по охране труда",
+        source_text="Образовательная программа по общим вопросам охраны труда",
+        category="Образовательные услуги",
+        external_id="S-TRAIN",
+    )
+    light = _item(
+        name="Комплект светового оборудования",
+        source_text="Комплект светового оборудования 48 000,00р.",
+        category="Оборудование",
+        external_id="S-LIGHT",
+    )
+    uc, repository, _embeddings, _vector_search = _use_case(
+        items=[training, light],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=training.id, score=0.82, payload={}),
+            CatalogSearchHit(price_item_id=light.id, score=0.81, payload={}),
+        ],
+    )
+    repository.keyword_hits = []
+
+    result = await uc.execute(query="кофе брейк", limit=8)
+
+    assert result.items == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_enabled_retries_clean_query_for_imported_natural_query(
+) -> None:
+    imported_items = await _imported_prices_fixture_items()
+    item_by_id = {item.id: item for item in imported_items}
+    uc, repository, _vector_search = _imported_use_case(imported_items)
+
+    result = await uc.execute(query="найди радиомикрофон в Екатеринбурге", limit=20)
+
+    assert [call["query"] for call in repository.keyword_calls] == [
+        "найди радиомикрофон в Екатеринбурге",
+        "радиомикрофон",
+    ]
+    assert all(
+        call["filters"].supplier_city_normalized == "екатеринбург"
+        for call in repository.keyword_calls
+    )
+    assert any(item_by_id[found.id].external_id == "244" for found in result.items)
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_fetches_extra_candidates_before_evidence_filtering(
+) -> None:
+    first = _item(name="Радиомикрофон", source_text="Радиомикрофон", external_id="1")
+    second = _item(name="Акустическая система", source_text="Звук", external_id="2")
+    uc, _repository, _embeddings, vector_search = _use_case(
+        items=[first, second],
+        semantic_hits=[
+            CatalogSearchHit(price_item_id=first.id, score=0.91, payload={}),
+            CatalogSearchHit(price_item_id=second.id, score=0.9, payload={}),
+        ],
+    )
+
+    await uc.execute(query="радиомикрофон", limit=2)
+
+    assert vector_search.calls[0]["limit"] > 2
 
 
 @pytest.mark.asyncio

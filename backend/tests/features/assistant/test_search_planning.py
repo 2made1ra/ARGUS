@@ -46,13 +46,11 @@ def test_plans_service_group_searches_from_interpreted_turn() -> None:
         request.filters.supplier_city_normalized == "екатеринбург"
         for request in planned
     )
-    assert "кейтеринг" in planned[0].query
-    assert "свет" in planned[1].query
-    assert "120 человек" in planned[0].query
-    assert "Екатеринбург" in planned[1].query
+    assert planned[0].query == "кейтеринг"
+    assert planned[1].query == "свет"
 
 
-def test_search_query_uses_brief_context_and_budget_filter_when_useful() -> None:
+def test_search_query_keeps_semantic_part_separate_from_filters() -> None:
     brief_before = BriefState(city="Екатеринбург")
     brief_after = BriefState(
         event_type="корпоратив",
@@ -76,12 +74,40 @@ def test_search_query_uses_brief_context_and_budget_filter_when_useful() -> None
 
     assert len(planned) == 1
     request = planned[0]
-    assert request.query == (
-        "кейтеринг фуршет корпоратив 120 человек Екатеринбург "
-        "площадка без подвеса до 2500 на гостя неоновая вечеринка"
-    )
+    assert request.query == "кейтеринг фуршет"
     assert request.filters.supplier_city_normalized == "екатеринбург"
     assert request.filters.unit_price_max == 2500
+
+
+def test_interpreted_direct_search_keeps_city_and_budget_out_of_query() -> None:
+    brief_before = BriefState()
+    interpretation = EventBriefInterpreter().interpret(
+        message=(
+            "найди кейтеринг в Екатеринбурге до 2500 на гостя "
+            "для корпоратива на 120 человек"
+        ),
+        brief=brief_before,
+    )
+    action_plan = BriefWorkflowPolicy().plan(
+        interpretation=interpretation,
+        brief=brief_before,
+    )
+    brief_after = merge_brief(brief_before, interpretation.brief_update)
+    decision = _decision(
+        search_requests=action_plan.search_requests,
+        workflow_stage=action_plan.workflow_stage,
+    )
+
+    planned = SearchPlanner().plan(
+        decision=decision,
+        brief_before=brief_before,
+        brief_after=brief_after,
+        workflow_stage=action_plan.workflow_stage,
+    )
+
+    assert planned[0].query == "кейтеринг"
+    assert planned[0].filters.supplier_city_normalized == "екатеринбург"
+    assert planned[0].filters.unit_price_max == 2500
 
 
 def test_city_filter_matches_catalog_normalization_for_prefixed_city() -> None:

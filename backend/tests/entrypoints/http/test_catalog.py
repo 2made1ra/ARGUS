@@ -428,7 +428,10 @@ async def test_search_catalog_items_returns_found_item_cards(app: FastAPI) -> No
                 "limit": 10,
                 "filters": {
                     "supplier_city": "г. Москва",
+                    "supplier_city_normalized": "москва",
                     "category": "Аренда",
+                    "category_normalized": "аренда",
+                    "section_normalized": "оборудование",
                     "supplier_status": "Активен",
                     "has_vat": "Без НДС",
                     "unit_price": "1200.00",
@@ -460,5 +463,8 @@ async def test_search_catalog_items_returns_found_item_cards(app: FastAPI) -> No
     assert call["query"] == "аренда света"
     assert call["limit"] == 10
     assert call["filters"].supplier_city == "г. Москва"
+    assert call["filters"].supplier_city_normalized == "москва"
     assert call["filters"].category == "Аренда"
+    assert call["filters"].category_normalized == "аренда"
+    assert call["filters"].section_normalized == "оборудование"
     assert call["filters"].unit_price == Decimal("1200.00")

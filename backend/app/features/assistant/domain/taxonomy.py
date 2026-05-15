@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import Literal
+
+
+@dataclass(frozen=True, slots=True)
+class AliasEntry:
+    term: str
+    match_type: Literal["exact", "phrase", "stem"] = "phrase"
 
 
 @dataclass(frozen=True, slots=True)
 class ServiceAlias:
     category: str
-    aliases: tuple[str, ...]
+    aliases: tuple[AliasEntry, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,47 +40,156 @@ CORE_SERVICE_CATEGORIES: tuple[str, ...] = (
     "площадка",
 )
 
+
+def _alias(
+    term: str,
+    match_type: Literal["exact", "phrase", "stem"] = "phrase",
+) -> AliasEntry:
+    return AliasEntry(term=term, match_type=match_type)
+
+
+def _alias_matches(alias: AliasEntry, lower: str) -> bool:
+    term = alias.term.lower()
+    if alias.match_type == "stem":
+        return (
+            re.search(
+                rf"(?<![0-9a-zа-я]){re.escape(term)}[0-9a-zа-я-]*",
+                lower,
+            )
+            is not None
+        )
+    if alias.match_type == "exact":
+        return (
+            re.search(
+                rf"(?<![0-9a-zа-я]){re.escape(term)}(?![0-9a-zа-я])",
+                lower,
+            )
+            is not None
+        )
+    return term in lower
+
+
 SERVICE_ALIASES: tuple[ServiceAlias, ...] = (
     ServiceAlias(
         "звук",
-        ("звук", "звуку", "акустик", "микрофон", "радиомикрофон", "радики"),
+        (
+            _alias("звук", "exact"),
+            _alias("звуку", "exact"),
+            _alias("акустик", "stem"),
+            _alias("микрофон", "phrase"),
+            _alias("радиомикрофон", "phrase"),
+            _alias("радики", "exact"),
+        ),
     ),
     ServiceAlias(
         "свет",
-        ("свет", "свету", "световое", "световым", "напольные приборы"),
+        (
+            _alias("свет", "exact"),
+            _alias("свету", "exact"),
+            _alias("световое", "phrase"),
+            _alias("световым", "phrase"),
+            _alias("светодиод", "stem"),
+            _alias("напольные приборы", "phrase"),
+        ),
     ),
     ServiceAlias(
         "сценические конструкции",
-        ("сцен", "ферм", "граунд", "ground support"),
+        (
+            _alias("сцен", "stem"),
+            _alias("ферм", "stem"),
+            _alias("граунд", "phrase"),
+            _alias("ground support", "phrase"),
+        ),
     ),
     ServiceAlias(
         "мультимедиа",
-        ("экран", "экраны", "проектор", "мультимедиа", "led", "лед"),
+        (
+            _alias("экран", "exact"),
+            _alias("экраны", "exact"),
+            _alias("проектор", "phrase"),
+            _alias("мультимедиа", "phrase"),
+            _alias("led", "exact"),
+            _alias("лед", "exact"),
+        ),
     ),
     ServiceAlias(
         "кейтеринг",
-        ("кейтеринг", "кейтерингу", "фуршет", "банкет", "welcome drink"),
+        (
+            _alias("кейтеринг", "phrase"),
+            _alias("кейтерингу", "phrase"),
+            _alias("кофе брейк", "phrase"),
+            _alias("кофе-брейк", "phrase"),
+            _alias("фуршет", "phrase"),
+            _alias("банкет", "phrase"),
+            _alias("обед", "phrase"),
+            _alias("welcome drink", "phrase"),
+        ),
     ),
     ServiceAlias(
         "welcome-зона",
-        ("welcome-зон", "welcome зон", "велком", "велкам", "регистрац"),
+        (
+            _alias("welcome-зон", "stem"),
+            _alias("welcome зон", "phrase"),
+            _alias("велком", "phrase"),
+            _alias("велкам", "phrase"),
+            _alias("регистрац", "stem"),
+        ),
     ),
     ServiceAlias(
         "персонал",
-        ("ведущ", "хостес", "хостесс", "персонал", "координатор"),
+        (
+            _alias("ведущ", "stem"),
+            _alias("хостес", "phrase"),
+            _alias("хостесс", "phrase"),
+            _alias("персонал", "phrase"),
+            _alias("координатор", "phrase"),
+        ),
     ),
-    ServiceAlias("логистика", ("логистик", "доставка", "транспорт")),
-    ServiceAlias("декор", ("декор", "оформлен", "бренд-волл", "фотозон", "навигац")),
+    ServiceAlias(
+        "логистика",
+        (
+            _alias("логистик", "stem"),
+            _alias("доставка", "exact"),
+            _alias("транспорт", "exact"),
+        ),
+    ),
+    ServiceAlias(
+        "декор",
+        (
+            _alias("декор", "phrase"),
+            _alias("оформлен", "stem"),
+            _alias("бренд-волл", "phrase"),
+            _alias("фотозон", "stem"),
+            _alias("навигац", "stem"),
+        ),
+    ),
     ServiceAlias(
         "мебель",
-        ("мебел", "стойка регистрации", "ресепшен", "стол", "стуль"),
+        (
+            _alias("мебел", "stem"),
+            _alias("стойка регистрации", "phrase"),
+            _alias("ресепшен", "phrase"),
+            _alias("стол", "exact"),
+            _alias("стуль", "stem"),
+        ),
     ),
-    ServiceAlias("площадка", ("площадк", "лофт")),
+    ServiceAlias("площадка", (_alias("площадк", "stem"), _alias("лофт", "phrase"))),
     ServiceAlias(
         "спортивный инвентарь",
-        ("спортивный инвентарь", "спортивного инвентаря", "спортинвентар"),
+        (
+            _alias("спортивный инвентарь", "phrase"),
+            _alias("спортивного инвентаря", "phrase"),
+            _alias("спортинвентар", "stem"),
+        ),
     ),
-    ServiceAlias("оборудование", ("оборудован", "инвентар", "спортинвентар")),
+    ServiceAlias(
+        "оборудование",
+        (
+            _alias("оборудован", "stem"),
+            _alias("инвентар", "stem"),
+            _alias("спортинвентар", "stem"),
+        ),
+    ),
 )
 
 SERVICE_BUNDLES: dict[str, tuple[ServiceNeedTemplate, ...]] = {
@@ -206,7 +323,7 @@ def service_categories_for(lower: str) -> list[str]:
     lower = lower.lower()
     categories: list[str] = []
     for service_alias in SERVICE_ALIASES:
-        if any(alias in lower for alias in service_alias.aliases):
+        if any(_alias_matches(alias, lower) for alias in service_alias.aliases):
             categories.append(service_alias.category)
     if _mentions_sports_inventory(lower):
         categories = [

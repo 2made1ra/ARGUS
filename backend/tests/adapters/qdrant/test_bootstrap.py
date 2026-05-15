@@ -191,7 +191,17 @@ async def test_bootstrap_catalog_collection_creates_payload_indexes() -> None:
         },
         {
             "collection_name": "price_items_search_v1",
+            "field_name": "category_normalized",
+            "field_schema": PayloadSchemaType.KEYWORD,
+        },
+        {
+            "collection_name": "price_items_search_v1",
             "field_name": "section",
+            "field_schema": PayloadSchemaType.KEYWORD,
+        },
+        {
+            "collection_name": "price_items_search_v1",
+            "field_name": "section_normalized",
             "field_schema": PayloadSchemaType.KEYWORD,
         },
         {
@@ -221,7 +231,17 @@ async def test_bootstrap_catalog_collection_creates_payload_indexes() -> None:
         },
         {
             "collection_name": "price_items_search_v1",
+            "field_name": "supplier_city_normalized",
+            "field_schema": PayloadSchemaType.KEYWORD,
+        },
+        {
+            "collection_name": "price_items_search_v1",
             "field_name": "supplier_status",
+            "field_schema": PayloadSchemaType.KEYWORD,
+        },
+        {
+            "collection_name": "price_items_search_v1",
+            "field_name": "supplier_status_normalized",
             "field_schema": PayloadSchemaType.KEYWORD,
         },
         {

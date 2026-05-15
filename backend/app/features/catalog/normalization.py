@@ -124,6 +124,10 @@ def _normalize_unit(value: str | None) -> str | None:
     compact = text.removesuffix(".")
     if compact in {"шт", "ед", "nos", "pcs"}:
         return "шт"
+    if compact in {"rnm", "сутки", "ночь", "ночи", "night"}:
+        return "ночь"
+    if compact in {"sqm", "кв.м", "кв м", "м2", "м²"}:
+        return "м2"
     if compact in {"усл", "услуга"}:
         return "усл"
     return compact
@@ -161,6 +165,10 @@ def _normalize_city(value: str | None) -> str | None:
     if text is None:
         return None
     text = re.sub(r"^(г\.?|город)\s+", "", text)
+    text = re.sub(r"\s*-\s*", "-", text)
+    text = re.sub(r"\s+г$", "", text)
+    if text in {"санкт-петербург", "питер", "спб", "санкт петербург"}:
+        return "санкт-петербург"
     return text or None
 
 
@@ -187,4 +195,3 @@ __all__ = [
     "build_row_fingerprint",
     "normalize_price_row",
 ]
-

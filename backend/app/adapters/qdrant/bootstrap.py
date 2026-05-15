@@ -6,13 +6,17 @@ CATALOG_PAYLOAD_INDEXES: tuple[tuple[str, PayloadSchemaType], ...] = (
     ("import_batch_id", PayloadSchemaType.UUID),
     ("source_file_id", PayloadSchemaType.UUID),
     ("category", PayloadSchemaType.KEYWORD),
+    ("category_normalized", PayloadSchemaType.KEYWORD),
     ("section", PayloadSchemaType.KEYWORD),
+    ("section_normalized", PayloadSchemaType.KEYWORD),
     ("unit", PayloadSchemaType.KEYWORD),
     ("unit_price", PayloadSchemaType.FLOAT),
     ("has_vat", PayloadSchemaType.KEYWORD),
     ("vat_mode", PayloadSchemaType.KEYWORD),
     ("supplier_city", PayloadSchemaType.KEYWORD),
+    ("supplier_city_normalized", PayloadSchemaType.KEYWORD),
     ("supplier_status", PayloadSchemaType.KEYWORD),
+    ("supplier_status_normalized", PayloadSchemaType.KEYWORD),
     ("embedding_template_version", PayloadSchemaType.KEYWORD),
 )
 

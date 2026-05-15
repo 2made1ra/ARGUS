@@ -42,7 +42,7 @@ class LMStudioEmbeddings:
             return []
 
         embeddings: list[list[float]] = []
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async with httpx.AsyncClient(timeout=self._timeout, trust_env=False) as client:
             for batch in _batches(texts, self._batch_size):
                 response = await client.post(
                     self._embeddings_url(),

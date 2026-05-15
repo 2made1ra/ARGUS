@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -86,7 +87,7 @@ async def test_llm_enriches_direct_search_without_authorizing_tools() -> None:
         == "екатеринбург"
     )
     assert "llm_router_used" in interpretation.reason_codes
-    assert interpretation.user_visible_summary == "Похоже, нужен поиск по свету."
+    assert interpretation.user_visible_summary is None
 
     plan = BriefWorkflowPolicy().plan(
         interpretation=interpretation,
@@ -517,3 +518,38 @@ def test_llm_validation_clamps_confidence_and_drops_unknown_values() -> None:
     assert result.tool_intents == ["search_items"]
     assert result.search_requests[0].filters.vat_mode == "with_vat"
     assert not hasattr(result.search_requests[0].filters, "raw_sql")
+
+
+@pytest.mark.asyncio
+async def test_repetitive_llm_summary_is_ignored_without_blocking_search() -> None:
+    repeated_summary = (
+        "Вы ищете площадку для мероприятия. "
+        "подбор-подбор-подбор-подбор-подбор-подбор-подбор-подбор-"
+        "подбор-подбор-подбор-подбор-подбор"
+    )
+    llm = FakeLLMStructuredRouter(
+        output=json.dumps(
+            {
+                "interface_mode": "chat_search",
+                "intent": "supplier_search",
+                "confidence": 0.95,
+                "user_visible_summary": repeated_summary,
+            },
+            ensure_ascii=False,
+        ),
+        calls=[],
+    )
+
+    interpretation = await EventBriefInterpreter(llm_router=llm).interpret_with_llm(
+        message="мне нужна площадка на музыкальный вечер",
+        brief=BriefState(),
+        recent_turns=[],
+        visible_candidates=[],
+    )
+
+    assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert interpretation.intent == "supplier_search"
+    assert interpretation.requested_actions == ["search_items"]
+    assert interpretation.search_requests[0].service_category == "площадка"
+    assert interpretation.user_visible_summary is None
+    assert "llm_router_used" in interpretation.reason_codes

@@ -39,7 +39,7 @@ def validate_llm_router_json(raw: str) -> LLMRouterSuggestion | None:
         tool_intents=_tool_intents(payload.get("tool_intents")),
         missing_fields=_strings(payload.get("missing_fields")),
         clarification_questions=_strings(payload.get("clarification_questions")),
-        user_visible_summary=_optional_string(payload.get("user_visible_summary")),
+        user_visible_summary=None,
     )
 
 

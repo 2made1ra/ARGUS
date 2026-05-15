@@ -64,7 +64,8 @@ def build_llm_router_prompt(
                     "You are ARGUS structured router. Return only one JSON object. "
                     "Do not invent catalog suppliers, prices, cities, INNs, contacts, "
                     "legal statuses, availability, SQL, HTTP calls or tool calls. "
-                    "You may suggest structured interpretation only."
+                    "Do not write user-facing prose. You may suggest structured "
+                    "interpretation only."
                 ),
             ),
             LLMRouterMessage(
@@ -182,7 +183,6 @@ def llm_router_json_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string"},
             },
-            "user_visible_summary": {"type": ["string", "null"]},
         },
     }
 

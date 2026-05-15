@@ -75,6 +75,15 @@ export default function AssistantPage() {
     }));
   }
 
+  function handleResetBrief(): void {
+    setBrief(emptyBriefState);
+    setFoundItems([]);
+    setVerificationResults([]);
+    setRenderedBrief(null);
+    setInterfaceMode("chat_search");
+    setRouter(null);
+  }
+
   return (
     <main className="workspace assistant-workspace">
       <header className="workspace-header assistant-header">
@@ -106,7 +115,7 @@ export default function AssistantPage() {
         />
         {interfaceMode === "brief_workspace" && (
           <aside className="assistant-side">
-            <BriefDraftPanel brief={brief} />
+            <BriefDraftPanel brief={brief} onReset={handleResetBrief} />
             <FoundItemsPanel
               items={foundItems}
               loading={loading}

@@ -2,6 +2,7 @@ import type { BriefState } from "../api";
 
 interface Props {
   brief: BriefState;
+  onReset?: () => void;
 }
 
 type BriefFact = {
@@ -33,7 +34,7 @@ const openQuestionLabels: Record<string, string> = {
   selected_item_ids: "Какие позиции выбраны в подборку?",
 };
 
-export default function BriefDraftPanel({ brief }: Props) {
+export default function BriefDraftPanel({ brief, onReset }: Props) {
   const primaryFacts = compactFacts([
     { label: "Тип мероприятия", value: brief.event_type },
     { label: "Город", value: brief.city },
@@ -76,7 +77,19 @@ export default function BriefDraftPanel({ brief }: Props) {
           <p className="eyebrow">Brief</p>
           <h2>Черновик брифа</h2>
         </div>
-        <span className="meta">{knownFactCount(brief)} фактов</span>
+        <div className="section-heading__actions">
+          <span className="meta">{knownFactCount(brief)} фактов</span>
+          {onReset && (
+            <button
+              className="btn-ghost btn-ghost--danger btn-sm"
+              onClick={onReset}
+              title="Сбросить бриф и вернуться к поиску"
+              type="button"
+            >
+              Сбросить
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="brief-panel__sections">

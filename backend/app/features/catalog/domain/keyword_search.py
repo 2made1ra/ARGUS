@@ -140,7 +140,15 @@ def merge_search_filters(
             _pick(base.supplier_city_normalized, inferred.supplier_city_normalized)
         ),
         category=_pick(base.category, inferred.category),
+        category_normalized=_pick(
+            base.category_normalized,
+            inferred.category_normalized,
+        ),
         section=_pick(base.section, inferred.section),
+        section_normalized=_pick(
+            base.section_normalized,
+            inferred.section_normalized,
+        ),
         supplier_status=_pick(base.supplier_status, inferred.supplier_status),
         supplier_status_normalized=(
             _pick(
@@ -172,7 +180,17 @@ def price_item_matches_filters(
         return False
     if filters.category is not None and item.category != filters.category:
         return False
+    if (
+        filters.category_normalized is not None
+        and item.category_normalized != filters.category_normalized
+    ):
+        return False
     if filters.section is not None and item.section != filters.section:
+        return False
+    if (
+        filters.section_normalized is not None
+        and item.section_normalized != filters.section_normalized
+    ):
         return False
     if (
         filters.supplier_status is not None

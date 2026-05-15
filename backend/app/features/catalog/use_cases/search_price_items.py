@@ -46,6 +46,7 @@ _CATALOG_QUERY_STOP_WORDS = frozenset(
     },
 )
 _EKATERINBURG_ALIASES = ("екат", "екб", "екатеринбург")
+_SEMANTIC_CANDIDATE_MULTIPLIER = 3
 
 
 class SearchPriceItemsUseCase:
@@ -94,7 +95,7 @@ class SearchPriceItemsUseCase:
             await self._semantic_hits(
                 query=query,
                 filters=filters,
-                limit=limit,
+                limit=_candidate_limit(limit),
             )
             if self._semantic_search_enabled
             else []
@@ -102,18 +103,22 @@ class SearchPriceItemsUseCase:
         keyword_hits = await self._items.search_active_by_keywords(
             query=query,
             filters=filters,
-            limit=limit,
+            limit=_candidate_limit(limit),
         )
-        if not keyword_hits and not self._semantic_search_enabled:
-            cleaned_query = _clean_catalog_keyword_query(query, filters)
-            if cleaned_query is not None:
-                keyword_hits = await self._items.search_active_by_keywords(
-                    query=cleaned_query,
-                    filters=filters,
-                    limit=limit,
-                )
+        cleaned_query = _clean_catalog_keyword_query(query, filters)
+        if not keyword_hits and cleaned_query is not None:
+            keyword_hits = await self._items.search_active_by_keywords(
+                query=cleaned_query,
+                filters=filters,
+                limit=_candidate_limit(limit),
+            )
 
-        candidates = _merge_candidates(semantic_hits, keyword_hits, limit=limit)
+        candidates = _merge_candidates(
+            semantic_hits,
+            keyword_hits,
+            limit=_candidate_limit(limit),
+            result_limit=limit,
+        )
         if not candidates:
             return SearchPriceItemsResult(items=[])
 
@@ -123,21 +128,21 @@ class SearchPriceItemsUseCase:
         )
         items_by_id = {item.id: item for item in hydrated}
 
+        evidence_terms = _catalog_evidence_terms(cleaned_query or query, filters)
         found_items: list[FoundPriceItem] = []
-        drop_semantic_without_lexical_evidence = (
-            _requires_sports_inventory_lexical_evidence(query)
-        )
         for candidate in candidates:
             item = items_by_id.get(candidate.item_id)
             if item is None:
                 continue
             if (
                 candidate.reason_code == "semantic"
-                and drop_semantic_without_lexical_evidence
-                and not _has_sports_inventory_lexical_evidence(item)
+                and evidence_terms
+                and not _has_catalog_lexical_evidence(item, evidence_terms)
             ):
                 continue
             found_items.append(_found_item(item, candidate))
+            if len(found_items) >= limit:
+                break
 
         return SearchPriceItemsResult(items=found_items)
 
@@ -179,6 +184,7 @@ def _merge_candidates(
     keyword_hits: list[tuple[UUID, float, MatchReasonCode]],
     *,
     limit: int,
+    result_limit: int,
 ) -> list[_Candidate]:
     if limit < 1:
         return []
@@ -213,14 +219,37 @@ def _merge_candidates(
 
     if len(candidates) < limit:
         candidates.extend(keyword_candidates[: limit - len(candidates)])
+        _promote_keyword_candidate(candidates, result_limit=result_limit)
         return candidates
 
     if keyword_candidates:
         # Weak vectors can otherwise fill the response and hide exact catalog matches.
         strongest_keyword = max(keyword_candidates, key=lambda item: item.score)
-        return [*candidates[: limit - 1], strongest_keyword]
+        return [*candidates[: result_limit - 1], strongest_keyword]
 
     return candidates[:limit]
+
+
+def _promote_keyword_candidate(
+    candidates: list[_Candidate],
+    *,
+    result_limit: int,
+) -> None:
+    if result_limit < 1 or len(candidates) <= result_limit:
+        return
+    first_page = candidates[:result_limit]
+    if any(candidate.reason_code != "semantic" for candidate in first_page):
+        return
+    keyword_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.reason_code != "semantic"
+    ]
+    if not keyword_candidates:
+        return
+    strongest_keyword = max(keyword_candidates, key=lambda item: item.score)
+    candidates.remove(strongest_keyword)
+    candidates[result_limit - 1] = strongest_keyword
 
 
 def _catalog_filters_from_search_filters(
@@ -238,10 +267,16 @@ def _catalog_filters_from_search_filters(
         vat_mode=filters.vat_mode,
         supplier_city=filters.supplier_city,
         supplier_city_normalized=filters.supplier_city_normalized,
+        category_normalized=filters.category_normalized,
+        section_normalized=filters.section_normalized,
         supplier_status=filters.supplier_status,
         supplier_status_normalized=filters.supplier_status_normalized,
         embedding_template_version=embedding_template_version,
     )
+
+
+def _candidate_limit(limit: int) -> int:
+    return max(limit, limit * _SEMANTIC_CANDIDATE_MULTIPLIER)
 
 
 def _found_item(item: PriceItem, candidate: _Candidate) -> FoundPriceItem:
@@ -306,14 +341,7 @@ def _catalog_query_terms(query: str) -> list[str]:
     return re.findall(r"[0-9a-zа-я]+", normalized)
 
 
-def _requires_sports_inventory_lexical_evidence(query: str) -> bool:
-    normalized = " ".join(_catalog_query_terms(query))
-    return "спортинвентар" in normalized or (
-        "спортив" in normalized and "инвентар" in normalized
-    )
-
-
-def _has_sports_inventory_lexical_evidence(item: PriceItem) -> bool:
+def _has_catalog_lexical_evidence(item: PriceItem, evidence_terms: list[str]) -> bool:
     text = " ".join(
         value
         for value in (
@@ -325,10 +353,34 @@ def _has_sports_inventory_lexical_evidence(item: PriceItem) -> bool:
         )
         if value is not None
     )
-    normalized = " ".join(_catalog_query_terms(text))
-    return "спортинвентар" in normalized or (
-        "спортив" in normalized and "инвентар" in normalized
-    )
+    item_stems = {_catalog_evidence_stem(term) for term in _catalog_query_terms(text)}
+    return any(term in item_stems for term in evidence_terms)
+
+
+def _catalog_evidence_terms(
+    query: str,
+    filters: SearchPriceItemsFilters,
+) -> list[str]:
+    terms = [
+        term
+        for term in _catalog_query_terms(query)
+        if not _is_catalog_query_context_term(term, filters) and len(term) >= 4
+    ]
+    if len(terms) < 2:
+        return []
+    return [
+        stem
+        for stem in (_catalog_evidence_stem(term) for term in terms)
+        if len(stem) >= 4
+    ]
+
+
+def _catalog_evidence_stem(term: str) -> str:
+    if len(term) > 4 and term.endswith(("а", "я", "ы", "и", "у", "ю", "е", "о")):
+        term = term[:-1]
+    if len(term) <= 5:
+        return term
+    return term[:6]
 
 
 def _is_catalog_query_context_term(

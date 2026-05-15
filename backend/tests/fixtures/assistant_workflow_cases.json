@@ -1084,14 +1084,15 @@
       "candidate_item_ids": [],
       "expected_interface_mode": "chat_search",
       "expected_intent": "supplier_search",
-      "expected_workflow_stage": "search_clarifying",
+      "expected_workflow_stage": "searching",
       "expected_brief_patch": {},
-      "expected_action_plan_tool_intents": [],
+      "expected_action_plan_tool_intents": [
+        "search_items"
+      ],
+      "expected_categoryless_search": true,
       "expected_search_categories": [],
       "expected_verification_targets": [],
-      "expected_missing_fields": [
-        "service_category"
-      ]
+      "expected_missing_fields": []
     },
     {
       "id": "brief-017-select-without-visible-context",

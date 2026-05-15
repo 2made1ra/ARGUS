@@ -137,7 +137,9 @@ class CatalogSearchFilters:
     import_batch_id: UUID | None = None
     source_file_id: UUID | None = None
     category: str | None = None
+    category_normalized: str | None = None
     section: str | None = None
+    section_normalized: str | None = None
     unit: str | None = None
     unit_price: float | None = None
     unit_price_min: float | None = None

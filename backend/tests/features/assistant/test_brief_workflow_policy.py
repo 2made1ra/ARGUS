@@ -83,7 +83,7 @@ def test_direct_inventory_search_stays_chat_search() -> None:
     assert not plan.search_requests[0].query.startswith("мне ")
 
 
-def test_direct_contractor_search_with_active_brief_stays_chat_search() -> None:
+def test_direct_contractor_search_with_active_brief_redirects_to_workspace() -> None:
     current_brief = BriefState(event_type="корпоратив")
     interpretation = EventBriefInterpreter().interpret(
         message="Найди свет в Екатеринбурге",
@@ -96,10 +96,11 @@ def test_direct_contractor_search_with_active_brief_stays_chat_search() -> None:
 
     assert interpretation.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
     assert interpretation.intent == "supplier_search"
-    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
-    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
-    assert plan.tool_intents == ["search_items"]
-    assert plan.search_requests[0].service_category == "свет"
+    # brief is active → policy locks chat_search and redirects to brief_workspace
+    assert plan.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE
+    assert plan.workflow_stage == EventBriefWorkflowState.CLARIFYING
+    assert plan.tool_intents == []
+    assert len(plan.clarification_questions) == 1
 
 
 def test_active_brief_search_with_current_fact_update_uses_workspace() -> None:
@@ -186,6 +187,43 @@ def test_categoryless_contractor_search_asks_for_service_category() -> None:
     assert plan.should_search_now is False
     assert plan.missing_fields == ["service_category"]
     assert plan.clarification_questions == ["Какую услугу или категорию нужно найти?"]
+
+
+def test_categoryless_supplier_name_search_goes_to_catalog_without_service_question(
+) -> None:
+    plan = _plan_for("найди поставщика ООО НИКА")
+
+    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert plan.should_search_now is True
+    assert plan.missing_fields == []
+    assert plan.search_requests[0].service_category is None
+    assert plan.search_requests[0].query == "ООО НИКА"
+
+
+def test_categoryless_inn_search_goes_to_catalog_without_service_question() -> None:
+    plan = _plan_for("найди поставщика 7701234567")
+
+    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert plan.should_search_now is True
+    assert plan.missing_fields == []
+    assert plan.search_requests[0].service_category is None
+    assert plan.search_requests[0].query == "7701234567"
+
+
+def test_categoryless_explicit_inn_search_uses_catalog() -> None:
+    plan = _plan_for("найди поставщика по ИНН 7701234567")
+
+    assert plan.interface_mode == AssistantInterfaceMode.CHAT_SEARCH
+    assert plan.workflow_stage == EventBriefWorkflowState.SEARCHING
+    assert plan.tool_intents == ["search_items"]
+    assert plan.should_search_now is True
+    assert plan.missing_fields == []
+    assert plan.search_requests[0].service_category is None
+    assert plan.search_requests[0].query == "7701234567"
 
 
 def test_event_domain_term_alone_does_not_force_brief_workspace() -> None:

@@ -16,6 +16,31 @@ from app.features.assistant.dto import (
 _DEFAULT_LIMIT = 8
 _MAX_PLANNED_SEARCHES = 3
 _AUDIENCE_RE = re.compile(r"(?P<size>\d{1,5})\s*(?:человек|гостей|гостя|гость)", re.I)
+_PER_GUEST_BUDGET_RE = re.compile(
+    r"(?:до|около|примерно)?\s*\d[\d\s]*\s*(?:руб(?:\.|лей)?\s*)?"
+    r"(?:на|за)\s*(?:гостя|человека)",
+    re.I,
+)
+_TOTAL_BUDGET_RE = re.compile(
+    r"бюджет\w*\s*(?:около|примерно|до)?\s*"
+    r"\d+(?:[\s\u00a0]\d{3})*(?:[,.]\d+)?\s*"
+    r"(?:млн\.?|миллион(?:а|ов)?|тыс\.?|тысяч[аи]?)?",
+    re.I,
+)
+_CITY_PHRASE_RE = re.compile(
+    r"\b(?:в|во|город|г\.?)\s+"
+    r"(?:екатеринбург(?:е)?|екате|екб|москв(?:а|е)|санкт-петербург(?:е)?|"
+    r"петербург(?:е)?|спб)\b",
+    re.I,
+)
+_EVENT_TYPE_WORD_RE = re.compile(
+    r"\b(?:корпоратив\w*|конференц\w*|презентац\w*|выпускн\w*|мероприят\w*)\b",
+    re.I,
+)
+_SEARCH_REFINEMENT_RE = re.compile(
+    r"\b(?:кто сможет|быстро|срочно|еще|ещё|другие|варианты|под это)\b",
+    re.I,
+)
 
 
 class SearchPlanner:
@@ -192,31 +217,82 @@ def _planned_query(
     base_query = _base_query_for_request(request, all_categories)
     parts: list[str] = []
     _append_unique(parts, request.service_category)
-    _append_unique(parts, base_query)
-    _append_unique(parts, brief_after.event_type or brief_before.event_type)
-    audience_size = (
-        brief_after.audience_size
-        or brief_before.audience_size
-        or fallback_slots.audience_size
-        or _audience_size(request.query)
+    _append_unique(
+        parts,
+        _semantic_query_tail(
+            base_query,
+            service_category=request.service_category,
+            brief_before=brief_before,
+            brief_after=brief_after,
+            fallback_slots=fallback_slots,
+        ),
     )
-    if audience_size is not None:
-        _append_unique(parts, f"{audience_size} человек")
-    city = brief_after.city or brief_before.city or fallback_slots.city
-    if city is None:
-        city = canonical_city_for(request.query.lower())
-    _append_unique(parts, city)
-    for constraint in [*brief_after.venue_constraints, *brief_before.venue_constraints]:
-        _append_unique(parts, constraint)
-    budget_per_guest = (
-        brief_after.budget_per_guest
-        or brief_before.budget_per_guest
-        or fallback_slots.budget_per_guest
-    )
-    if budget_per_guest is not None:
-        _append_unique(parts, f"до {budget_per_guest} на гостя")
-    _append_unique(parts, brief_after.concept or brief_before.concept)
     return " ".join(parts)
+
+
+def _semantic_query_tail(
+    value: str | None,
+    *,
+    service_category: str | None,
+    brief_before: BriefState,
+    brief_after: BriefState,
+    fallback_slots: BriefState,
+) -> str | None:
+    if value is None:
+        return None
+    cleaned = value
+    cleaned = _AUDIENCE_RE.sub(" ", cleaned)
+    cleaned = _PER_GUEST_BUDGET_RE.sub(" ", cleaned)
+    cleaned = _TOTAL_BUDGET_RE.sub(" ", cleaned)
+    cleaned = _CITY_PHRASE_RE.sub(" ", cleaned)
+    cleaned = _EVENT_TYPE_WORD_RE.sub(" ", cleaned)
+    cleaned = _SEARCH_REFINEMENT_RE.sub(" ", cleaned)
+    if service_category is not None:
+        cleaned = _remove_phrase(cleaned, service_category)
+    for structural_value in _structural_values(
+        brief_before=brief_before,
+        brief_after=brief_after,
+        fallback_slots=fallback_slots,
+    ):
+        cleaned = _remove_phrase(cleaned, structural_value)
+    cleaned = re.sub(r"\b(?:для|на|в|во|по|под|до|за)\b", " ", cleaned, flags=re.I)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;:-?!")
+    return cleaned or None
+
+
+def _structural_values(
+    *,
+    brief_before: BriefState,
+    brief_after: BriefState,
+    fallback_slots: BriefState,
+) -> list[str]:
+    values: list[str] = []
+    for brief in (brief_after, brief_before, fallback_slots):
+        values.extend(
+            value
+            for value in (
+                brief.event_type,
+                brief.city,
+                brief.concept,
+                brief.event_level,
+                brief.date_or_period,
+            )
+            if value is not None
+        )
+        values.extend(brief.venue_constraints)
+        values.extend(brief.constraints)
+        values.extend(brief.preferences)
+    return _dedupe(values)
+
+
+def _remove_phrase(value: str, phrase: str) -> str:
+    escaped = re.escape(phrase)
+    return re.sub(
+        rf"(?<![0-9a-zа-я]){escaped}(?![0-9a-zа-я])",
+        " ",
+        value,
+        flags=re.I,
+    )
 
 
 def _base_query_for_request(

@@ -2,7 +2,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from app.adapters.llm.embeddings import (
     EmbeddingDimensionMismatch,
     EmbeddingResponseError,
@@ -24,9 +23,11 @@ class FakeResponse:
 class RecordingAsyncClient:
     calls: list[dict[str, Any]] = []
     timeouts: list[float] = []
+    trust_envs: list[bool | None] = []
 
-    def __init__(self, *, timeout: float) -> None:
+    def __init__(self, *, timeout: float, trust_env: bool | None = None) -> None:
         self.timeouts.append(timeout)
+        self.trust_envs.append(trust_env)
 
     async def __aenter__(self) -> "RecordingAsyncClient":
         return self
@@ -44,8 +45,9 @@ class RecordingAsyncClient:
 
 
 class MismatchedDimensionAsyncClient:
-    def __init__(self, *, timeout: float) -> None:
+    def __init__(self, *, timeout: float, trust_env: bool | None = None) -> None:
         self.timeout = timeout
+        self.trust_env = trust_env
 
     async def __aenter__(self) -> "MismatchedDimensionAsyncClient":
         return self
@@ -58,8 +60,9 @@ class MismatchedDimensionAsyncClient:
 
 
 class MissingDataAsyncClient:
-    def __init__(self, *, timeout: float) -> None:
+    def __init__(self, *, timeout: float, trust_env: bool | None = None) -> None:
         self.timeout = timeout
+        self.trust_env = trust_env
 
     async def __aenter__(self) -> "MissingDataAsyncClient":
         return self
@@ -72,8 +75,9 @@ class MissingDataAsyncClient:
 
 
 class FailingAsyncClient:
-    def __init__(self, *, timeout: float) -> None:
+    def __init__(self, *, timeout: float, trust_env: bool | None = None) -> None:
         self.timeout = timeout
+        self.trust_env = trust_env
 
     async def __aenter__(self) -> "FailingAsyncClient":
         return self
@@ -94,6 +98,7 @@ def _embedding_for_text(text: str) -> list[float]:
 def clear_recording_client() -> None:
     RecordingAsyncClient.calls = []
     RecordingAsyncClient.timeouts = []
+    RecordingAsyncClient.trust_envs = []
 
 
 @pytest.mark.asyncio
@@ -131,6 +136,24 @@ async def test_embed_batches_texts_by_32_and_preserves_order(
     assert RecordingAsyncClient.calls[-1]["json"]["input"] == texts[96:]
     assert RecordingAsyncClient.timeouts == [12.0]
     assert result == [_embedding_for_text(text) for text in texts]
+
+
+@pytest.mark.asyncio
+async def test_embed_disables_environment_proxy_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.adapters.llm.embeddings.httpx.AsyncClient",
+        RecordingAsyncClient,
+    )
+    embeddings = LMStudioEmbeddings(
+        base_url="http://192.168.0.65:1234/v1",
+        embedding_dim=3,
+    )
+
+    await embeddings.embed(["text-1"])
+
+    assert RecordingAsyncClient.trust_envs == [False]
 
 
 @pytest.mark.asyncio

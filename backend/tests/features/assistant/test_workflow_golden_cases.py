@@ -289,7 +289,7 @@ def test_workflow_case_expected_tool_contract(case: dict[str, Any]) -> None:
     assert set(tool_intents) <= TOOL_INTENTS
     assert "call_llm" not in tool_intents
 
-    if "search_items" in tool_intents:
+    if "search_items" in tool_intents and not case.get("expected_categoryless_search"):
         assert case["expected_search_categories"]
     else:
         assert case["expected_search_categories"] == []

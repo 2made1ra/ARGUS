@@ -29,6 +29,17 @@ def test_service_taxonomy_covers_core_event_blocks_and_professional_aliases() ->
     assert canonical_city_for("в Екате") == "Екатеринбург"
 
 
+def test_service_taxonomy_does_not_match_aliases_inside_unrelated_words() -> None:
+    cases = [
+        "Светлана ищет столовую рядом",
+        "экранный формат презентации",
+        "транспортировкой заниматься не нужно",
+    ]
+
+    for phrase in cases:
+        assert service_categories_for(phrase) == []
+
+
 def test_welcome_zone_expands_to_normalized_service_bundle() -> None:
     slots = extract_event_brief_slots("надо закрыть welcome-зону")
 

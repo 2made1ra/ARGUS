@@ -217,7 +217,7 @@ def _first_alias_position(lower: str, category: str) -> int:
         if service_alias.category != category:
             continue
         for alias in service_alias.aliases:
-            position = lower.find(alias)
+            position = lower.find(alias.term)
             if position >= 0:
                 positions.append(position)
     if positions:

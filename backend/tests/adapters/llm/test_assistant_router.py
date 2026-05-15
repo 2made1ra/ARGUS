@@ -92,13 +92,16 @@ async def test_assistant_router_uses_lm_studio_json_schema_response_format(
     assert payload["response_format"]["json_schema"]["name"] == (
         "argus_assistant_router"
     )
+    assert payload["response_format"]["json_schema"]["strict"] is True
     assert payload["response_format"]["json_schema"]["schema"]["type"] == "object"
+    assert payload["max_tokens"] == 512
 
 
 def test_llm_router_schema_constrains_nested_brief_update_fields() -> None:
     schema = llm_router_json_schema()
 
     assert schema["required"] == ["interface_mode", "intent", "confidence"]
+    assert "user_visible_summary" not in schema["properties"]
     brief_update = schema["properties"]["brief_update"]
     assert brief_update["additionalProperties"] is False
     assert set(brief_update["properties"]) >= {

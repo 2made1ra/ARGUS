@@ -375,8 +375,16 @@ def _search_filter_conditions(filters: SearchPriceItemsFilters) -> list[object]:
         )
     if filters.category is not None:
         conditions.append(PriceItemRow.category == filters.category)
+    if filters.category_normalized is not None:
+        conditions.append(
+            PriceItemRow.category_normalized == filters.category_normalized,
+        )
     if filters.section is not None:
         conditions.append(PriceItemRow.section == filters.section)
+    if filters.section_normalized is not None:
+        conditions.append(
+            PriceItemRow.section_normalized == filters.section_normalized,
+        )
     if filters.supplier_status is not None:
         conditions.append(PriceItemRow.supplier_status == filters.supplier_status)
     if filters.supplier_status_normalized is not None:

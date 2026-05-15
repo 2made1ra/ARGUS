@@ -64,6 +64,42 @@ def test_normalize_price_row_derives_vat_mode(raw_vat: str, vat_mode: str) -> No
     assert normalized.vat_mode == vat_mode
 
 
+@pytest.mark.parametrize(
+    ("raw_city", "normalized_city"),
+    [
+        ("г. Санкт - Петербург", "санкт-петербург"),
+        ("Санкт-Петербург г", "санкт-петербург"),
+        ("Питер", "санкт-петербург"),
+        ("Г ОДИНЦОВО", "одинцово"),
+    ],
+)
+def test_normalize_price_row_canonicalizes_city_aliases(
+    raw_city: str,
+    normalized_city: str,
+) -> None:
+    normalized = normalize_price_row(_raw(supplier_city=raw_city))
+
+    assert normalized.supplier_city_normalized == normalized_city
+
+
+@pytest.mark.parametrize(
+    ("raw_unit", "normalized_unit"),
+    [
+        ("Nos", "шт"),
+        ("ед.", "шт"),
+        ("Rnm", "ночь"),
+        ("Sqm", "м2"),
+    ],
+)
+def test_normalize_price_row_canonicalizes_unit_aliases(
+    raw_unit: str,
+    normalized_unit: str,
+) -> None:
+    normalized = normalize_price_row(_raw(unit=raw_unit))
+
+    assert normalized.unit_normalized == normalized_unit
+
+
 def test_normalize_price_row_warns_for_unusual_inn_length() -> None:
     normalized = normalize_price_row(_raw(supplier_inn="12345"))
 

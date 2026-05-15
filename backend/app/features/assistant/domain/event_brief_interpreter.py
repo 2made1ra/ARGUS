@@ -533,7 +533,10 @@ def _search_requests(*, message: str, slots: BriefState) -> list[SearchRequest]:
     if not categories:
         categories = list(slots.required_services)
     if not categories:
-        return []
+        exact_query = _categoryless_exact_search_query(message)
+        if exact_query is None:
+            return []
+        return [SearchRequest(query=exact_query, service_category=None, limit=8)]
 
     return _search_requests_for_categories(
         message=message,
@@ -742,5 +745,23 @@ def _strip_search_prefix(message: str) -> str:
         if lowered.startswith(prefix):
             return normalized[len(prefix) :].strip()
     return normalized
+
+
+def _categoryless_exact_search_query(message: str) -> str | None:
+    stripped = _strip_search_prefix(message)
+    cleaned = re.sub(
+        r"^(?:поставщик|поставщика|подрядчик|подрядчика)\s+",
+        "",
+        stripped,
+        flags=re.IGNORECASE,
+    ).strip()
+    inn_match = re.search(r"\bинн\s+(\d{10}|\d{12})\b", cleaned, flags=re.IGNORECASE)
+    if inn_match is not None:
+        return inn_match.group(1)
+    if re.fullmatch(r"\d{10}|\d{12}", cleaned):
+        return cleaned
+    if re.search(r"\b(?:ооо|ао|ано|ип|зао|пао)\b", cleaned, flags=re.IGNORECASE):
+        return cleaned
+    return None
 
 __all__ = ["EventBriefInterpreter"]

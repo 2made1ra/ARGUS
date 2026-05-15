@@ -37,12 +37,14 @@ class LMStudioAssistantRouterAdapter:
                 {"role": message.role, "content": message.content}
                 for message in prompt.messages
             ],
+            "max_tokens": 512,
             "temperature": 0,
             "stream": False,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "argus_assistant_router",
+                    "strict": True,
                     "schema": llm_router_json_schema(),
                 },
             },

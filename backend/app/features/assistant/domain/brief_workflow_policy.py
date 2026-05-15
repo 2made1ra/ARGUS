@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from app.features.assistant.brief import merge_brief
@@ -9,6 +10,7 @@ from app.features.assistant.dto import (
     BriefState,
     EventBriefWorkflowState,
     Interpretation,
+    SearchRequest,
 )
 
 _INTAKE_FIELD_ORDER = (
@@ -63,11 +65,19 @@ _RENDER_QUESTIONS = {
     ),
 }
 
+_BRIEF_LOCKED_QUESTION = (
+    "Сейчас идёт составление брифа. "
+    "Попросите «сформируй бриф», чтобы завершить, "
+    "или сбросьте бриф для нового поиска."
+)
+
 
 class BriefWorkflowPolicy:
     def plan(self, *, interpretation: Interpretation, brief: BriefState) -> ActionPlan:
         if interpretation.interface_mode == AssistantInterfaceMode.BRIEF_WORKSPACE:
             return _brief_workspace_plan(interpretation=interpretation, brief=brief)
+        if _has_renderable_brief(brief):
+            return _brief_locked_plan()
         return _chat_search_plan(interpretation=interpretation)
 
 
@@ -208,6 +218,16 @@ def _render_plan(
     )
 
 
+def _brief_locked_plan() -> ActionPlan:
+    return ActionPlan(
+        interface_mode=AssistantInterfaceMode.BRIEF_WORKSPACE,
+        workflow_stage=EventBriefWorkflowState.CLARIFYING,
+        tool_intents=[],
+        missing_fields=[],
+        clarification_questions=[_BRIEF_LOCKED_QUESTION],
+    )
+
+
 def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
     if interpretation.intent == "render_brief":
         return ActionPlan(
@@ -242,6 +262,7 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
         request
         for request in interpretation.search_requests
         if request.service_category is not None
+        or _is_categoryless_exact_search_request(request)
     ]
     missing_fields: list[str] = []
     if not search_requests:
@@ -265,6 +286,18 @@ def _chat_search_plan(interpretation: Interpretation) -> ActionPlan:
                 *interpretation.clarification_questions,
             ],
         )[:3],
+    )
+
+
+def _is_categoryless_exact_search_request(request: SearchRequest) -> bool:
+    query = request.query.strip()
+    if request.service_category is not None:
+        return False
+    if re.fullmatch(r"\d{10}|\d{12}", query):
+        return True
+    return (
+        re.search(r"\b(?:ооо|ао|ано|ип|зао|пао)\b", query, flags=re.IGNORECASE)
+        is not None
     )
 
 
